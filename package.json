@@ -1,0 +1,14 @@
+{
+  "name": "brokers-bestie",
+  "version": "0.1.0",
+  "description": "Brokers Bestie: codes, routes, mileage and safety check-ins for real estate agents, in one phone app.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vercel dev",
+    "test": "node --test test/*.test.mjs"
+  }
+}
