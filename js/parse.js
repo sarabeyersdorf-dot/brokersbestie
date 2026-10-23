@@ -129,3 +129,22 @@ export function tripsCsv(trips, properties = []) {
   }
   return lines.join('\n');
 }
+
+// Adds one finished spoken phrase to what has been heard so far. Android
+// Chrome re-sends the phrase-so-far as a new "final" piece ("start", "start
+// at", "start at 10:00 a.m."), which was stacking up in the box (Cowork's
+// report, 2026-10-23). A phrase that repeats the last one is dropped; one
+// that extends it replaces it; anything else is a new phrase.
+export function mergeSpeech(chunks, next) {
+  const t = String(next || '').trim();
+  if (!t) return chunks;
+  const norm = (s) => s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const last = chunks[chunks.length - 1];
+  if (last != null) {
+    const a = norm(last);
+    const b = norm(t);
+    if (b === a || a.startsWith(b)) return chunks;
+    if (b.startsWith(a)) return [...chunks.slice(0, -1), t];
+  }
+  return [...chunks, t];
+}

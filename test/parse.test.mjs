@@ -77,3 +77,17 @@ test('mileage export is a spreadsheet a tax preparer can open', () => {
 test('addresses are tidied the way the MLS writes them', () => {
   assert.equal(tidyAddress('433 East Highway 4'), '433 E Hwy 4');
 });
+
+test('Android repeating speech pieces add up to one phrase, not a stack', async () => {
+  const { mergeSpeech } = await import('../js/parse.js');
+  // The pattern Sara's Android phone produced (Cowork, 2026-10-23).
+  let chunks = [];
+  for (const piece of ['start', 'start at', 'start at 10:00 a.m.', 'start at 10:00 a.m.', 'Start at 10:00 a.m. 433 East Highway 4']) chunks = mergeSpeech(chunks, piece);
+  assert.deepEqual(chunks, ['Start at 10:00 a.m. 433 East Highway 4']);
+  // A genuinely new phrase is added; a shorter echo of the last is ignored.
+  chunks = mergeSpeech(chunks, 'go to 324 Augusta Court Valley Springs');
+  chunks = mergeSpeech(chunks, 'go to 324 Augusta');
+  assert.deepEqual(chunks, ['Start at 10:00 a.m. 433 East Highway 4', 'go to 324 Augusta Court Valley Springs']);
+  // iPhone style (each phrase once) is unchanged.
+  assert.deepEqual(mergeSpeech(mergeSpeech([], '433 East Highway 4'), 'then 1143 Echo Street'), ['433 East Highway 4', 'then 1143 Echo Street']);
+});

@@ -4,7 +4,7 @@
 import * as store from './store.js';
 import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLink, mapLink, todayIso, daysFrom, niceDate, whenText, toast, copy } from './ui.js';
 import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMiles, roadMiles, driveMinutes } from './route.js';
-import { parseTourText, matchProperty, search, tripsCsv } from './parse.js';
+import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
 import { sampleData } from './sample.js';
 
 const $view = document.getElementById('view');
@@ -212,37 +212,71 @@ function formSheet({ title, fields, values = {}, saveLabel = 'Save', onSave, onD
 // ---------- talking instead of typing ----------
 
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+// Listens one phrase at a time and starts again by itself until the agent taps
+// stop. "Keep listening" mode is what made Android Chrome repeat every word;
+// mergeSpeech() also drops Android's repeated pieces if they still come.
 function dictate(target, button) {
   if (!Recognition) {
     toast('Use the microphone on your keyboard to dictate');
     target.focus();
     return;
   }
-  const r = new Recognition();
-  r.lang = 'en-US';
-  r.interimResults = true;
-  r.continuous = true;
   const before = target.value ? target.value.replace(/\s*$/, ' ') : '';
-  let finalText = '';
-  r.onresult = (e) => {
-    let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) finalText += e.results[i][0].transcript + ' ';
-      else interim += e.results[i][0].transcript;
-    }
-    target.value = before + finalText + interim;
+  let chunks = [];
+  let listening = true;
+  let rec = null;
+  let quickEnds = 0;
+  let startedAt = 0;
+  const show = (list) => {
+    target.value = before + list.join(' ');
     target.dispatchEvent(new Event('input'));
   };
-  const stop = () => { try { r.stop(); } catch {} };
-  r.onend = () => { if (button) { button.classList.remove('dark'); button.innerHTML = button.dataset.label; } };
-  r.onerror = (e) => { if (e.error === 'not-allowed') toast('Allow the microphone to talk to Bestie'); };
+  const finish = () => {
+    listening = false;
+    show(chunks);
+    if (button) {
+      button.classList.remove('dark');
+      button.innerHTML = button.dataset.label;
+      button.onclick = () => dictate(target, button);
+    }
+  };
+  const listenOnce = () => {
+    rec = new Recognition();
+    rec.lang = 'en-US';
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (e) => {
+      const res = e.results[e.results.length - 1];
+      const text = res[0].transcript;
+      if (res.isFinal) { chunks = mergeSpeech(chunks, text); show(chunks); }
+      else show(mergeSpeech(chunks, text)); // shown while speaking, not kept yet
+    };
+    rec.onerror = (e) => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        listening = false;
+        toast('Allow the microphone to talk to Bestie');
+      }
+    };
+    rec.onend = () => {
+      // A phone that keeps ending instantly is refusing to listen: stop
+      // rather than spin.
+      quickEnds = Date.now() - startedAt < 400 ? quickEnds + 1 : 0;
+      if (listening && quickEnds < 5) {
+        try { startedAt = Date.now(); rec = null; listenOnce(); return; } catch {}
+      }
+      finish();
+    };
+    startedAt = Date.now();
+    rec.start();
+  };
   if (button) {
     button.dataset.label = button.innerHTML;
     button.classList.add('dark');
     button.innerHTML = 'Listening… tap to stop';
-    button.onclick = () => { stop(); button.onclick = () => dictate(target, button); };
+    button.onclick = () => { listening = false; try { rec && rec.stop(); } catch {} finish(); };
   }
-  r.start();
+  listenOnce();
 }
 function wireMics(root) {
   root.querySelectorAll('[data-mic]').forEach((b) => {
