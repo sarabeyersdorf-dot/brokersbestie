@@ -1587,7 +1587,7 @@ function viewSettings() {
         <div class="label accent">Connect your CRM</div>
         <div class="small" id="crmstate">Checking…</div>
         <label class="field"><span>Feed link (from your CRM)</span><input id="crmurl" type="url" autocomplete="off" placeholder="https://yourcrm.com/api/crm/bestie-feed"></label>
-        <label class="field"><span>Feed key</span><input id="crmkey" class="codein" autocomplete="off" placeholder="Leave empty to keep the saved key"></label>
+        <label class="field"><span>Feed key</span><input id="crmkey" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"></label>
         <button class="btn block" type="button" id="crmmake">Make a new key (copies it)</button>
         <div class="hint">Your listings, deal dates, contacts and appointments come in from the CRM and update each time you open Bestie. Codes, photos and notes stay Bestie's: the CRM never changes them.</div>
         <div class="btns"><button class="btn dark" type="button" id="crmsave">Save and sync</button><button class="btn" type="button" id="crmrun">Sync now</button></div>
