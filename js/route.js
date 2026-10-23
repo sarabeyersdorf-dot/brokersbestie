@@ -59,7 +59,11 @@ export function schedule(start, startMinutes, stops, perStop = MINUTES_PER_STOP)
   let miles = 0;
   let late = 0;
   const legs = stops.map((s) => {
-    const legMiles = prev && s.lat != null && prev.lat != null ? roadMiles(prev, s) : 0;
+    // A stop the map could not place has no drive time, so it gets no time
+    // at all ("time unknown") and does not move the clock for the others.
+    // Inventing one is what showed 433 E Hwy 4 "21 min late" (2026-10-23).
+    if (s.lat == null || s.lng == null) return { ...s, arrive: null, legMiles: 0, legMinutes: 0, waitMinutes: 0, lateMinutes: 0, unknown: true };
+    const legMiles = prev && prev.lat != null ? roadMiles(prev, s) : 0;
     const legMin = driveMinutes(legMiles);
     clock += legMin;
     // Per stop, so the screen can say "early: wait 15 min" or "15 min late".
@@ -122,9 +126,12 @@ function backtracks(legs) {
   return n;
 }
 
-// Cost: missing a window an agent gave you is far worse than a few miles.
+// A set showing time is a rule, not a preference: any order that keeps every
+// set time beats any order that misses one, however many miles it saves.
+// Only when no order can keep them all is the least-late one chosen.
+const LATE_WEIGHT = 1000;
 function cost(result) {
-  return result.miles + result.late * 2 + backtracks(result.legs) * BACKTRACK_PENALTY;
+  return result.late * LATE_WEIGHT + result.miles + backtracks(result.legs) * BACKTRACK_PENALTY;
 }
 
 function nearestNeighbour(start, stops) {
@@ -187,8 +194,9 @@ export function planRoute({ start, startMinutes, stops }) {
   return {
     ...result,
     unplaced,
-    savedMiles: Math.max(0, asGiven.miles - result.miles),
-    savedMinutes: Math.max(0, driveMinutes(asGiven.miles) - driveMinutes(result.miles))
+    // Never claim a saving that was bought by making a showing late.
+    savedMiles: result.late <= asGiven.late ? Math.max(0, asGiven.miles - result.miles) : 0,
+    savedMinutes: result.late <= asGiven.late ? Math.max(0, driveMinutes(asGiven.miles) - driveMinutes(result.miles)) : 0
   };
 }
 

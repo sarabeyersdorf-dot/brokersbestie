@@ -162,7 +162,9 @@ img { max-width: 100%; display: block; }
 .stop { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
 .stop.shown { border: 2px solid var(--done); }
 .stop-head { display: flex; gap: 12px; align-items: flex-start; }
-.stop-time { width: 56px; display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
+.stop-time { width: 64px; display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; text-align: center; }
+.stop-time .num { line-height: 1.05; }
+.occ-word { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
 .stop-time .num { font-size: 20px; }
 .leg { font-size: 13px; font-style: italic; color: var(--ink-2); text-align: center; }
 .code-pill { display: inline-flex; gap: 8px; align-items: baseline; background: var(--ink); border-radius: 4px; padding: 5px 10px; align-self: flex-start; }
@@ -194,3 +196,14 @@ img { max-width: 100%; display: block; }
    rest of the list still scrolls under a finger. */
 .drag { width: 40px; height: 44px; border: 0; background: none; color: var(--mute); display: inline-flex; align-items: center; justify-content: center; touch-action: none; cursor: grab; flex-shrink: 0; }
 .rleg.dragging { background: var(--teal-tint); outline: 2px solid var(--teal); position: relative; z-index: 2; }
+
+/* Nothing may push the page sideways on a phone, whatever text size the
+   phone is set to (Sara's Android cut cards off, 2026-10-23). Text wraps;
+   a pair of buttons stacks when the two won't fit side by side. */
+.wrap > *, .card, .stop, .row .grow { min-width: 0; max-width: 100%; }
+.stop, .stop *, .row .t, .row .s, .label, .title { overflow-wrap: anywhere; }
+.btn { white-space: normal; line-height: 1.2; }
+.stop .btns, .wrap > .btns { display: flex; flex-wrap: wrap; }
+.stop .btns > *, .wrap > .btns > * { flex: 1 1 130px; }
+.code-pill { flex-wrap: wrap; max-width: 100%; }
+html, body { max-width: 100%; overflow-x: hidden; }

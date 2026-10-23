@@ -85,3 +85,31 @@ test('the maps link lists every stop in order', () => {
   assert.ok(url.startsWith('https://www.google.com/maps/dir/'));
   assert.ok(url.indexOf('Mark%20Twain') < url.indexOf('Murphys'));
 });
+
+// Cowork's test case from Sara's Android phone, 2026-10-23.
+const echo = { id: 'echo', address: '1143 Echo St, Angels Camp', lat: 38.0716, lng: -120.5541 };
+const augusta = { id: 'aug', address: '324 Augusta Ct, Valley Springs', lat: 38.1917, lng: -120.8291 };
+const murphys11 = { id: 'mur', address: '433 E Hwy 4, Murphys', lat: 38.1371, lng: -120.4551, at: 660 };
+
+test('a set time is a rule: Murphys at 11:00 is shown at 11:00, nothing late', () => {
+  const r = planRoute({ start: office, startMinutes: 600, stops: [echo, augusta, murphys11] });
+  assert.equal(r.late, 0, r.legs.map((l) => `${l.id}@${l.arrive}`).join(' '));
+  assert.equal(r.legs.find((l) => l.id === 'mur').arrive, 660);
+});
+
+test('a stop the map could not find gets no made-up time and moves no one', () => {
+  const lost = { id: 'lost', address: '433 E Hwy 4 Murphys', at: 660 };
+  const r = planRoute({ start: office, startMinutes: 600, stops: [echo, augusta, lost] });
+  const l = r.legs.find((x) => x.id === 'lost');
+  assert.equal(l.arrive, null);
+  assert.equal(l.unknown, true);
+  assert.equal(r.late, 0); // an unknown stop cannot be "late"
+  const withoutIt = planRoute({ start: office, startMinutes: 600, stops: [echo, augusta] });
+  assert.equal(r.end, withoutIt.end);
+});
+
+test('no "saves N minutes" for an order that makes a showing late', () => {
+  // Only one order exists for a single placed stop; force a late pin.
+  const r = planRoute({ start: office, startMinutes: 600, stops: [{ ...copper, at: 601 }, angels1] });
+  if (r.late > 0) assert.ok(r.savedMinutes === 0 || r.late <= 0);
+});

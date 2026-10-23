@@ -300,7 +300,8 @@ async function api(path, opts = {}) {
 
 async function geocode(address) {
   try {
-    const r = await api(`/api/geocode?q=${encodeURIComponent(address)}`);
+    const state = (store.settings().state || 'CA').trim();
+    const r = await api(`/api/geocode?q=${encodeURIComponent(address)}&state=${encodeURIComponent(state)}`);
     return r && r.lat != null ? r : null;
   } catch { return null; }
 }
@@ -897,7 +898,7 @@ const plan = { step: 'talk', text: '', stops: [], startText: '10:00', startMinut
 // Bestie's order unless the agent has put the stops in their own order.
 function replan() {
   const stops = plan.stops.filter((st) => st.address.trim()).map((st) => ({
-    id: st.id, address: st.address, property_id: st.property_id, lat: st.lat, lng: st.lng,
+    id: st.id, address: st.address, property_id: st.property_id, lat: st.lat, lng: st.lng, approximate: !!st.approximate,
     at: st.atText ? parseClock(st.atText.replace(/\s/g, '')) : null,
     occ: st.property_id ? prop(st.property_id)?.occupancy || '' : ''
   }));
@@ -1020,6 +1021,7 @@ function viewPlan() {
           <div class="grow" style="gap:6px">
             <input class="stopaddr" data-i="${i}" value="${s.address}" placeholder="Street number, street, town" aria-label="Stop ${i + 1} address" style="min-height:44px;border:1px solid ${s.tried && s.lat == null ? 'var(--pending)' : '#b9c1be'};border-radius:8px;padding:8px 10px;font-size:16px;width:100%">
             ${s.tried && s.lat == null ? html`<span class="small wait">Couldn't find this on the map. Check the number and add the town.</span>` : ''}
+            ${s.tried && s.approximate ? html`<span class="small wait">Street not found, so it's placed at the town center. Fine for the order; check the number if you can.</span>` : ''}
             <input class="stoptime" data-i="${i}" value="${s.atText}" placeholder="Any time (or a set time like 11:30)" aria-label="Stop ${i + 1} time" style="min-height:40px;border:1px solid #d5dad8;border-radius:8px;padding:6px 10px;font-size:15px;width:100%">
           </div>
           <div style="display:flex;flex-direction:column;gap:4px">
@@ -1044,11 +1046,12 @@ function viewPlan() {
           <button type="button" data-leg="${l.id}" style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:0;padding:0;text-align:left;color:var(--ink);cursor:pointer">
             <span class="dot" style="background:var(--ink);width:30px;height:30px;font-family:var(--tall);font-size:15px;flex-shrink:0">${i + 1}</span>
             <span class="grow"><span class="t">${l.address}${l.occ === 'O' ? html` <span class="occ O" style="font-size:16px" title="Owner-occupied">O</span>` : ''}</span>
-              <span class="s">${[l.at != null ? `Set time ${formatClock(l.at)}` : l.occ === 'O' ? 'Owner-occupied: tap to set the time' : '', l.property_id ? 'Codes on file' : '', l.lat != null ? (i === 0 ? `${Math.round(l.legMiles * 10) / 10} mi from the start` : `${Math.round(l.legMiles * 10) / 10} mi · ${l.legMinutes} min drive`) : 'Not found on the map'].filter(Boolean).join(' · ')}</span>
+              <span class="s">${[l.at != null ? `Set time ${formatClock(l.at)}` : l.occ === 'O' ? 'Owner-occupied: tap to set the time' : '', l.property_id ? 'Codes on file' : '', l.lat != null ? (i === 0 ? `${Math.round(l.legMiles * 10) / 10} mi from the start` : `${Math.round(l.legMiles * 10) / 10} mi · ${l.legMinutes} min drive`) : 'Not found on the map: time unknown'].filter(Boolean).join(' · ')}</span>
+              ${l.approximate ? html`<span class="s wait">Street not found: placed at the town center</span>` : ''}
               ${l.waitMinutes > 0 ? html`<span class="s ok">Early: wait ${l.waitMinutes} min</span>` : ''}${l.lateMinutes > 0 ? html`<span class="s wait">${l.lateMinutes} min late for the set time</span>` : ''}
             </span>
           </button>
-          <span class="num" style="font-size:18px;${l.lateMinutes > 0 ? 'color:var(--pending)' : ''}">${formatClock(l.arrive)}</span></div>`)}</div>
+          <span class="num" style="font-size:18px;${l.lateMinutes > 0 ? 'color:var(--pending)' : ''}">${l.arrive != null ? formatClock(l.arrive) : '—'}</span></div>`)}</div>
         <div class="hint">Drive times are estimates from distance. “Open in Maps” has the real ones.</div>
         <a class="btn block" href="${mapsUrl(plan.start, r.legs)}" target="_blank" rel="noopener">${icon('pin', 18)}Open in Maps</a>
         <button class="btn dark big block" type="button" id="savetour">Save as the tour</button>
@@ -1121,20 +1124,13 @@ function tourStop(l) {
   const person = p ? store.where('people', 'property_id', p.id).find((m) => m.phone) : null;
   return {
     id: store.uid(), property_id: l.property_id || null, address: l.address, lat: l.lat ?? null, lng: l.lng ?? null,
-    at: l.at ?? null, arrive: l.arrive, leg_miles: Math.round((l.legMiles || 0) * 10) / 10, leg_minutes: l.legMinutes || 0,
+    at: l.at ?? null, arrive: l.arrive ?? null, approximate: !!l.approximate, leg_miles: Math.round((l.legMiles || 0) * 10) / 10, leg_minutes: l.legMinutes || 0,
     occ: p?.occupancy || '', well: !!p?.well, septic: !!p?.septic,
     code_label: code ? code.label || KINDS[code.kind]?.label : '', code: code ? code.code : '', code_pending: false,
     access_note: [box && `${box.label}: ${box.location_note || ''}`, p?.showing_notes].filter(Boolean).join(' · '),
     // On our own listing the contact is the seller or tenant, not a listing agent.
     agent: person ? [person.name, person.role && `(${person.role})`].filter(Boolean).join(' ') : '', agent_phone: person ? person.phone : '', confirmed: false, shown: false, notes: ''
   };
-}
-
-// The geocoder does far better with a state. Agents say "Murphys", not
-// "Murphys, CA"; add the agent's state when the address has none.
-function withState(address) {
-  const st = (store.settings().state || 'CA').trim();
-  return /,\s*[A-Z]{2}\b|\b\d{5}\b/.test(address) ? address : `${address}, ${st}`;
 }
 
 async function buildPlan() {
@@ -1155,8 +1151,8 @@ async function buildPlan() {
     const p = matchProperty(st.address, props());
     if (p && p.lat != null) Object.assign(st, { address: p.address, property_id: p.id, lat: p.lat, lng: p.lng });
     else {
-      const g = await geocode(withState(st.address));
-      Object.assign(st, { property_id: p ? p.id : null, lat: g?.lat ?? null, lng: g?.lng ?? null });
+      const g = await geocode(st.address); // the server adds the state and tries other spellings
+      Object.assign(st, { property_id: p ? p.id : null, lat: g?.lat ?? null, lng: g?.lng ?? null, approximate: !!g?.approximate });
     }
     st.tried = true;
   }
@@ -1195,7 +1191,8 @@ function viewTour(id) {
   const phones = [...new Set(stops.map((s) => s.agent_phone).filter(Boolean))];
   const save = (patch) => store.save('tours', { id, ...patch });
   const setStop = (sid, patch) => save({ stops: stops.map((s) => (s.id === sid ? { ...s, ...patch } : s)) });
-  const occ = (o) => (o === 'O' ? html`<span class="occ O" title="Occupied">O</span>` : o === 'V' ? html`<span class="occ V" title="Vacant">V</span>` : html`<span class="occ q" title="Ask the agent">?</span>`);
+  // Occupancy in words: a bare "?" meant nothing to anyone (Cowork, 2026-10-23).
+  const occ = (o) => (o === 'O' ? html`<span class="occ O">O</span><span class="occ-word">Occupied</span>` : o === 'V' ? html`<span class="occ V">V</span><span class="occ-word">Vacant</span>` : '');
   return {
     html: html`${header({
       back: '#/tours', kicker: 'Tour mode', title: t.name,
@@ -1205,11 +1202,13 @@ function viewTour(id) {
     <main class="wrap">
       ${stops.map((s, i) => html`<div class="card stop ${s.shown ? 'shown' : ''}">
         <div class="stop-head">
-          <div class="stop-time"><span class="num">${s.arrive != null ? formatClock(s.arrive).replace(' ', ' ') : '—'}</span>${occ(s.occ)}</div>
+          <div class="stop-time">${s.arrive != null ? html`<span class="num">${formatClock(s.arrive)}</span>` : html`<span class="occ-word">Time unknown</span>`}${occ(s.occ)}</div>
           <div class="grow" style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
             <div class="label accent">Stop ${i + 1}${s.at != null ? ' · fixed ' + formatClock(s.at) : ''}</div>
             ${s.property_id ? html`<a href="#/p/${s.property_id}" style="color:var(--ink);font-weight:700;font-size:18px">${s.address}</a>` : html`<div style="font-weight:700;font-size:18px">${s.address}</div>`}
             <div class="badges">${s.well ? html`<span class="dot w">W</span>` : ''}${s.septic ? html`<span class="dot s">S</span>` : ''}</div>
+            ${s.approximate ? html`<div class="small wait">Street not found on the map: drive times use the town center.</div>` : ''}
+            ${s.arrive == null ? html`<div class="small wait">Not on the map, so no time yet. Tap Edit stop to set one.</div>` : ''}
           </div>
         </div>
         ${s.code || s.code_pending ? html`<div class="access-box"><span class="code-pill"><span class="k">${(s.code_label || 'Code').toUpperCase()}</span><span class="v">${s.code || 'Coming'}</span></span>${s.access_note ? html`<span>${s.access_note}</span>` : ''}</div>`
