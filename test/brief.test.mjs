@@ -1,0 +1,61 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime } from '../js/brief.js';
+import { actionPlan, eventKind } from '../js/assist.js';
+
+const today = '2026-10-23';
+const data = {
+  properties: [{ id: 'p1', address: '433 E Highway 4', status: 'escrow', coe_date: '2026-10-27' }, { id: 'p2', address: '1143 Echo St', status: 'listing' }],
+  events: [
+    { id: 'e2', date: today, start_minutes: 840, title: 'Inspection', property_id: 'p2', kind: 'inspection' },
+    { id: 'e1', date: today, start_minutes: 600, title: 'Walk-through', property_id: 'p1', kind: 'walkthrough' },
+    { id: 'e3', date: '2026-10-24', start_minutes: null, title: 'Open house', kind: 'open' }
+  ],
+  dates: [{ id: 'd1', property_id: 'p1', label: 'Appraisal', due: '2026-10-25', done: false }, { id: 'd2', property_id: 'p2', label: 'Loan removal', due: '2026-10-20', done: false }],
+  tasks: [{ id: 't1', text: 'Order warranty', due: today, done: false }, { id: 't2', text: 'Call lender', due: '2026-10-21', done: false }, { id: 't3', text: 'Old', due: '2026-10-21', done: true }],
+  tours: [{ id: 'r1', date: today, start_minutes: 690, name: 'Smith tour', stops: [{}, {}] }]
+};
+
+test('a day lists timed things in order, then the all-day ones', () => {
+  const items = dayItems(data, today);
+  assert.deepEqual(items.map((i) => i.id), ['e1', 'r1', 'e2', 't1']);
+  assert.equal(items[0].where, '433 E Highway 4');
+});
+
+test('the agenda skips empty days', () => {
+  assert.deepEqual(agenda(data, today, 5).map((d) => d.day), [today, '2026-10-24', '2026-10-25']);
+});
+
+test('the briefing finds late work, closings and the week ahead', () => {
+  const b = briefing(data, today, { pickups: 2 });
+  assert.deepEqual(b.late.map((t) => t.id), ['t2']);
+  assert.deepEqual(b.lateDates.map((d) => d.id), ['d2']);
+  assert.deepEqual(b.closings.map((p) => p.id), ['p1']);
+  assert.deepEqual(b.deadlines.map((d) => d.id), ['d1']);
+  const text = briefingText(b, data);
+  assert.match(text, /Today you have 3 appointments\./);
+  assert.match(text, /At 10:00 AM, Walk-through at 433 E Highway 4\./);
+  assert.match(text, /433 E Highway 4 closes Tuesday\./);
+  assert.match(briefingText(briefing({ properties: [{ address: '1 Main', status: 'escrow', coe_date: today }] }, today), {}), /1 Main closes today/);
+  assert.match(text, /2 signs or lockboxes to pick up/);
+});
+
+test('a quiet day says so', () => {
+  assert.match(briefingText(briefing({}, today), {}), /Nothing is on the calendar today/);
+});
+
+test('dates and times', () => {
+  assert.equal(addDays('2026-12-31', 1), '2027-01-01');
+  assert.equal(timeToMinutes('09:30'), 570);
+  assert.equal(minutesToTime(570), '09:30');
+  assert.equal(timeToMinutes(''), null);
+});
+
+test('"walk-through tomorrow at 10" becomes an appointment, not a to-do', () => {
+  const p = actionPlan({ type: 'event', text: 'Walk-through', due: '2026-10-24', time: '10:00', minutes: null, property_id: 'p1' }, { today });
+  assert.equal(p.table, 'events');
+  assert.equal(p.row.start_minutes, 600);
+  assert.equal(p.row.kind, 'walkthrough');
+  assert.ok(actionPlan({ type: 'event', text: 'Meet', due: null }, { today }).error);
+  assert.equal(eventKind('Final signing at title'), 'closing');
+});

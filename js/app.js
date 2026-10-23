@@ -6,7 +6,8 @@ import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLi
 import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMiles, roadMiles, driveMinutes } from './route.js';
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
 import { sampleData } from './sample.js';
-import { sheetChanges, sheetExtras, sheetNoteText, actionPlan } from './assist.js';
+import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -378,6 +379,8 @@ function viewToday() {
         <div class="btns"><a class="btn dark" href="#/p/new">Add a listing</a><button class="btn" type="button" id="sample">Show sample data</button></div>
       </section>` : ''}
 
+      ${!empty && !searchText ? briefingCard() : ''}
+
       ${hp ? html`<section class="sec">
         <div class="label accent">You're at · ${Math.round(here.d * 5280)} ft away</div>
         <a class="card pad sec" href="#/p/${hp.id}" style="color:var(--ink)">
@@ -418,7 +421,7 @@ function viewToday() {
       </section>` : ''}
 
       <section class="sec">
-        <div class="btns"><a class="btn" href="#/miles">${icon('miles', 18)}Mileage</a><a class="btn" href="#/safety">${icon('shield', 18)}Safety check-in</a></div>
+        <div class="btns"><a class="btn" href="#/miles">${icon('miles', 18)}Mileage</a><a class="btn" href="#/signs">${icon('sign', 18)}Signs</a><a class="btn" href="#/safety">${icon('shield', 18)}Safety check-in</a></div>
       </section>
       ${!store.cloud.enabled ? html`<div class="hint" style="text-align:center">Everything is saved on this phone.</div>` : ''}
     </main>`,
@@ -441,6 +444,9 @@ function viewToday() {
         render();
       });
       root.querySelector('#addtodo')?.addEventListener('click', () => addTaskSheet());
+      root.querySelector('#readbrief')?.addEventListener('click', (e) => readBriefing(e.currentTarget));
+      wireDayRows(root.querySelector('.brief') || document.createElement('div'));
+      autoCrmSync();
       root.querySelectorAll('[data-done]').forEach((b) => b.addEventListener('click', () => {
         const [table, id] = b.getAttribute('data-done').split(':');
         store.save(table, { id, done: true, done_at: new Date().toISOString() });
@@ -872,6 +878,7 @@ function viewSigns() {
   const tab = (k, l) => html`<button class="tab ${signTab === k ? 'on' : ''}" type="button" data-t="${k}">${l}</button>`;
   return {
     html: html`${header({
+      back: '#/',
       kicker: 'Signs & lockboxes',
       extra: html`<div class="stats"><div class="stat"><span class="n">${items.filter((a) => a.status === 'out').length}</span><span class="l">Out</span></div><div class="stat"><span class="n">${office.length}</span><span class="l">In the office</span></div><div class="stat"><span class="n" style="color:var(--code)">${pick.size}</span><span class="l">To pick up</span></div></div>`
     })}
@@ -1554,6 +1561,7 @@ function viewSettings() {
   const s = store.settings();
   const c = store.cloud;
   return {
+    form: true, // typed links and keys must not be wiped by a sync repaint
     html: html`${header({ back: '#/', kicker: 'Settings', title: 'Brokers Bestie' })}
     <main class="wrap">
       <section class="card pad sec">
@@ -1568,6 +1576,23 @@ function viewSettings() {
             <button class="btn block" type="button" id="join">Join team</button>
             <button class="btn ghost block" type="button" id="signout">Sign out</button>`}
       </section>
+
+      ${c.user ? html`<section class="card pad sec">
+        <div class="label accent">Your phone's calendar</div>
+        <div class="small">Shows Bestie's appointments, tours and deadlines in the calendar app you already use. It updates by itself (iPhone about every 15 minutes, Google a few times a day).</div>
+        <div id="calbox"><button class="btn block" type="button" id="callink">${icon('cal', 18)}Get my calendar link</button></div>
+      </section>
+
+      <section class="card pad sec">
+        <div class="label accent">Connect your CRM</div>
+        <div class="small" id="crmstate">Checking…</div>
+        <label class="field"><span>Feed link (from your CRM)</span><input id="crmurl" type="url" autocomplete="off" placeholder="https://yourcrm.com/api/crm/bestie-feed"></label>
+        <label class="field"><span>Feed key</span><input id="crmkey" class="codein" autocomplete="off" placeholder="Leave empty to keep the saved key"></label>
+        <button class="btn block" type="button" id="crmmake">Make a new key (copies it)</button>
+        <div class="hint">Your listings, deal dates, contacts and appointments come in from the CRM and update each time you open Bestie. Codes, photos and notes stay Bestie's: the CRM never changes them.</div>
+        <div class="btns"><button class="btn dark" type="button" id="crmsave">Save and sync</button><button class="btn" type="button" id="crmrun">Sync now</button></div>
+        <button class="btn ghost block" type="button" id="crmoff" hidden>Disconnect</button>
+      </section>` : ''}
 
       <section class="card pad sec">
         <div class="label">Home base (where tours start)</div>
@@ -1616,6 +1641,49 @@ function viewSettings() {
         if (!code) return;
         try { await store.joinTeam(code); toast('You joined the team'); } catch (e) { toast(e.message); }
       });
+      root.querySelector('#callink')?.addEventListener('click', async () => {
+        try {
+          const token = await store.calToken();
+          const https = `${location.origin}/api/cal/${token}.ics`;
+          const webcal = https.replace(/^https?:/, 'webcal:');
+          root.querySelector('#calbox').innerHTML = str(html`<div class="btns">
+            <a class="btn dark" href="${webcal}">iPhone / Mac calendar</a>
+            <a class="btn" href="${'https://calendar.google.com/calendar/r?cid=' + encodeURIComponent(webcal)}" target="_blank" rel="noopener">Google Calendar</a>
+          </div><button class="btn ghost block" type="button" id="calcopy">Copy the link</button>
+          <div class="hint">Anyone with this link can see the team calendar, so keep it to yourselves.</div>`);
+          root.querySelector('#calcopy').addEventListener('click', async () => { await copy(https); toast('Copied'); });
+        } catch (e) { toast(e.message || 'Could not make the link'); }
+      });
+      if (store.cloud.user) {
+        const st = root.querySelector('#crmstate');
+        const show = (r) => {
+          st.textContent = r.connected ? `Connected to ${new URL(r.feed_url).host}. ${r.last_result || ''}${r.last_synced_at ? ` (${new Date(r.last_synced_at).toLocaleString()})` : ''}` : 'Not connected.';
+          if (r.connected && !root.querySelector('#crmurl').value) root.querySelector('#crmurl').value = r.feed_url;
+          root.querySelector('#crmoff').hidden = !r.connected;
+        };
+        api('/api/crm-sync').then(show).catch((e) => { st.textContent = e.message; });
+        const call = async (body, btn) => {
+          btn.disabled = true;
+          st.textContent = 'Syncing…';
+          try {
+            const r = await api('/api/crm-sync', { method: 'POST', body: JSON.stringify(body) });
+            show(r);
+            if (r.result && r.result.ok) { await store.syncNow(); toast('Synced from your CRM'); pinCrmProperties(); }
+            else if (r.result) toast(r.result.error);
+          } catch (e) { st.textContent = e.message; }
+          btn.disabled = false;
+        };
+        root.querySelector('#crmmake').addEventListener('click', async () => {
+          const bytes = crypto.getRandomValues(new Uint8Array(24));
+          const key = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+          root.querySelector('#crmkey').value = key;
+          await copy(key);
+          toast('New key copied. Paste it into your CRM too, then Save and sync.');
+        });
+        root.querySelector('#crmsave').addEventListener('click', (e) => call({ op: 'save', url: root.querySelector('#crmurl').value.trim(), key: root.querySelector('#crmkey').value.trim() }, e.currentTarget));
+        root.querySelector('#crmrun').addEventListener('click', (e) => call({ op: 'run' }, e.currentTarget));
+        root.querySelector('#crmoff').addEventListener('click', (e) => { if (confirm('Stop syncing from this CRM? What already came in stays.')) call({ op: 'disconnect' }, e.currentTarget); });
+      }
       const hb = root.querySelector('#hb');
       root.querySelector('#hbhere').addEventListener('click', async () => {
         const fix = await locate();
@@ -1643,6 +1711,156 @@ function viewSettings() {
 
 function notFound() {
   return { html: html`${header({ back: '#/', title: 'Not found' })}<main class="wrap"><div class="card empty">That item isn't here any more.</div></main>` };
+}
+
+// ======================================================================
+// CALENDAR
+// ======================================================================
+
+const kindLabel = (k) => (EVENT_KINDS.find(([v]) => v === k) || [k, ''])[1] || '';
+const dayHeading = (iso) => {
+  const today = todayIso();
+  if (iso === today) return 'Today';
+  if (iso === addDays(today, 1)) return 'Tomorrow';
+  return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' });
+};
+
+// One row of the calendar or the Today schedule. Tapping opens what it is.
+function dayItemRow(i) {
+  const time = i.start != null && i.kind !== 'task' ? html`<span class="num cal-time">${formatClock(i.start).replace(':00 ', ' ')}</span>` : html`<span class="cal-time allday">${{ date: 'Due', task: 'To do', event: 'All day', tour: '' }[i.kind]}</span>`;
+  const kl = i.kind === 'event' ? kindLabel(i.sub) : '';
+  const sub = [i.kind === 'event' ? (kl && !i.title.toLowerCase().includes(kl.toLowerCase().split(' ')[0]) ? kl : '') : i.kind === 'date' ? 'Deadline' : i.kind === 'tour' ? 'Tour' : '', i.where].filter(Boolean).join(' · ');
+  const attrs = i.kind === 'tour' ? raw(`href="#/tour/${esc(i.id)}"`) : i.kind === 'event' ? raw(`data-event="${esc(i.id)}"`) : i.kind === 'date' ? raw(`data-cal-date="${esc(i.id)}"`) : raw(`data-cal-task="${esc(i.id)}"`);
+  const tag = i.kind === 'tour' ? 'a' : 'button';
+  return html`${raw(`<${tag} class="row cal-row k-${i.kind}${i.done ? ' done-row' : ''}" ${tag === 'button' ? 'type="button"' : ''} `)}${attrs}${raw('>')}
+    ${time}<span class="grow"><span class="t ${i.done ? 'done-text' : ''}">${i.title}</span>${sub ? html`<span class="s">${sub}</span>` : ''}</span>${raw(`</${tag}>`)}`;
+}
+
+function wireDayRows(root) {
+  root.querySelectorAll('[data-event]').forEach((b) => b.addEventListener('click', () => eventSheet(store.get('events', b.getAttribute('data-event')))));
+  root.querySelectorAll('[data-cal-date]').forEach((b) => b.addEventListener('click', () => { const d = store.get('dates', b.getAttribute('data-cal-date')); if (d) dateSheet(d.property_id, d); }));
+  root.querySelectorAll('[data-cal-task]').forEach((b) => b.addEventListener('click', () => {
+    if (confirm('Mark this to-do done?')) store.save('tasks', { id: b.getAttribute('data-cal-task'), done: true, done_at: new Date().toISOString() });
+  }));
+}
+
+function eventSheet(e, prefill = {}) {
+  const v = e ? { ...e, time: minutesToTime(e.start_minutes) } : { kind: 'showing', date: todayIso(), minutes: 30, ...prefill };
+  formSheet({
+    title: e ? e.title || 'Appointment' : 'New appointment',
+    fields: [
+      { name: 'title', label: 'What', placeholder: 'Walk-through with the buyers' },
+      { name: 'kind', label: 'Kind', type: 'select', options: EVENT_KINDS },
+      { name: 'date', label: 'Date', type: 'date' },
+      { name: 'time', label: 'Start (leave empty for all day)', type: 'time' },
+      { name: 'minutes', label: 'How long', type: 'select', options: [['15', '15 min'], ['30', '30 min'], ['45', '45 min'], ['60', '1 hour'], ['90', '1½ hours'], ['120', '2 hours'], ['180', '3 hours']] },
+      { name: 'property_id', label: 'Property', type: 'select', options: [['', '— none —'], ...props().map((p) => [p.id, p.address])] },
+      { name: 'location', label: 'Where (if not the property)', placeholder: 'Title office, 125 Main St' },
+      { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'With the Smiths. Bring the CMA.' }
+    ],
+    values: { ...v, minutes: String(v.minutes || 30), property_id: v.property_id || '' },
+    extra: e && e.source === 'crm' ? html`<div class="note-box">From your CRM. A change here stays on your team until the CRM next changes it.</div>` : '',
+    onSave(f) {
+      if (!f.title && !f.property_id) { toast('Say what it is'); return false; }
+      if (!f.date) { toast('Pick the date'); return false; }
+      store.save('events', { ...(e ? { id: e.id } : {}), title: f.title || `${kindLabel(f.kind)} · ${addr(f.property_id)}`, kind: f.kind, date: f.date, start_minutes: timeToMinutes(f.time), minutes: Number(f.minutes) || null, property_id: f.property_id || null, location: f.location, notes: f.notes, done: e ? !!e.done : false });
+      toast(e ? 'Saved' : `Added to ${dayHeading(f.date).toLowerCase() === 'today' ? 'today' : niceDate(f.date)}`);
+    },
+    onDelete: e ? () => store.remove('events', e.id) : null
+  });
+}
+
+let calFrom = null;
+function viewCalendar() {
+  const today = todayIso();
+  calFrom = calFrom || today;
+  const days = agenda(store.snapshot(), calFrom, 45);
+  const link = store.cloud.user ? null : 'Sign in (Settings) to see it in your phone calendar too.';
+  return {
+    html: html`${header({ kicker: 'Calendar', title: calFrom === today ? 'Coming up' : `From ${niceDate(calFrom)}`, sub: 'Appointments, tours, deadlines and to-dos in one list.', right: html`<button class="btn teal" type="button" id="addevent" style="min-height:40px">+ Add</button>` })}
+    <main class="wrap">
+      <div class="tabs">
+        <button class="tab ${calFrom === today ? 'on' : ''}" type="button" data-from="${today}">From today</button>
+        <button class="tab" type="button" data-from="${addDays(calFrom, -7)}">‹ Week before</button>
+        <label class="tab cal-pick">Jump to…<input type="date" id="jump" value="${calFrom}"></label>
+      </div>
+      ${days.length ? days.map(({ day, items }) => html`<section class="sec">
+        <div class="sec-head"><div class="label ${day === today ? 'accent' : ''}">${dayHeading(day)}${day !== today && day !== addDays(today, 1) ? '' : html` · ${niceDate(day)}`}</div><button class="btn ghost" type="button" data-addon="${day}" style="min-height:32px">+</button></div>
+        <div class="card list">${items.map(dayItemRow)}</div>
+      </section>`) : html`<div class="card empty">Nothing in the next 45 days. Tap + Add, or tell Bestie: “Walk-through tomorrow at 10 at 433 Highway 4.”</div>`}
+      ${link ? html`<div class="hint" style="text-align:center">${link}</div>` : html`<a class="hint" href="#/settings" style="text-align:center;display:block">Put this calendar on your phone's own calendar →</a>`}
+    </main>`,
+    mount(root) {
+      root.querySelector('#addevent').addEventListener('click', () => eventSheet(null));
+      root.querySelectorAll('[data-addon]').forEach((b) => b.addEventListener('click', () => eventSheet(null, { date: b.getAttribute('data-addon') })));
+      root.querySelectorAll('[data-from]').forEach((b) => b.addEventListener('click', () => { calFrom = b.getAttribute('data-from'); render(); }));
+      root.querySelector('#jump').addEventListener('change', (ev) => { if (ev.target.value) { calFrom = ev.target.value; render(); } });
+      wireDayRows(root);
+    }
+  };
+}
+
+// ---------- the morning briefing ----------
+
+function briefingCard() {
+  const data = store.snapshot();
+  const b = briefing(data, todayIso(), { pickups: pickups().length });
+  const hour = new Date().getHours();
+  const hello = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const timed = b.today.filter((i) => i.kind !== 'task' && i.kind !== 'date');
+  const facts = [
+    timed.length ? `${timed.length} appointment${timed.length === 1 ? '' : 's'} today${timed[0].start != null ? `, first at ${formatClock(timed[0].start)}` : ''}` : 'No appointments today',
+    b.closings.length ? `${b.closings.length} closing${b.closings.length === 1 ? '' : 's'} this week` : '',
+    b.deadlines.length ? `${b.deadlines.length} deadline${b.deadlines.length === 1 ? '' : 's'} in the next 7 days` : '',
+    b.late.length ? `${b.late.length} overdue to-do${b.late.length === 1 ? '' : 's'}` : '',
+    b.lateDates.length ? `${b.lateDates.length} deadline${b.lateDates.length === 1 ? '' : 's'} passed, not marked done` : ''
+  ].filter(Boolean);
+  return html`<section class="card pad sec brief">
+    <div class="sec-head"><div><div class="label accent">${hello}</div><div class="brief-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div></div>
+      <button class="btn" type="button" id="readbrief" style="min-height:40px">${icon('speak', 18)}Read it to me</button></div>
+    <ul class="brief-facts">${facts.map((f) => html`<li>${f}</li>`)}</ul>
+    ${timed.length ? html`<div class="card list">${timed.map(dayItemRow)}</div>` : ''}
+    ${b.closings.length || b.deadlines.length ? html`<div class="small">${[...b.closings.map((p) => `${p.address} closes ${niceDate(p.coe_date)}`), ...b.deadlines.slice(0, 4).map((d) => `${d.label} · ${addr(d.property_id)} · ${niceDate(d.due)}`)].join(' — ')}</div>` : ''}
+    <a class="small" href="#/calendar" style="color:var(--teal-text);font-weight:600">Open the calendar →</a>
+  </section>`;
+}
+
+function readBriefing(button) {
+  if (!('speechSynthesis' in window)) return toast('This phone cannot read aloud');
+  if (speechSynthesis.speaking) { speechSynthesis.cancel(); return; }
+  const data = store.snapshot();
+  const hour = new Date().getHours();
+  const text = briefingText(briefing(data, todayIso(), { pickups: pickups().length }), data, { hello: hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening' });
+  const say = new SpeechSynthesisUtterance(text);
+  say.lang = 'en-US';
+  say.rate = 1;
+  if (button) { button.textContent = 'Stop reading'; say.onend = say.onerror = () => { button.innerHTML = str(html`${icon('speak', 18)}Read it to me`); }; }
+  speechSynthesis.speak(say);
+}
+
+// ---------- CRM sync from the phone ----------
+
+let crmChecked = false;
+// Once a session, when signed in: ask the server to pull the CRM if it has not
+// in the last hour, then fetch what it wrote.
+async function autoCrmSync() {
+  if (crmChecked || !store.cloud.user || !navigator.onLine) return;
+  crmChecked = true;
+  try {
+    const r = await api('/api/crm-sync', { method: 'POST', body: JSON.stringify({ op: 'auto' }) });
+    if (r.result && r.result.ok) { await store.syncNow(); pinCrmProperties(); }
+  } catch {}
+}
+
+// Properties that came from the CRM have no map pin; find a few each time.
+const pinTried = new Set();
+async function pinCrmProperties() {
+  const todo = props().filter((p) => p.source === 'crm' && p.lat == null && !pinTried.has(p.id)).slice(0, 5);
+  for (const p of todo) {
+    pinTried.add(p.id);
+    const g = await geocode([p.address, p.city].filter(Boolean).join(', '));
+    if (g && !g.approximate) store.save('properties', { id: p.id, lat: g.lat, lng: g.lng });
+  }
 }
 
 // ======================================================================
@@ -1939,7 +2157,8 @@ const ROUTES = [
   [/^#\/p\/([^/]+)$/, (m) => viewHub(m[1]), 'props'],
   [/^#\/quick(?:\/([a-z]+))?(?:\/([^/]+))?$/, (m) => viewQuick(m[1], m[2]), 'quick'],
   [/^#\/sheet(?:\/([^/]+))?$/, (m) => viewSheet(m[1]), 'props'],
-  [/^#\/signs$/, () => viewSigns(), 'signs'],
+  [/^#\/calendar$/, () => viewCalendar(), 'calendar'],
+  [/^#\/signs$/, () => viewSigns(), 'today'],
   [/^#\/plan$/, () => viewPlan(), 'tours'],
   [/^#\/tours$/, () => viewTours(), 'tours'],
   [/^#\/tour\/([^/]+)$/, (m) => viewTour(m[1]), 'tours'],

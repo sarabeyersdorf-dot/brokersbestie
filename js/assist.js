@@ -52,12 +52,30 @@ export function sheetNoteText(sheet) {
   return lines.join('\n');
 }
 
+// The calendar's kinds of appointment, and a guess at one from its title.
+export const EVENT_KINDS = [['showing', 'Showing'], ['walkthrough', 'Walk-through'], ['inspection', 'Inspection'], ['appraisal', 'Appraisal'], ['closing', 'Closing / signing'], ['open', 'Open house'], ['meeting', 'Meeting'], ['other', 'Other']];
+export function eventKind(title) {
+  const t = String(title || '').toLowerCase();
+  if (/walk/.test(t)) return 'walkthrough';
+  if (/inspect/.test(t)) return 'inspection';
+  if (/apprais/.test(t)) return 'appraisal';
+  if (/clos|sign/.test(t)) return 'closing';
+  if (/open house/.test(t)) return 'open';
+  if (/show|tour/.test(t)) return 'showing';
+  return 'meeting';
+}
+
 // One spoken action -> what to save, or where to go. `today` is YYYY-MM-DD.
 // Returns { table, row } | { go, plan? } | { error }.
 export function actionPlan(a, { today }) {
   const pid = a.property_id || null;
   const needsProp = (msg) => (pid ? null : { error: msg });
   switch (a.type) {
+    case 'event': {
+      if (!a.due) return { error: 'Say what day' };
+      const m = String(a.time || '').match(/^(\d{1,2}):(\d{2})/);
+      return { table: 'events', row: { title: a.text || 'Appointment', kind: eventKind(a.text), date: a.due, start_minutes: m ? Number(m[1]) * 60 + Number(m[2]) : null, minutes: a.minutes || null, property_id: pid, location: a.where || '', notes: a.name ? `With ${a.name}` : '', done: false } };
+    }
     case 'task':
       if (!a.text) return { error: 'No to-do heard' };
       return { table: 'tasks', row: { text: a.text, due: a.due || today, property_id: pid, done: false } };

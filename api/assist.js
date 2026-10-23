@@ -7,7 +7,7 @@
 import { send, readBody } from './_lib/server.js';
 import { askJson, refuse, S, AiError } from './_lib/ai.js';
 
-export const ACTION_TYPES = ['task', 'note', 'code', 'date', 'person', 'expense', 'trip', 'property', 'tour', 'checkin', 'unclear'];
+export const ACTION_TYPES = ['event', 'task', 'note', 'code', 'date', 'person', 'expense', 'trip', 'property', 'tour', 'checkin', 'unclear'];
 
 const ACTION = S.obj({
   type: { type: 'string', enum: ACTION_TYPES },
@@ -15,6 +15,7 @@ const ACTION = S.obj({
   property_id: S.str,
   text: S.str,
   due: S.str,
+  time: S.str,
   code_kind: S.oneOf(['lockbox', 'gate', 'alarm', 'door', 'key']),
   code: S.str,
   where: S.str,
@@ -33,7 +34,8 @@ export const ASSIST_SCHEMA = S.obj({ actions: S.list(ACTION) });
 
 const SYSTEM = `You turn what a real estate agent says into actions in their phone app, Brokers Bestie.
 Return one action per thing they asked for, in the order said. Action types:
-- task: a to-do. text = what to do, due = date (YYYY-MM-DD) if they gave one. An appointment, walk-through, meeting or call at a set time is a task on that day with the time in the text, e.g. "10:00 AM walk-through". Set property_id when it names a property.
+- event: an appointment on the calendar (showing, walk-through, inspection, appraisal, closing, signing, meeting, open house, call at a set time). text = a short title, e.g. "Walk-through", due = the date, time = start as 24-hour HH:MM (null if no time was said), minutes = how long if said, code_kind = null, where = the place if it is not a saved property, name = who it is with. Set property_id when it names a property.
+- task: a to-do with no set time. text = what to do, due = date (YYYY-MM-DD) if they gave one.
 - note: a note filed on a property. text = the note.
 - code: a lockbox, gate, alarm, door code or hidden key. code_kind, code, where (where it is).
 - date: a key date on a deal (inspection, contingency removal, appraisal, close of escrow). text = the label, due = the date.

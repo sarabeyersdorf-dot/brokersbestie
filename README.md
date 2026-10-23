@@ -52,6 +52,7 @@ Dropbox, read an MLS sheet into a listing, brokerage owner view, App Store versi
 | `CRON_SECRET` | Any long random string; protects the every-5-minutes safety job |
 | `ANTHROPIC_API_KEY` | Reads MLS sheets and understands "Tell Bestie" voice commands. From console.anthropic.com → API keys. Without it, sheets still save as photos and voice commands offer to save the words as a to-do or note. |
 | `ANTHROPIC_WORKSPACE_ID` (only if needed) | Only for a key made outside a workspace: the workspace's id from the Console. A key made inside a workspace needs nothing else. |
+| `CRON_SECRET` | Also used by the daily CRM sync (`/api/cron/crm-sync`). |
 | `GOOGLE_MAPS_API_KEY` (optional) | Better address lookup for tour routes on rural roads. Without it the free OpenStreetMap lookup is used. |
 
 The safety job is set to run **once a day** (`vercel.json`) so the site deploys on

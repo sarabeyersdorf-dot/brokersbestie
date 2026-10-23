@@ -7,7 +7,7 @@
 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
-export const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'tours', 'trips', 'expenses', 'checkins'];
+export const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'events', 'tours', 'trips', 'expenses', 'checkins'];
 const KEY = (t) => `bb:${t}`;
 const DELETED = 'bb:_deleted';
 const SETTINGS = 'bb:settings';
@@ -92,7 +92,7 @@ export function remove(table, id) {
 
 // Deleting a property takes everything filed under it with it.
 export function removeProperty(id) {
-  for (const t of ['access', 'people', 'notes', 'tasks', 'dates', 'expenses']) {
+  for (const t of ['access', 'people', 'notes', 'tasks', 'dates', 'events', 'expenses']) {
     for (const r of where(t, 'property_id', id)) remove(t, r.id);
   }
   remove('properties', id);
@@ -231,6 +231,15 @@ export async function joinTeam(code) {
   cloud.teamId = id;
   await syncNow();
   return id;
+}
+
+// The secret link a phone calendar subscribes to (one per team).
+export async function calToken() {
+  const c = await client();
+  if (!cloud.teamId) await syncNow();
+  const { data: token, error } = await c.rpc('bb_cal_token', { team: cloud.teamId });
+  if (error) throw error;
+  return token;
 }
 
 export async function inviteCode() {

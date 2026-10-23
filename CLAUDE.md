@@ -63,3 +63,22 @@ Legacy Properties DRE 02254944 · Sara Cooper DRE 02141987 · James Beyersdorf D
   per use). `api/_lib/ai.js` is the one place that calls Claude; it uses
   `fallbacks: 'default'` so a declined request is retried on a fallback model.
 - `dictate()` finishes once and leaves typed words alone if nothing was heard.
+
+## Calendar, morning briefing, CRM sync (2026-10-23)
+
+- **Calendar** (`#/calendar`, in the bottom nav where Signs was; Signs is a
+  button on Today): `events` table (db/003). `js/brief.js` is the one
+  definition of what is on a day (`dayItems`: events, tours, deadlines,
+  to-dos) and of the briefing (`briefing`, `briefingText`). Tell Bestie's
+  `event` action makes appointments (an appointment is never a to-do now).
+- **Phone calendar**: Settings → "Your phone's calendar" →
+  `/api/cal/<token>.ics` (team calendar, token from `bb_cal_token`, floating
+  times). `cal_feeds` and `crm_links` are RLS-on with NO policies: server only.
+- **CRM sync**: any CRM serving **Bestie Feed v1** (`api/_lib/feed.js`
+  documents it). Legacy serves it at `/api/crm/bestie-feed` (its own
+  `BESTIE_FEED_KEY`). `runSync` upserts with stable ids
+  `crm:<team>:<kind>:<ext>`; the CRM owns address/status/price/MLS/COE, people,
+  deal dates and appointments; it never writes codes, notes, photos, pins,
+  showing notes or an appointment's `done`. Appointments cancelled in the CRM
+  are removed from today on. Phones trigger it hourly on open (`op: 'auto'`);
+  `api/cron/crm-sync` runs daily.
