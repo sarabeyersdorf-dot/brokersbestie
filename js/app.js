@@ -1574,7 +1574,9 @@ function viewSettings() {
         ${!c.enabled ? html`<div>Everything is saved on this phone only. Team mode (sign-in, sharing with your team, automatic safety alerts) turns on once the server is set up.</div>`
           : !c.user ? html`<div>Sign in to save to your team and use it on every phone.</div>
             <label class="field"><span>Email</span><input id="email" type="email" autocomplete="email" placeholder="you@brokerage.com"></label>
-            <button class="btn dark block" type="button" id="signin">Email me a sign-in link</button>`
+            <label class="field"><span>Invite code from your team (if you have one)</span><input id="precode" autocomplete="off" autocapitalize="characters" placeholder="ABC123" value="${s.pendingInvite || ''}"></label>
+            <button class="btn dark block" type="button" id="signin">Email me a sign-in link</button>
+            <div class="hint">With a code, you join that team as soon as you sign in.</div>`
           : html`<div>Signed in as <b>${c.user.email}</b>. ${c.status === 'synced' ? 'Everything is saved to your team.' : c.status === 'error' ? 'Last save did not go through; it will retry.' : ''}</div>
             <div class="btns"><button class="btn" type="button" id="syncnow">Save now</button><button class="btn" type="button" id="invite">Invite a teammate</button></div>
             <label class="field"><span>Join a team with a code</span><input id="joincode" autocomplete="off" placeholder="ABC123"></label>
@@ -1634,6 +1636,8 @@ function viewSettings() {
       root.querySelector('#signin')?.addEventListener('click', async () => {
         const email = root.querySelector('#email').value.trim();
         if (!email) return toast('Type your email');
+        const code = root.querySelector('#precode').value.trim().toUpperCase();
+        store.saveSettings({ pendingInvite: code });
         try { await store.signIn(email); toast('Check your email for the sign-in link'); } catch (e) { toast(e.message); }
       });
       root.querySelector('#syncnow')?.addEventListener('click', () => store.syncNow());
@@ -1644,7 +1648,7 @@ function viewSettings() {
       root.querySelector('#join')?.addEventListener('click', async () => {
         const code = root.querySelector('#joincode').value.trim();
         if (!code) return;
-        try { await store.joinTeam(code); toast('You joined the team'); } catch (e) { toast(e.message); }
+        try { await store.joinTeam(code); toast('You joined the team'); location.reload(); } catch (e) { toast(e.message); }
       });
       root.querySelector('#callink')?.addEventListener('click', async () => {
         try {

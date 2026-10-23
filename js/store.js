@@ -237,6 +237,14 @@ async function ensureTeam() {
   const c = cloud.client;
   const { data: rows, error } = await c.from('team_members').select('team_id').eq('user_id', cloud.user.id).limit(1);
   if (error) throw error;
+  // An invite code typed before signing in: join that team instead of
+  // starting an empty one of your own.
+  const code = settings().pendingInvite;
+  if (code) {
+    const { data: joined, error: ej } = await c.rpc('bb_join_team', { invite_code: code });
+    saveSettings({ pendingInvite: '' });
+    if (!ej && joined) return joined;
+  }
   if (rows && rows.length) return rows[0].team_id;
   const { data: id, error: e2 } = await c.rpc('bb_create_team', { team_name: 'My team' });
   if (e2) throw e2;
