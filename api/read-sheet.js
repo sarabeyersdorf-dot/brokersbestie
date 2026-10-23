@@ -4,7 +4,7 @@
 // phone shows what was found and the agent ticks what to keep.
 
 import { send, readBody } from './_lib/server.js';
-import { askJson, refuse, S } from './_lib/ai.js';
+import { askJson, refuse, S, AiError } from './_lib/ai.js';
 
 const TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 const MAX_FILES = 4;
@@ -74,6 +74,6 @@ export default async function handler(req, res) {
     return send(res, 200, { sheet });
   } catch (e) {
     console.warn('read-sheet failed', e && e.message);
-    return send(res, 502, { error: 'Could not read the sheet right now. It is still saved on the property.' });
+    return send(res, 502, { error: `${e instanceof AiError ? e.message : 'Could not read the sheet right now.'} The sheet can still be saved to the property.` });
   }
 }

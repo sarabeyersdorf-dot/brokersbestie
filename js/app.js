@@ -1877,7 +1877,7 @@ async function runCommand(s, focus) {
     actions = r.actions || [];
   } catch (e) {
     // Bestie can't be reached: what they said is still worth keeping.
-    out.innerHTML = str(html`<div class="warn-box">${navigator.onLine ? e.message : 'No signal right now.'} You can still keep what you said:</div>
+    out.innerHTML = str(html`<div class="warn-box">${navigator.onLine ? e.message : 'No signal right now.'}<br>You can still keep what you said:</div>
       <div class="btns"><button class="btn" type="button" data-keep="task">Save as a to-do</button>${focus ? html`<button class="btn" type="button" data-keep="note">Save as a note</button>` : ''}</div>`);
     out.querySelectorAll('[data-keep]').forEach((b) => b.addEventListener('click', () => {
       if (b.getAttribute('data-keep') === 'note') store.save('notes', { property_id: focus, text });

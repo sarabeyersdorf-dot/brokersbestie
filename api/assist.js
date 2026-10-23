@@ -5,7 +5,7 @@
 // and the agent confirms before anything is filed.
 
 import { send, readBody } from './_lib/server.js';
-import { askJson, refuse, S } from './_lib/ai.js';
+import { askJson, refuse, S, AiError } from './_lib/ai.js';
 
 export const ACTION_TYPES = ['task', 'note', 'code', 'date', 'person', 'expense', 'trip', 'property', 'tour', 'checkin', 'unclear'];
 
@@ -33,7 +33,7 @@ export const ASSIST_SCHEMA = S.obj({ actions: S.list(ACTION) });
 
 const SYSTEM = `You turn what a real estate agent says into actions in their phone app, Brokers Bestie.
 Return one action per thing they asked for, in the order said. Action types:
-- task: a to-do. text = what to do, due = date (YYYY-MM-DD) if they gave one.
+- task: a to-do. text = what to do, due = date (YYYY-MM-DD) if they gave one. An appointment, walk-through, meeting or call at a set time is a task on that day with the time in the text, e.g. "10:00 AM walk-through". Set property_id when it names a property.
 - note: a note filed on a property. text = the note.
 - code: a lockbox, gate, alarm, door code or hidden key. code_kind, code, where (where it is).
 - date: a key date on a deal (inspection, contingency removal, appraisal, close of escrow). text = the label, due = the date.
@@ -81,6 +81,6 @@ export default async function handler(req, res) {
     return send(res, 200, { actions });
   } catch (e) {
     console.warn('assist failed', e && e.message);
-    return send(res, 502, { error: 'Bestie could not work that out right now' });
+    return send(res, 502, { error: e instanceof AiError ? e.message : 'Bestie could not work that out right now' });
   }
 }
