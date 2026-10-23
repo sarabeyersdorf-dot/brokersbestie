@@ -77,13 +77,9 @@ test('only CRM-linked changes are sent, in the shape the CRM takes', () => {
   assert.equal(changes[1].notes, undefined, 'a CRM appointment\'s notes are not sent back');
   assert.equal(changes[2].property_ext, '433-hwy4');
   assert.equal(changes[2].notes, 'Bring the ladder');
-  const t = pushChanges({ tasks: [{ id: `crm:${team}:t:task-1`, source: 'crm', done: true }, { id: 'mine', done: true }] });
-  assert.deepEqual(t.map((c) => [c.type, c.ext_id, c.done]), [['task', 'task-1', true]]);
 });
 
-test('CRM tasks come in as to-dos; a done one only ever ticks', () => {
-  const r = mapFeed({ ...feed, tasks: [{ ext_id: 'k1', property_ext: '433-hwy4', text: 'Order the warranty', due: '2026-10-25', done: false }, { ext_id: 'k2', property_ext: '433-hwy4', text: 'Send TDS', due: null, done: true }, { ext_id: 'k3', property_ext: 'nope', text: 'Lost' }] }, team);
-  assert.deepEqual(r.tasks.map((t) => [t.id, t.text, t.due]), [[crmId(team, 't', 'k1'), 'Order the warranty', '2026-10-25'], [crmId(team, 't', 'k2'), 'Send TDS', null]]);
-  assert.ok(!('done' in r.tasks[0]));
-  assert.deepEqual(r.doneTasks, [crmId(team, 't', 'k2')]);
+test('a CRM task list is not brought in: Bestie is not a CRM', () => {
+  const r = mapFeed({ ...feed, tasks: [{ ext_id: 'k1', property_ext: '433-hwy4', text: 'Order the warranty' }] }, team);
+  assert.equal(r.tasks, undefined);
 });

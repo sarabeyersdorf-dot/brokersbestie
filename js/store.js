@@ -87,7 +87,7 @@ export function save(table, row) {
   const existing = row.id ? get(table, row.id) : null;
   const next = { ...(existing || {}), ...row, id: row.id || uid(), updated_at: now, _dirty: true };
   // Changed on this phone -> send it to the CRM at the next sync (two-way sync).
-  if ((table === 'dates' || table === 'events' || table === 'tasks') && crmLinked(next) && !next.sample) {
+  if ((table === 'dates' || table === 'events') && crmLinked(next) && !next.sample) {
     next.crm_dirty = true;
     for (const fn of crmListeners) fn();
   }

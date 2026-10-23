@@ -102,8 +102,8 @@ written to a CRM.
   the CRM accepted is re-keyed to `crm:<team>:e:<crm id>` so it is not doubled.
   A CRM that answers 405 to POST keeps the changes waiting and says so.
 - db/004: `dates.crm_dirty`, `events.crm_dirty`, `events.cancelled`.
-- **CRM tasks** (Sara: "I dont show any tasks at all for me in the crm echo
-  deal"): the feed's `tasks` (Legacy `agent_tasks` with a deal) come in as
-  to-dos on their property (`crm:<team>:t:<id>`, db/005 `tasks.source`,
-  `tasks.crm_dirty`), ticks go both ways like deadlines (`doneTasks` only ever
-  ticks). Tasks with no deal are not in the feed.
+- **CRM tasks are NOT brought in** (Sara, 2026-10-23: "this is getting too
+  much like a crm ... remove the CRM tasks"). Added and removed the same day;
+  `runSync` clears any `tasks.source = 'crm'` rows. Bestie is the field
+  companion: properties, codes, contacts, appointments, contract deadlines. Do
+  not add CRM back-office data (task lists, pipelines, lead stages) without her.

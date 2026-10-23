@@ -31,15 +31,14 @@ const quoteList = (ids) => ids.map((id) => `"${id.replace(/"/g, '')}"`).join(','
 
 // Send what the phones changed. Returns { sent, failed, note }.
 async function push(teamId, link) {
-  const [dates, events, tasks] = await Promise.all([
+  const [dates, events] = await Promise.all([
     db(`dates?team_id=eq.${teamId}&crm_dirty=is.true&select=*`),
-    db(`events?team_id=eq.${teamId}&crm_dirty=is.true&select=*`),
-    db(`tasks?team_id=eq.${teamId}&crm_dirty=is.true&select=*`)
+    db(`events?team_id=eq.${teamId}&crm_dirty=is.true&select=*`)
   ]);
-  const changes = pushChanges({ dates, events, tasks });
+  const changes = pushChanges({ dates, events });
   // Rows marked dirty that the CRM has no use for (not linked to it): clear.
   const linked = new Set(changes.map((c) => c._id));
-  for (const r of [...dates.map((x) => ['dates', x]), ...events.map((x) => ['events', x]), ...tasks.map((x) => ['tasks', x])]) {
+  for (const r of [...dates.map((x) => ['dates', x]), ...events.map((x) => ['events', x])]) {
     if (!linked.has(r[1].id)) await db(`${r[0]}?id=eq.${encodeURIComponent(r[1].id)}`, { method: 'PATCH', body: { crm_dirty: false } });
   }
   if (!changes.length) return { sent: 0, failed: 0 };
@@ -90,19 +89,20 @@ export async function runSync(teamId, today = new Date().toISOString().slice(0, 
     if (text.length > MAX_FEED_BYTES) throw new Error('The CRM feed is too large');
     const rows = mapFeed(JSON.parse(text), teamId);
     // Never pull over a change still waiting to go to the CRM.
-    const [dirtyD, dirtyE, dirtyT] = await Promise.all([
+    const [dirtyD, dirtyE] = await Promise.all([
       db(`dates?team_id=eq.${teamId}&crm_dirty=is.true&select=id`),
-      db(`events?team_id=eq.${teamId}&crm_dirty=is.true&select=id`),
-      db(`tasks?team_id=eq.${teamId}&crm_dirty=is.true&select=id`)
+      db(`events?team_id=eq.${teamId}&crm_dirty=is.true&select=id`)
     ]);
-    const waiting = new Set([...dirtyD, ...dirtyE, ...dirtyT].map((r) => r.id));
+    const waiting = new Set([...dirtyD, ...dirtyE].map((r) => r.id));
     rows.dates = rows.dates.filter((r) => !waiting.has(r.id));
-    rows.tasks = rows.tasks.filter((r) => !waiting.has(r.id));
     rows.events = rows.events.filter((r) => !waiting.has(r.id));
     // Properties first: people, dates and events point at them.
-    for (const t of ['properties', 'people', 'dates', 'events', 'tasks']) await upsert(t, rows[t]);
+    for (const t of ['properties', 'people', 'dates', 'events']) await upsert(t, rows[t]);
+    // CRM tasks were brought in for one day (2026-10-23) and taken out again:
+    // clear any still here. The agent's own to-dos are never touched.
+    await db(`tasks?team_id=eq.${teamId}&source=eq.crm`, { method: 'DELETE' });
     // Done in the CRM -> done here. Never the other way: a tick on the phone stays.
-    for (const [table, done] of [['dates', rows.doneDates], ['tasks', rows.doneTasks]]) {
+    for (const [table, done] of [['dates', rows.doneDates]]) {
       for (let i = 0; i < done.length; i += 100) {
         const ids = done.slice(i, i + 100);
         await db(`${table}?team_id=eq.${teamId}&done=is.false&crm_dirty=is.false&id=in.(${encodeURIComponent(quoteList(ids))})`, { method: 'PATCH', body: { done: true, updated_at: new Date().toISOString() } });
@@ -111,11 +111,11 @@ export async function runSync(teamId, today = new Date().toISOString().slice(0, 
     // An appointment cancelled in the CRM leaves the calendar too (past ones stay).
     const keep = rows.events.map((e) => e.id);
     await db(`events?team_id=eq.${teamId}&source=eq.crm&crm_dirty=is.false&date=gte.${today}${keep.length ? `&id=not.in.(${encodeURIComponent(quoteList(keep))})` : ''}`, { method: 'DELETE' });
-    const counts = Object.fromEntries(['properties', 'people', 'dates', 'events', 'tasks'].map((k) => [k, rows[k].length]));
+    const counts = Object.fromEntries(['properties', 'people', 'dates', 'events'].map((k) => [k, rows[k].length]));
     result = { ok: true, counts, pushed };
   } catch (e) {
     result = { ok: false, error: e.name === 'TimeoutError' ? 'The CRM did not answer in time' : e.message };
   }
-  await db(`crm_links?team_id=eq.${teamId}`, { method: 'PATCH', body: { last_synced_at: new Date().toISOString(), last_result: result.ok ? `Synced ${result.counts.properties} properties, ${result.counts.events} appointments, ${result.counts.dates} dates, ${result.counts.tasks} to-dos, ${result.counts.people} people.${pushed.sent ? ` Sent ${pushed.sent} change${pushed.sent === 1 ? '' : 's'} to the CRM.` : ''}${pushed.failed ? ` ${pushed.failed} change${pushed.failed === 1 ? '' : 's'} not taken yet${pushed.note ? ' (' + pushed.note + ')' : ''}; will retry.` : ''}` : `Failed: ${result.error}` } });
+  await db(`crm_links?team_id=eq.${teamId}`, { method: 'PATCH', body: { last_synced_at: new Date().toISOString(), last_result: result.ok ? `Synced ${result.counts.properties} properties, ${result.counts.events} appointments, ${result.counts.dates} dates, ${result.counts.people} people.${pushed.sent ? ` Sent ${pushed.sent} change${pushed.sent === 1 ? '' : 's'} to the CRM.` : ''}${pushed.failed ? ` ${pushed.failed} change${pushed.failed === 1 ? '' : 's'} not taken yet${pushed.note ? ' (' + pushed.note + ')' : ''}; will retry.` : ''}` : `Failed: ${result.error}` } });
   return result;
 }

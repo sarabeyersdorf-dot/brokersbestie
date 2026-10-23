@@ -6,7 +6,7 @@
 //     price, mls, coe_date }], people: [{ ext_id, property_ext, name, role,
 //     phone, email }], dates: [{ ext_id, property_ext, label, due, done }],
 //     events: [{ ext_id, property_ext, title, kind, date, start, minutes,
-//     location, with }], tasks: [{ ext_id, property_ext, text, due, done }] }
+//     location, with }] }
 // Times are the agent's wall clock: date 'YYYY-MM-DD', start minutes after
 // midnight (null = all day).
 
@@ -46,13 +46,9 @@ export function mapFeed(feed, teamId) {
       id: crmId(teamId, 'd', d.ext_id), team_id: teamId, source: 'crm', property_id: at(d.property_ext),
       label: s(d.label, 120) || 'Deadline', due: day(d.due)
     })),
-    // The CRM's to-dos for its deals. Like dates: `done` is applied separately
-    // (doneTasks) and only ever ticks, so a phone tick is never undone.
-    tasks: (feed.tasks || []).filter((t) => t && t.ext_id && t.text && at(t.property_ext)).map((t) => ({
-      id: crmId(teamId, 't', t.ext_id), team_id: teamId, source: 'crm', property_id: at(t.property_ext),
-      text: s(t.text, 300), due: day(t.due)
-    })),
-    doneTasks: (feed.tasks || []).filter((t) => t && t.ext_id && t.done && t.text && at(t.property_ext)).map((t) => crmId(teamId, 't', t.ext_id)),
+    // A CRM's own task list is NOT brought in (Sara, 2026-10-23: "this is
+    // getting too much like a crm ... remove the CRM tasks"). Bestie is the
+    // field companion: properties, codes, contacts, appointments, deadlines.
     doneDates: (feed.dates || []).filter((d) => d && d.ext_id && d.done && day(d.due) && at(d.property_ext)).map((d) => crmId(teamId, 'd', d.ext_id)),
     // `done` is left out on purpose: ticking an appointment off on the phone
     // must survive the next sync.
@@ -69,7 +65,6 @@ export function mapFeed(feed, teamId) {
 //
 // POST { format: 'bestie-feed/1', changes } to the same feed link. Two kinds:
 //   { type: 'date', ext_id, done }
-//   { type: 'task', ext_id, done }
 //   { type: 'event', ext_id (null = new), property_ext, title, kind, date,
 //     start, minutes, location, notes, cancelled }
 // The CRM answers { results: [{ ok, ext_id?, error? }] } in the same order.
@@ -82,12 +77,8 @@ export function extOf(id, kind) {
 
 // Rows marked crm_dirty -> the changes to send. Each keeps _id/_table/_row so
 // the result can be matched back; those are stripped before sending.
-export function pushChanges({ dates = [], events = [], tasks = [] }) {
+export function pushChanges({ dates = [], events = [] }) {
   const out = [];
-  for (const t of tasks) {
-    const ext = t.source === 'crm' ? extOf(t.id, 't') : null;
-    if (ext) out.push({ type: 'task', ext_id: ext, done: !!t.done, _id: t.id, _table: 'tasks', _row: t });
-  }
   for (const d of dates) {
     const ext = d.source === 'crm' ? extOf(d.id, 'd') : null;
     if (ext) out.push({ type: 'date', ext_id: ext, done: !!d.done, _id: d.id, _table: 'dates', _row: d });
