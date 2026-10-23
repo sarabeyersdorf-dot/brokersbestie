@@ -337,7 +337,9 @@ function todoItems() {
   for (const d of store.all('dates')) {
     if (d.done) continue;
     const n = daysFrom(d.due);
-    if (n == null || n > 7) continue;
+    // Due today or overdue only: the week ahead is in the briefing card, and a
+    // closing 6 days out is not something to do today.
+    if (n == null || n > 0) continue;
     items.push({ table: 'dates', id: d.id, text: `${d.label} · ${addr(d.property_id)}`, sub: n < 0 ? `${-n} days past · confirm it happened` : whenText(d.due), pid: d.property_id, late: n < 0 });
   }
   for (const a of pickups()) {
