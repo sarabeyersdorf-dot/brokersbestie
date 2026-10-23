@@ -84,3 +84,21 @@ Legacy Properties DRE 02254944 · Sara Cooper DRE 02141987 · James Beyersdorf D
   an id. Appointments cancelled in the CRM
   are removed from today on. Phones trigger it hourly on open (`op: 'auto'`);
   `api/cron/crm-sync` runs daily.
+
+## Two-way CRM sync (2026-10-23)
+
+Sara: "yes add the two-way sync to the CRM". Only two things go back, and the
+CRM decides how to apply them (Legacy: `applyChange` in `crm-bestie-feed.js`):
+a CRM deadline ticked/unticked (-> timeline item done/upcoming, logged on the
+deal) and an appointment on a CRM property added, changed or deleted (-> the
+CRM calendar, always `internal`, never a client portal). Nothing else is ever
+written to a CRM.
+
+- `store.save` sets `crm_dirty` on a CRM-linked date/event (`crmLinked`) and
+  the phone asks for a sync 5s later. Deleting a CRM-linked appointment sets
+  `cancelled` (hidden everywhere) instead of removing it.
+- `runSync` SENDS first (`pushChanges` in `feed.js`, POST to the feed link),
+  then PULLS, and the pull skips any row still `crm_dirty`. A new appointment
+  the CRM accepted is re-keyed to `crm:<team>:e:<crm id>` so it is not doubled.
+  A CRM that answers 405 to POST keeps the changes waiting and says so.
+- db/004: `dates.crm_dirty`, `events.crm_dirty`, `events.cancelled`.

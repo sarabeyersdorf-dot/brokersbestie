@@ -1764,14 +1764,16 @@ function eventSheet(e, prefill = {}) {
       { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'With the Smiths. Bring the CMA.' }
     ],
     values: { ...v, minutes: String(v.minutes || 30), property_id: v.property_id || '' },
-    extra: e && e.source === 'crm' ? html`<div class="note-box">From your CRM. A change here stays on your team until the CRM next changes it.</div>` : '',
+    extra: e && store.crmLinked(e) ? html`<div class="note-box">On your CRM's calendar too. A change or delete here goes to the CRM at the next sync.</div>` : '',
     onSave(f) {
       if (!f.title && !f.property_id) { toast('Say what it is'); return false; }
       if (!f.date) { toast('Pick the date'); return false; }
       store.save('events', { ...(e ? { id: e.id } : {}), title: f.title || `${kindLabel(f.kind)} · ${addr(f.property_id)}`, kind: f.kind, date: f.date, start_minutes: timeToMinutes(f.time), minutes: Number(f.minutes) || null, property_id: f.property_id || null, location: f.location, notes: f.notes, done: e ? !!e.done : false });
       toast(e ? 'Saved' : `Added to ${dayHeading(f.date).toLowerCase() === 'today' ? 'today' : niceDate(f.date)}`);
     },
-    onDelete: e ? () => store.remove('events', e.id) : null
+    // A CRM appointment is cancelled, not removed: the CRM is told at the next
+    // sync and deletes it there too. Bestie-only ones just go.
+    onDelete: e ? () => (store.crmLinked(e) ? store.save('events', { id: e.id, cancelled: true }) : store.remove('events', e.id)) : null
   });
 }
 
@@ -1856,6 +1858,22 @@ async function autoCrmSync() {
     if (r.result && r.result.ok) { await store.syncNow(); pinCrmProperties(); }
   } catch {}
 }
+
+// A deadline ticked or an appointment changed on a CRM property goes to the
+// CRM a few seconds later (save to the team first, then ask the server to send).
+let crmPushTimer = null;
+store.onCrmChange(() => {
+  if (!store.cloud.user) return;
+  clearTimeout(crmPushTimer);
+  crmPushTimer = setTimeout(async () => {
+    try {
+      await store.syncNow();
+      const r = await api('/api/crm-sync', { method: 'POST', body: JSON.stringify({ op: 'run' }) });
+      if (r.result && !r.result.ok) toast(`Saved here. The CRM did not take it yet: ${r.result.error}`);
+      else await store.syncNow();
+    } catch { /* stays marked; the next sync sends it */ }
+  }, 5000);
+});
 
 // Properties that came from the CRM have no map pin; find a few each time.
 const pinTried = new Set();

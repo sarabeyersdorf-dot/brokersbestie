@@ -71,10 +71,26 @@ export function saveSettings(patch) {
   emit();
 }
 
+// A deadline or appointment the team's CRM knows about: it came from the CRM,
+// or it sits on a property that did.
+const crmListeners = new Set();
+export function onCrmChange(fn) {
+  crmListeners.add(fn);
+}
+
+export function crmLinked(r) {
+  return !!r && (r.source === 'crm' || String(r.property_id || '').startsWith('crm:'));
+}
+
 export function save(table, row) {
   const now = new Date().toISOString();
   const existing = row.id ? get(table, row.id) : null;
   const next = { ...(existing || {}), ...row, id: row.id || uid(), updated_at: now, _dirty: true };
+  // Changed on this phone -> send it to the CRM at the next sync (two-way sync).
+  if ((table === 'dates' || table === 'events') && crmLinked(next) && !next.sample) {
+    next.crm_dirty = true;
+    for (const fn of crmListeners) fn();
+  }
   if (!existing) next.created_at = now;
   data[table] = existing ? all(table).map((r) => (r.id === next.id ? next : r)) : [next, ...all(table)];
   writeJson(KEY(table), data[table]);

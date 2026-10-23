@@ -17,7 +17,7 @@ const where = (data, pid) => ((data.properties || []).find((p) => p.id === pid) 
 export function dayItems(data, day) {
   const items = [];
   for (const e of data.events || []) {
-    if (e.date !== day) continue;
+    if (e.date !== day || e.cancelled) continue;
     items.push({ kind: 'event', id: e.id, start: e.start_minutes ?? null, minutes: e.minutes || null, title: e.title || 'Appointment', where: e.location || where(data, e.property_id), property_id: e.property_id || null, done: !!e.done, sub: e.kind || '' });
   }
   for (const t of data.tours || []) {

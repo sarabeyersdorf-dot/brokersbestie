@@ -53,3 +53,28 @@ test('the phone calendar file is valid and escapes text', () => {
   assert.match(ics, /END:VCALENDAR\r\n$/);
   for (const line of ics.split('\r\n')) assert.ok(line.length <= 75, line);
 });
+
+import { pushChanges, extOf } from '../api/_lib/feed.js';
+
+test('a CRM id is read whole, and only for its own kind', () => {
+  assert.equal(extOf(`crm:${team}:d:abc-1`, 'd'), 'abc-1');
+  assert.equal(extOf(`crm:${team}:d:abc-1`, 'e'), null);
+  assert.equal(extOf('plain-uuid'), null);
+});
+
+test('only CRM-linked changes are sent, in the shape the CRM takes', () => {
+  const p = `crm:${team}:p:433-hwy4`;
+  const changes = pushChanges({
+    dates: [{ id: `crm:${team}:d:it-1`, source: 'crm', done: true }, { id: 'mine', done: true }],
+    events: [
+      { id: `crm:${team}:e:ap-1`, source: 'crm', property_id: p, title: 'Walk-through', kind: 'walkthrough', date: '2026-10-24', start_minutes: 600, minutes: 30, notes: 'With Jim' },
+      { id: 'new-1', property_id: p, title: 'Inspection', kind: 'inspection', date: '2026-10-25', start_minutes: 540, notes: 'Bring the ladder' },
+      { id: 'new-2', property_id: 'mine-prop', title: 'Lunch' },
+      { id: 'new-3', property_id: p, cancelled: true }
+    ]
+  });
+  assert.deepEqual(changes.map((c) => [c.type, c.ext_id, c.cancelled ?? null]), [['date', 'it-1', null], ['event', 'ap-1', false], ['event', null, false], ['event', null, true]]);
+  assert.equal(changes[1].notes, undefined, 'a CRM appointment\'s notes are not sent back');
+  assert.equal(changes[2].property_ext, '433-hwy4');
+  assert.equal(changes[2].notes, 'Bring the ladder');
+});

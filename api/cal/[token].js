@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   const since = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
   const [props, events, dates, tours] = await Promise.all([
     db(`properties?team_id=eq.${team}&select=id,address,city`),
-    db(`events?team_id=eq.${team}&date=gte.${since}&select=*`),
+    db(`events?team_id=eq.${team}&date=gte.${since}&cancelled=is.not.true&select=*`),
     db(`dates?team_id=eq.${team}&done=is.false&due=gte.${since}&select=*`),
     db(`tours?team_id=eq.${team}&date=gte.${since}&select=*`)
   ]);

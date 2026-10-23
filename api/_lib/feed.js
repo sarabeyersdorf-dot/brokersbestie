@@ -58,6 +58,43 @@ export function mapFeed(feed, teamId) {
   };
 }
 
+// ---------- the way back: phone changes -> the CRM ----------
+//
+// POST { format: 'bestie-feed/1', changes } to the same feed link. Two kinds:
+//   { type: 'date', ext_id, done }
+//   { type: 'event', ext_id (null = new), property_ext, title, kind, date,
+//     start, minutes, location, notes, cancelled }
+// The CRM answers { results: [{ ok, ext_id?, error? }] } in the same order.
+
+// "crm:<team>:<kind>:<ext>" -> "<ext>", or null for a row that is not the CRM's.
+export function extOf(id, kind) {
+  const p = String(id || '').split(':');
+  return p[0] === 'crm' && p.length >= 4 && (!kind || p[2] === kind) ? p.slice(3).join(':') : null;
+}
+
+// Rows marked crm_dirty -> the changes to send. Each keeps _id/_table/_row so
+// the result can be matched back; those are stripped before sending.
+export function pushChanges({ dates = [], events = [] }) {
+  const out = [];
+  for (const d of dates) {
+    const ext = d.source === 'crm' ? extOf(d.id, 'd') : null;
+    if (ext) out.push({ type: 'date', ext_id: ext, done: !!d.done, _id: d.id, _table: 'dates', _row: d });
+  }
+  for (const e of events) {
+    const ext = e.source === 'crm' ? extOf(e.id, 'e') : null;
+    const prop = extOf(e.property_id, 'p');
+    if (!ext && !prop) continue; // not about anything the CRM knows
+    if (!ext && e.cancelled) { out.push({ type: 'event', ext_id: null, cancelled: true, _id: e.id, _table: 'events', _row: e }); continue; }
+    out.push({
+      type: 'event', ext_id: ext, property_ext: prop, title: e.title || '', kind: e.kind || 'other',
+      date: e.date, start: e.start_minutes ?? null, minutes: e.minutes ?? null, location: e.location || '',
+      notes: ext ? undefined : (e.notes || ''), cancelled: !!e.cancelled,
+      _id: e.id, _table: 'events', _row: e
+    });
+  }
+  return out;
+}
+
 // ---------- the calendar a phone subscribes to (.ics) ----------
 
 const esc = (t) => String(t || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
