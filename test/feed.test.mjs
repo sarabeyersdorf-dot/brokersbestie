@@ -19,6 +19,7 @@ test('a CRM feed maps to rows with stable, team-scoped ids', () => {
   assert.equal(r.people.length, 1, 'a person on no property is dropped');
   assert.equal(r.people[0].property_id, r.properties[0].id);
   assert.equal(r.dates[0].id, crmId(team, 'd', 9));
+  assert.deepEqual(mapFeed({ ...feed, dates: [{ ext_id: 7, property_ext: '433-hwy4', label: 'Loan', due: '2026-10-01', done: true }] }, team).doneDates, [crmId(team, 'd', 7)]);
   assert.equal(r.events[0].start_minutes, 600);
   assert.equal(r.events[0].notes, 'With Jim Smith');
   assert.equal(r.events[1].property_id, null);
@@ -33,6 +34,7 @@ test('the CRM never writes the agent\'s own fields', () => {
   const r = mapFeed(feed, team);
   for (const k of ['lat', 'lng', 'showing_notes', 'directions', 'occupancy']) assert.ok(!(k in r.properties[0]), k);
   assert.ok(!('done' in r.events[0]), 'ticking an appointment off survives a sync');
+  assert.ok(!('done' in r.dates[0]), 'ticking a deadline off survives a sync');
 });
 
 test('anything that is not a Bestie feed is refused', () => {

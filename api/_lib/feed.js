@@ -39,10 +39,14 @@ export function mapFeed(feed, teamId) {
       id: crmId(teamId, 'm', m.ext_id), team_id: teamId, source: 'crm', property_id: at(m.property_ext),
       name: s(m.name, 120), role: s(m.role, 60), phone: s(m.phone, 40), email: s(m.email, 120)
     })),
+    // `done` is not in these rows: a deadline ticked off on the phone must stay
+    // ticked. The CRM's own "done" is applied separately (doneDates) and only
+    // ever ticks, never un-ticks.
     dates: (feed.dates || []).filter((d) => d && d.ext_id && day(d.due) && at(d.property_ext)).map((d) => ({
       id: crmId(teamId, 'd', d.ext_id), team_id: teamId, source: 'crm', property_id: at(d.property_ext),
-      label: s(d.label, 120) || 'Deadline', due: day(d.due), done: !!d.done
+      label: s(d.label, 120) || 'Deadline', due: day(d.due)
     })),
+    doneDates: (feed.dates || []).filter((d) => d && d.ext_id && d.done && day(d.due) && at(d.property_ext)).map((d) => crmId(teamId, 'd', d.ext_id)),
     // `done` is left out on purpose: ticking an appointment off on the phone
     // must survive the next sync.
     events: (feed.events || []).filter((e) => e && e.ext_id && day(e.date)).map((e) => ({

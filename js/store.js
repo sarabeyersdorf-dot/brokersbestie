@@ -31,7 +31,10 @@ function writeJson(key, value) {
   }
 }
 
-for (const t of TABLES) data[t] = readJson(KEY(t), []);
+// A tick on a CRM deadline before 2026-10-23 saved a stray row with id 'crm'
+// (the id was cut at its first colon). It never reached the team and would
+// block every save, so it is dropped here.
+for (const t of TABLES) data[t] = readJson(KEY(t), []).filter((r) => r && r.id !== 'crm');
 
 export function uid() {
   return (crypto.randomUUID && crypto.randomUUID()) || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;

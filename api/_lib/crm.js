@@ -37,10 +37,15 @@ export async function runSync(teamId, today = new Date().toISOString().slice(0, 
     const rows = mapFeed(JSON.parse(text), teamId);
     // Properties first: people, dates and events point at them.
     for (const t of ['properties', 'people', 'dates', 'events']) await upsert(t, rows[t]);
+    // Done in the CRM -> done here. Never the other way: a tick on the phone stays.
+    for (let i = 0; i < rows.doneDates.length; i += 100) {
+      const ids = rows.doneDates.slice(i, i + 100);
+      await db(`dates?team_id=eq.${teamId}&done=is.false&id=in.(${encodeURIComponent(quoteList(ids))})`, { method: 'PATCH', body: { done: true, updated_at: new Date().toISOString() } });
+    }
     // An appointment cancelled in the CRM leaves the calendar too (past ones stay).
     const keep = rows.events.map((e) => e.id);
     await db(`events?team_id=eq.${teamId}&source=eq.crm&date=gte.${today}${keep.length ? `&id=not.in.(${encodeURIComponent(quoteList(keep))})` : ''}`, { method: 'DELETE' });
-    const counts = Object.fromEntries(Object.entries(rows).map(([k, v]) => [k, v.length]));
+    const counts = Object.fromEntries(['properties', 'people', 'dates', 'events'].map((k) => [k, rows[k].length]));
     result = { ok: true, counts };
   } catch (e) {
     result = { ok: false, error: e.name === 'TimeoutError' ? 'The CRM did not answer in time' : e.message };

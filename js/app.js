@@ -448,8 +448,13 @@ function viewToday() {
       wireDayRows(root.querySelector('.brief') || document.createElement('div'));
       autoCrmSync();
       root.querySelectorAll('[data-done]').forEach((b) => b.addEventListener('click', () => {
-        const [table, id] = b.getAttribute('data-done').split(':');
-        store.save(table, { id, done: true, done_at: new Date().toISOString() });
+        // Split at the FIRST colon only: ids from a CRM contain colons themselves.
+        const v = b.getAttribute('data-done');
+        const table = v.slice(0, v.indexOf(':'));
+        const id = v.slice(v.indexOf(':') + 1);
+        if (!store.get(table, id)) return toast('That item is no longer here');
+        // Deadlines have no done_at column; to-dos do.
+        store.save(table, table === 'tasks' ? { id, done: true, done_at: new Date().toISOString() } : { id, done: true });
         toast('Done');
       }));
     }

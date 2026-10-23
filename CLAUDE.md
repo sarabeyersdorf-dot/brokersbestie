@@ -79,6 +79,8 @@ Legacy Properties DRE 02254944 · Sara Cooper DRE 02141987 · James Beyersdorf D
   `BESTIE_FEED_KEY`). `runSync` upserts with stable ids
   `crm:<team>:<kind>:<ext>`; the CRM owns address/status/price/MLS/COE, people,
   deal dates and appointments; it never writes codes, notes, photos, pins,
-  showing notes or an appointment's `done`. Appointments cancelled in the CRM
+  showing notes, or an appointment's or deadline's `done` (CRM "done" only ever
+  ticks, never un-ticks: `doneDates`). CRM ids contain colons: never `split(':')`
+  an id. Appointments cancelled in the CRM
   are removed from today on. Phones trigger it hourly on open (`op: 'auto'`);
   `api/cron/crm-sync` runs daily.
