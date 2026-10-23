@@ -62,17 +62,35 @@ export function schedule(start, startMinutes, stops, perStop = MINUTES_PER_STOP)
     const legMiles = prev && s.lat != null && prev.lat != null ? roadMiles(prev, s) : 0;
     const legMin = driveMinutes(legMiles);
     clock += legMin;
+    // Per stop, so the screen can say "early: wait 15 min" or "15 min late".
+    let waitMinutes = 0;
+    let lateMinutes = 0;
     if (s.at != null) {
-      if (clock < s.at) clock = s.at;
-      else late += clock - s.at;
+      if (clock < s.at) { waitMinutes = s.at - clock; clock = s.at; }
+      else { lateMinutes = clock - s.at; late += lateMinutes; }
     }
     const arrive = clock;
     clock += s.minutes || perStop;
     miles += legMiles;
     prev = s;
-    return { ...s, arrive, legMiles, legMinutes: legMin };
+    return { ...s, arrive, legMiles, legMinutes: legMin, waitMinutes, lateMinutes };
   });
   return { legs, miles, late, end: clock };
+}
+
+// The agent's own order, kept exactly as given (dragged on the screen), with
+// times worked out along it. Stops the map could not place stay where put.
+export function routeInOrder({ start, startMinutes, stops }) {
+  const result = schedule(start, startMinutes, stops);
+  const best = planRoute({ start, startMinutes, stops });
+  return {
+    ...result,
+    unplaced: stops.filter((s) => s.lat == null || s.lng == null),
+    // How much Bestie's order would save, so the screen can offer it back.
+    bestSavesMinutes: Math.max(0, (result.end - best.end)),
+    savedMiles: 0,
+    savedMinutes: 0
+  };
 }
 
 function permutations(items) {

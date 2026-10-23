@@ -26,6 +26,10 @@ plain words, and let her choose.
 - `js/route.js` and `js/parse.js` are pure and tested. Route ordering is exact
   for up to 8 stops; it penalises backtracking (Sara's route-sheet rule: one
   continuous path, an outlier goes first or last) and lateness to a fixed window.
+- Tour route screen (Sara, 2026-10-23): tap a home to pin its showing time
+  (owner-occupied homes are marked O and prompted), drag the grip to set your
+  own order (`routeInOrder`), "Use Bestie's order" re-optimises around pins.
+  A pinned time is a constraint, not a position: prefer pinning to dragging.
 - `db/001_schema.sql`: every table carries `team_id`, RLS via `bb_is_member()`.
   **Any field the phone writes must have a column**, or the first sync fails;
   `test/schema.test.mjs` checks the edit form and sample data against the SQL.

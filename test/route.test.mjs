@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { haversineMiles, parseClock, formatClock, planRoute, schedule, mapsUrl } from '../js/route.js';
+import { haversineMiles, parseClock, formatClock, planRoute, schedule, mapsUrl, routeInOrder } from '../js/route.js';
 
 // Rough real coordinates in Calaveras County.
 const office = { address: 'Angels Camp office', lat: 38.0683, lng: -120.5396 };
@@ -62,6 +62,22 @@ test('nine or more stops still get a sensible order', () => {
   const shuffled = [many[5], many[0], many[9], many[2], many[7], many[1], many[8], many[3], many[6], many[4]];
   const r = planRoute({ start: { lat: 37.99, lng: -120.5 }, startMinutes: 600, stops: shuffled });
   assert.deepEqual(r.legs.map((l) => l.id), many.map((s) => s.id));
+});
+
+test('a dragged order is kept exactly, and says what the best order would save', () => {
+  const mine = [murphys, copper, angels1]; // doubles back on purpose
+  const r = routeInOrder({ start: office, startMinutes: 600, stops: mine });
+  assert.deepEqual(r.legs.map((l) => l.id), ['m', 'c', 'a1']);
+  assert.ok(r.bestSavesMinutes > 0);
+});
+
+test('an owner-occupied home pinned to 11:00 is shown at 11:00, early arrivals wait', () => {
+  const pinned = { ...angels2, at: 660 };
+  const r = routeInOrder({ start: office, startMinutes: 600, stops: [pinned, angels1] });
+  assert.equal(r.legs[0].arrive, 660);
+  assert.ok(r.legs[0].waitMinutes > 50);
+  const late = routeInOrder({ start: office, startMinutes: 600, stops: [murphys, copper, { ...angels2, at: 610 }] });
+  assert.ok(late.legs[2].lateMinutes > 0);
 });
 
 test('the maps link lists every stop in order', () => {

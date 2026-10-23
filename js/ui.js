@@ -138,7 +138,8 @@ const P = {
   gear: 'M12 9a3 3 0 110 6 3 3 0 010-6zM19 12l2-1-1-3-2 .2-1.2-1.6.6-2-2.6-1.6-1.4 1.5h-2L9 2l-2.6 1.6.6 2L5.8 7.2 4 7 3 10l2 1v2l-2 1 1 3 2-.2 1.2 1.6-.6 2L9 22l1.4-1.5h2L14 22l2.6-1.6-.6-2 1.2-1.6 2 .2 1-3-2-1z',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
   edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
-  check: 'M5 12l5 5 9-10'
+  check: 'M5 12l5 5 9-10',
+  grip: 'M5 8h14M5 12h14M5 16h14'
 };
 export function icon(name, size = 22, extra = '') {
   return raw(`<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}><path d="${P[name] || P.plus}"></path></svg>`);

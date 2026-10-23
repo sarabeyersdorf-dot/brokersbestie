@@ -189,3 +189,8 @@ img { max-width: 100%; display: block; }
 @media (min-width: 600px) {
   .app { border-left: 1px solid var(--line); border-right: 1px solid var(--line); min-height: 100vh; background: var(--bg); }
 }
+
+/* Drag to reorder a tour's stops. The handle alone takes the gesture, so the
+   rest of the list still scrolls under a finger. */
+.drag { width: 40px; height: 44px; border: 0; background: none; color: var(--mute); display: inline-flex; align-items: center; justify-content: center; touch-action: none; cursor: grab; flex-shrink: 0; }
+.rleg.dragging { background: var(--teal-tint); outline: 2px solid var(--teal); position: relative; z-index: 2; }

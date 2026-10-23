@@ -3,7 +3,7 @@
 
 import * as store from './store.js';
 import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLink, mapLink, todayIso, daysFrom, niceDate, whenText, toast, copy } from './ui.js';
-import { planRoute, mapsUrl, formatClock, parseClock, haversineMiles, roadMiles, driveMinutes } from './route.js';
+import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMiles, roadMiles, driveMinutes } from './route.js';
 import { parseTourText, matchProperty, search, tripsCsv } from './parse.js';
 import { sampleData } from './sample.js';
 
@@ -857,7 +857,101 @@ function viewSigns() {
 // Dictation gets things wrong, so the agent always sees and can fix each stop
 // before the route is built, and can come back to fix one after (Sara,
 // 2026-10-23: "add a correct route, not a start over").
-const plan = { step: 'talk', text: '', stops: [], startText: '10:00', start: null, result: null, busy: false, client: '', date: todayIso() };
+const plan = { step: 'talk', text: '', stops: [], startText: '10:00', startMinutes: 600, start: null, result: null, busy: false, client: '', date: todayIso(), manual: false, order: [] };
+
+// Work the route out again after a time is pinned or a stop is dragged.
+// Bestie's order unless the agent has put the stops in their own order.
+function replan() {
+  const stops = plan.stops.filter((st) => st.address.trim()).map((st) => ({
+    id: st.id, address: st.address, property_id: st.property_id, lat: st.lat, lng: st.lng,
+    at: st.atText ? parseClock(st.atText.replace(/\s/g, '')) : null,
+    occ: st.property_id ? prop(st.property_id)?.occupancy || '' : ''
+  }));
+  if (plan.manual) {
+    const pos = new Map(plan.order.map((id, i) => [id, i]));
+    stops.sort((a, b) => (pos.has(a.id) ? pos.get(a.id) : 999) - (pos.has(b.id) ? pos.get(b.id) : 999));
+    plan.result = routeInOrder({ start: plan.start, startMinutes: plan.startMinutes, stops });
+  } else {
+    plan.result = planRoute({ start: plan.start, startMinutes: plan.startMinutes, stops });
+  }
+}
+
+// Tap a home on the route: pin its showing time, move it, or take it off.
+function stopSheet(id) {
+  const st = plan.stops.find((x) => x.id === id);
+  if (!st) return;
+  const occ = st.property_id ? prop(st.property_id)?.occupancy : '';
+  const ids = plan.result.legs.map((l) => l.id);
+  const i = ids.indexOf(id);
+  const reorder = (to) => {
+    const next = ids.slice();
+    next.splice(i, 1);
+    next.splice(to, 0, id);
+    plan.order = next; plan.manual = true;
+  };
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">${st.address}</div>
+    ${occ === 'O' ? html`<div class="warn-box"><b>Owner-occupied.</b> Set the time the owner gave you and the rest of the tour moves around it.</div>` : ''}
+    <label class="field"><span>Showing time</span><input id="sttime" value="${st.atText}" placeholder="Any time, or a set time like 11:00" autocomplete="off"></label>
+    <div class="btns"><button class="btn dark" type="button" id="stsave">Set this time</button><button class="btn" type="button" id="stany">Any time</button></div>
+    <div class="btns"><button class="btn" type="button" id="stup" ${i === 0 ? raw('disabled') : ''}>Show earlier</button><button class="btn" type="button" id="stdown" ${i === ids.length - 1 ? raw('disabled') : ''}>Show later</button></div>
+    <button class="btn ghost block" type="button" id="strm">${icon('trash', 16)}Take off this tour</button>
+    <button class="btn ghost block" type="button" id="stcancel">Cancel</button>
+  </div>`, (sh) => {
+    const done = () => { replan(); closeSheet(); render(); };
+    sh.querySelector('#stsave').addEventListener('click', () => {
+      const v = sh.querySelector('#sttime').value.trim();
+      if (v && parseClock(v.replace(/\s/g, '')) == null) return toast('Try a time like 11:00 or 2:30 pm');
+      st.atText = v; done();
+    });
+    sh.querySelector('#stany').addEventListener('click', () => { st.atText = ''; done(); });
+    sh.querySelector('#stup').addEventListener('click', () => { reorder(i - 1); done(); });
+    sh.querySelector('#stdown').addEventListener('click', () => { reorder(i + 1); done(); });
+    sh.querySelector('#strm').addEventListener('click', () => {
+      plan.stops = plan.stops.filter((x) => x.id !== id);
+      plan.order = plan.order.filter((x) => x !== id);
+      if (!plan.stops.length) { plan.step = 'check'; plan.stops = [planStop()]; closeSheet(); render(); return; }
+      done();
+    });
+    sh.querySelector('#stcancel').addEventListener('click', closeSheet);
+  });
+}
+
+// Drag a stop by its handle. Pointer events cover finger and mouse; the row
+// moves live as it passes the middle of its neighbours.
+function wireDrag(root) {
+  root.querySelectorAll('[data-drag]').forEach((h) => h.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    const row = h.closest('.rleg');
+    const list = row.parentElement;
+    row.classList.add('dragging');
+    // Listen on the whole window: moving the row in the page drops a
+    // handle's pointer capture, and the finger would be lost mid-drag.
+    const move = (ev) => {
+      if (ev.pointerId !== e.pointerId) return;
+      const others = [...list.querySelectorAll('.rleg')].filter((r) => r !== row);
+      const before = others.find((r) => { const b = r.getBoundingClientRect(); return ev.clientY < b.top + b.height / 2; });
+      if (before) { if (row.nextElementSibling !== before) list.insertBefore(row, before); }
+      else if (list.lastElementChild !== row) list.appendChild(row);
+    };
+    const up = (ev) => {
+      if (ev.pointerId !== e.pointerId) return;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      row.classList.remove('dragging');
+      const ids = [...list.querySelectorAll('.rleg')].map((r) => r.dataset.id);
+      if (ids.join() !== plan.result.legs.map((l) => l.id).join()) {
+        plan.order = ids; plan.manual = true;
+        replan();
+        render();
+      }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }));
+}
 
 function planStop(address = '', at = null) {
   return { id: store.uid(), address, atText: at != null ? formatClock(at) : '', lat: null, lng: null, property_id: null, tried: false };
@@ -905,13 +999,22 @@ function viewPlan() {
       </section>` : ''}
 
       ${step === 'route' && r ? html`
-        ${r.savedMinutes > 2 ? html`<div class="note-box"><b>Saves about ${r.savedMinutes} minutes</b> over the order you said.</div>` : ''}
-        ${r.late > 0 ? html`<div class="warn-box">A time an agent gave can't be met in this order. Change the time in Edit the stops, or ask the agent to move it.</div>` : ''}
-        ${r.unplaced.length ? html`<div class="warn-box">I couldn't find ${r.unplaced.map((u) => u.address).join(', ')} on the map, so ${r.unplaced.length > 1 ? 'they are' : 'it is'} at the end. Tap <b>Edit the stops</b> to fix ${r.unplaced.length > 1 ? 'them' : 'it'}.</div>` : ''}
-        <div class="card list">${r.legs.map((l, i) => html`<div class="row">
-          <span class="dot" style="background:var(--ink);width:30px;height:30px;font-family:var(--tall);font-size:15px">${i + 1}</span>
-          <span class="grow"><span class="t">${l.address}</span><span class="s">${[l.at != null ? `Set time ${formatClock(l.at)}` : '', l.property_id ? 'Saved property · codes on file' : '', l.lat != null ? (i === 0 ? `${Math.round(l.legMiles * 10) / 10} mi from the start` : `${Math.round(l.legMiles * 10) / 10} mi · ${l.legMinutes} min from the last stop`) : 'Not found on the map'].filter(Boolean).join(' · ')}</span></span>
-          <span class="num" style="font-size:18px">${formatClock(l.arrive)}</span></div>`)}</div>
+        ${plan.manual ? html`<div class="${r.late > 0 ? 'warn-box' : 'note-box'}"><b>Your order.</b> ${r.late > 0 ? `It misses a set time (marked below). Bestie's order keeps every set time.` : r.bestSavesMinutes > 2 ? `Bestie's order would finish about ${r.bestSavesMinutes} minutes sooner.` : `About as quick as Bestie's order.`}
+          <button class="btn" type="button" id="usebest" style="margin-top:8px;min-height:40px;width:100%">Use Bestie's order</button></div>`
+          : r.savedMinutes > 2 ? html`<div class="note-box"><b>Saves about ${r.savedMinutes} minutes</b> over the order you said.</div>` : ''}
+        ${r.late > 0 && !plan.manual ? html`<div class="warn-box">A set time can't be met (marked below). Ask to move that showing, or drag the order yourself.</div>` : ''}
+        ${r.unplaced.length ? html`<div class="warn-box">I couldn't find ${r.unplaced.map((u) => u.address).join(', ')} on the map. Tap <b>Edit the stops</b> to fix ${r.unplaced.length > 1 ? 'them' : 'it'}.</div>` : ''}
+        <div class="hint">Drag <b>≡</b> to change the order. Tap a home to set its showing time.</div>
+        <div class="card list" id="routelist">${r.legs.map((l, i) => html`<div class="row rleg" data-id="${l.id}" style="padding-left:4px;gap:6px">
+          <button class="drag" type="button" data-drag aria-label="Drag to move ${l.address}">${icon('grip', 22)}</button>
+          <button type="button" data-leg="${l.id}" style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:0;padding:0;text-align:left;color:var(--ink);cursor:pointer">
+            <span class="dot" style="background:var(--ink);width:30px;height:30px;font-family:var(--tall);font-size:15px;flex-shrink:0">${i + 1}</span>
+            <span class="grow"><span class="t">${l.address}${l.occ === 'O' ? html` <span class="occ O" style="font-size:16px" title="Owner-occupied">O</span>` : ''}</span>
+              <span class="s">${[l.at != null ? `Set time ${formatClock(l.at)}` : l.occ === 'O' ? 'Owner-occupied: tap to set the time' : '', l.property_id ? 'Codes on file' : '', l.lat != null ? (i === 0 ? `${Math.round(l.legMiles * 10) / 10} mi from the start` : `${Math.round(l.legMiles * 10) / 10} mi · ${l.legMinutes} min drive`) : 'Not found on the map'].filter(Boolean).join(' · ')}</span>
+              ${l.waitMinutes > 0 ? html`<span class="s ok">Early: wait ${l.waitMinutes} min</span>` : ''}${l.lateMinutes > 0 ? html`<span class="s wait">${l.lateMinutes} min late for the set time</span>` : ''}
+            </span>
+          </button>
+          <span class="num" style="font-size:18px;${l.lateMinutes > 0 ? 'color:var(--pending)' : ''}">${formatClock(l.arrive)}</span></div>`)}</div>
         <div class="hint">Drive times are estimates from distance. “Open in Maps” has the real ones.</div>
         <a class="btn block" href="${mapsUrl(plan.start, r.legs)}" target="_blank" rel="noopener">${icon('pin', 18)}Open in Maps</a>
         <button class="btn dark big block" type="button" id="savetour">Save as the tour</button>
@@ -952,20 +1055,23 @@ function viewPlan() {
       root.querySelector('#edit')?.addEventListener('click', () => { plan.step = 'check'; render(); });
       root.querySelector('#again')?.addEventListener('click', () => {
         if (!confirm('Clear these stops and start again?')) return;
-        Object.assign(plan, { step: 'talk', text: '', stops: [], result: null });
+        Object.assign(plan, { step: 'talk', text: '', stops: [], result: null, manual: false, order: [] });
         render();
       });
+      wireDrag(root);
+      root.querySelectorAll('[data-leg]').forEach((b) => b.addEventListener('click', () => stopSheet(b.dataset.leg)));
+      root.querySelector('#usebest')?.addEventListener('click', () => { plan.manual = false; plan.order = []; replan(); render(); });
       root.querySelector('#savetour')?.addEventListener('click', () => {
         const tour = store.save('tours', {
           name: plan.client ? `${plan.client} · home tour` : 'Home tour',
           date: plan.date || todayIso(),
           start_place: plan.start?.address || 'Start',
           start_lat: plan.start?.lat ?? null, start_lng: plan.start?.lng ?? null,
-          start_minutes: parseClock(plan.startText) ?? 600,
+          start_minutes: plan.startMinutes,
           miles: Math.round(plan.result.miles * 10) / 10,
           stops: plan.result.legs.map((l) => tourStop(l))
         });
-        Object.assign(plan, { step: 'talk', text: '', stops: [], result: null });
+        Object.assign(plan, { step: 'talk', text: '', stops: [], result: null, manual: false, order: [] });
         location.hash = `#/tour/${tour.id}`;
       });
     }
@@ -1024,8 +1130,12 @@ async function buildPlan() {
     const first = plan.stops.find((x) => x.lat != null);
     plan.start = first ? { address: first.address, lat: first.lat, lng: first.lng } : null;
   }
-  const stops = plan.stops.map((st) => ({ id: st.id, address: st.address, property_id: st.property_id, lat: st.lat, lng: st.lng, at: st.atText ? parseClock(st.atText.replace(/\s/g, '')) : null }));
-  plan.result = planRoute({ start: plan.start, startMinutes, stops });
+  // "Build the route" always means Bestie's best order around any set times.
+  plan.startMinutes = startMinutes;
+  plan.manual = false;
+  plan.order = [];
+  replan();
+  const stops = plan.result.legs;
   plan.busy = false;
   // Nothing found at all: stay on the check screen with each problem marked.
   plan.step = stops.some((x) => x.lat != null) ? 'route' : 'check';
