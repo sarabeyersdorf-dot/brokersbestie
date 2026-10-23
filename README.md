@@ -52,8 +52,10 @@ Dropbox, read an MLS sheet into a listing, brokerage owner view, App Store versi
 | `CRON_SECRET` | Any long random string; protects the every-5-minutes safety job |
 | `GOOGLE_MAPS_API_KEY` (optional) | Better address lookup for tour routes on rural roads. Without it the free OpenStreetMap lookup is used. |
 
-The safety job runs every 5 minutes, which needs Vercel's Pro plan (the free plan
-only allows once a day).
+The safety job is set to run **once a day** (`vercel.json`) so the site deploys on
+Vercel's free plan, which refuses anything more frequent. Before relying on
+automatic safety texts, move to Vercel Pro and change the schedule back to
+`*/5 * * * *` (every 5 minutes).
 
 ## Working on it
 

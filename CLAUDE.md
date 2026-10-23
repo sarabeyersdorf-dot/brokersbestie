@@ -31,7 +31,8 @@ plain words, and let her choose.
   `test/schema.test.mjs` checks the edit form and sample data against the SQL.
 - `sw.js` caches the app for offline. **Bump `VERSION` when an app file changes.**
 - Safety: the phone keeps its own timer; in team mode `api/cron/checkins.js` texts
-  the contact 2 minutes after the time is up, claiming the row first so it can
+  the contact after the time is up (cron is DAILY until Vercel Pro; then set
+  `*/5 * * * *` in vercel.json — Hobby refuses to deploy anything more often), claiming the row first so it can
   never text twice. Never describe phone-only mode as automatic.
 - Everything typed is escaped by `html``…``  in `js/ui.js`. Don't build markup by
   string concatenation outside it.
