@@ -21,6 +21,7 @@ export class AiError extends Error {}
 function accountProblem(e) {
   const msg = String((e && e.message) || '');
   if (e && e.status === 401) return 'The Anthropic API key in Vercel is not valid. Copy it again from console.anthropic.com.';
+  if (/not scoped to a workspace/i.test(msg)) return 'This Anthropic key is not in a workspace. Make a new key inside a workspace (console.anthropic.com → API keys), or add ANTHROPIC_WORKSPACE_ID in Vercel.';
   if (/credit balance|billing/i.test(msg)) return 'The Anthropic account needs credit: console.anthropic.com → Billing.';
   if (e && e.status === 403) return 'The Anthropic key is not allowed to use this model.';
   if (e && e.status === 429) return 'Too many requests at once. Try again in a minute.';
@@ -38,7 +39,9 @@ function parseJson(text) {
 // Tried in order, simplest last: a newer option the account or model does not
 // take (a 400) falls back to the next shape rather than failing the agent.
 export async function askJson({ system, content, schema, effort = 'low', maxTokens = 4000 }) {
-  const client = new Anthropic({ apiKey: env('ANTHROPIC_API_KEY') });
+  // A key made outside a workspace has to name one on every request.
+  const workspace = env('ANTHROPIC_WORKSPACE_ID');
+  const client = new Anthropic({ apiKey: env('ANTHROPIC_API_KEY'), ...(workspace ? { defaultHeaders: { 'anthropic-workspace-id': workspace } } : {}) });
   const base = { model: MODEL, max_tokens: maxTokens, system, messages: [{ role: 'user', content }] };
   const shaped = { ...base, output_config: { effort, format: { type: 'json_schema', schema } } };
   const asked = { ...base, system: `${system}\n\nAnswer with only a JSON object that matches this JSON schema, nothing else:\n${JSON.stringify(schema)}` };
