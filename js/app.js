@@ -6,9 +6,11 @@ import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLi
 import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMiles, roadMiles, driveMinutes } from './route.js';
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
 import { sampleData } from './sample.js';
+import { sheetChanges, sheetExtras, sheetNoteText, actionPlan } from './assist.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
+const $fab = document.getElementById('fab');
 
 // ---------- vocabulary ----------
 
@@ -231,9 +233,14 @@ function dictate(target, button) {
     target.value = before + list.join(' ');
     target.dispatchEvent(new Event('input'));
   };
+  // Runs once: tapping stop and the phone's own "ended" both arrive here, and a
+  // second pass would rewrite the box. Nothing heard leaves typed words alone.
+  let finished = false;
   const finish = () => {
+    if (finished) return;
+    finished = true;
     listening = false;
-    show(chunks);
+    if (chunks.length) show(chunks);
     if (button) {
       button.classList.remove('dark');
       button.innerHTML = button.dataset.label;
@@ -479,6 +486,7 @@ function viewProps() {
   return {
     html: html`${header({ kicker: 'Properties', title: `${props().filter(groups.live).length} active`, right: html`<a class="btn teal" href="#/p/new" style="min-height:40px">+ Add</a>` })}
     <main class="wrap">
+      <a class="card row" href="#/sheet"><span class="tile" style="border:0;padding:0"><span class="ic t">${icon('sheet', 22)}</span></span><span class="grow"><span class="t">Snap an MLS sheet</span><span class="s">Bestie reads it and fills in the property card</span></span>${icon('chev', 18)}</a>
       <div class="tabs">${tab('live', 'Active')}${tab('escrow', 'In escrow')}${tab('tour', 'Showing')}${tab('done', 'Closed')}</div>
       <div class="card list">${list.length ? list.map(propRow) : html`<div class="empty">Nothing here yet.</div>`}</div>
     </main>`,
@@ -570,6 +578,7 @@ function viewHub(id) {
   const notes = store.where('notes', 'property_id', id).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
   const dates = store.where('dates', 'property_id', id).sort((a, b) => String(a.due).localeCompare(String(b.due)));
   const tasks = store.where('tasks', 'property_id', id).filter((t) => !t.done);
+  const sheetNote = notes.find((n) => n.source === 'mls_sheet');
   const main = people.find((m) => /tenant|occupant|seller|owner|showing/i.test(m.role || '') && m.phone) || people.find((m) => m.phone);
   const coe = p.coe_date ? daysFrom(p.coe_date) : null;
   const tab = (k, l) => html`<button class="tab ${hubTab === k ? 'on' : ''}" type="button" data-tab="${k}">${l}</button>`;
@@ -611,6 +620,7 @@ function viewHub(id) {
           ${p.disclosure_url ? html`<a class="btn" href="${safeUrl(p.disclosure_url)}" target="_blank" rel="noopener">Disclosures</a>` : ''}
           ${p.mls_url ? html`<a class="btn" href="${safeUrl(p.mls_url)}" target="_blank" rel="noopener">MLS listing</a>` : ''}
           <a class="btn" href="#/p/${id}/edit">${icon('edit', 18)}Edit details</a>
+          ${sheetNote ? html`<button class="btn" type="button" data-tab="notes">${icon('sheet', 18)}MLS sheet</button>` : html`<a class="btn" href="#/sheet/${id}">${icon('sheet', 18)}Snap MLS sheet</a>`}
           <a class="btn" href="#/quick">${icon('plus', 18)}Quick add</a>
         </div>` : ''}
 
@@ -629,8 +639,8 @@ function viewHub(id) {
 
       ${hubTab === 'notes' ? html`<section class="sec">
         <label class="field"><span>New note</span><textarea id="newnote" placeholder="Buyer wants the shed gone"></textarea></label>
-        <div class="btns"><button class="btn" type="button" data-mic="newnote">${icon('mic', 18)}Talk</button><button class="btn dark" type="button" id="savenote">Save note</button></div>
-        <div class="card list">${notes.length ? notes.map((n) => html`<div class="row" style="align-items:flex-start"><span class="grow"><span class="s">${niceDate(n.created_at)}</span><span style="white-space:pre-line">${n.text}</span></span><button class="icon-btn" type="button" data-delnote="${n.id}" aria-label="Delete note">${icon('trash', 16)}</button></div>`) : html`<div class="empty">No notes yet.</div>`}</div>
+        <div class="btns"><button class="btn" type="button" data-mic="newnote">${icon('mic', 18)}Talk</button><button class="btn dark" type="button" id="savenote">Save note</button><a class="btn" href="#/sheet/${id}">${icon('sheet', 18)}MLS sheet</a></div>
+        <div class="card list">${notes.length ? notes.map((n) => html`<div class="row" style="align-items:flex-start"><span class="grow"><span class="s">${niceDate(n.created_at)}</span><span style="white-space:pre-line">${n.text}</span>${(n.files || []).length ? html`<span class="pages">${n.files.map((f) => html`<button type="button" class="page" data-file="${f.id}" data-path="${f.path || ''}" aria-label="Open page">${f.type === 'application/pdf' ? html`<span class="pdf">PDF</span>` : html`<img alt="" data-photo="${f.id}" data-path="${f.path || ''}">`}</button>`)}</span>` : ''}</span><button class="icon-btn" type="button" data-delnote="${n.id}" aria-label="Delete note">${icon('trash', 16)}</button></div>`) : html`<div class="empty">No notes yet.</div>`}</div>
       </section>` : ''}
     </main>`,
     mount(root) {
@@ -649,6 +659,7 @@ function viewHub(id) {
         store.save('notes', { property_id: id, text: t });
         toast('Note saved');
       });
+      root.querySelectorAll('[data-file]').forEach((b) => b.addEventListener('click', () => openFile(b.getAttribute('data-file'), b.getAttribute('data-path'))));
       root.querySelectorAll('[data-delnote]').forEach((b) => b.addEventListener('click', () => { if (confirm('Delete this note?')) store.remove('notes', b.getAttribute('data-delnote')); }));
       loadPhotos(root);
     }
@@ -759,6 +770,7 @@ function viewQuick(kind, pid) {
       html: html`${header({ kicker: 'Quick add', title: 'What are you adding?', sub: 'It files to the property you are at.' })}
       <main class="wrap">
         <div class="tiles three">${Object.entries(KINDS).map(([key, x]) => html`<a class="tile" href="#/quick/${key}${pid ? '/' + pid : ''}"><span class="ic ${x.y ? 'y' : ''}">${icon(x.icon, 24)}</span>${x.short || x.label}</a>`)}
+          <a class="tile" href="#/sheet${pid ? '/' + pid : ''}"><span class="ic t">${icon('sheet', 24)}</span>MLS sheet</a>
           <a class="tile" href="#/miles/add"><span class="ic t">${icon('miles', 24)}</span>A drive</a>
           <a class="tile" href="#/safety"><span class="ic r">${icon('shield', 24)}</span>Check-in</a>
           <a class="tile" href="#/p/new"><span class="ic t">${icon('home', 24)}</span>Property</a>
@@ -1447,14 +1459,16 @@ function viewSafety() {
     };
   }
   const n = here && here.p;
+  const pre = checkinPrefill || {};
+  const startMins = [30, 45, 60, 90].reduce((best, m) => (pre.minutes && Math.abs(m - pre.minutes) < Math.abs(best - pre.minutes) ? m : best), 45);
   return {
     form: true,
     html: html`${header({ back: '#/', kicker: 'Safety check-in', title: 'Meeting someone new?' })}
     <main class="wrap"><form id="sf" class="sec" novalidate>
-      ${fieldHtml({ name: 'place', label: 'Where', placeholder: '433 E Highway 4, Murphys' }, n ? n.address : '')}
-      <div class="grid2">${fieldHtml({ name: 'meeting_name', label: 'Meeting', placeholder: 'New buyer' })}${fieldHtml({ name: 'meeting_phone', label: 'Their phone', type: 'tel' })}</div>
+      ${fieldHtml({ name: 'place', label: 'Where', placeholder: '433 E Highway 4, Murphys' }, pre.place || (n ? n.address : ''))}
+      <div class="grid2">${fieldHtml({ name: 'meeting_name', label: 'Meeting', placeholder: 'New buyer' }, pre.meeting_name)}${fieldHtml({ name: 'meeting_phone', label: 'Their phone', type: 'tel' })}</div>
       <div class="label">Check on me in</div>
-      <div class="tabs" id="mins">${[30, 45, 60, 90].map((m) => html`<button class="tab ${m === 45 ? 'on' : ''}" type="button" data-m="${m}">${m} min</button>`)}</div>
+      <div class="tabs" id="mins">${[30, 45, 60, 90].map((m) => html`<button class="tab ${m === startMins ? 'on' : ''}" type="button" data-m="${m}">${m} min</button>`)}</div>
       <div class="label" style="margin-top:6px">If I don't answer, text</div>
       <div class="grid2">${fieldHtml({ name: 'contact_name', label: 'Name', placeholder: 'James' }, contact.name)}${fieldHtml({ name: 'contact_phone', label: 'Phone', type: 'tel' }, contact.phone)}</div>
       <div class="hint">They get where you are, who you're meeting and that person's phone number.</div>
@@ -1462,7 +1476,8 @@ function viewSafety() {
       ${!serverOn ? html`<div class="warn-box"><b>Phone-only mode:</b> when time is up this phone buzzes and opens the text for you. Automatic alerts need team mode (Settings).</div>` : ''}
     </form></main>`,
     mount(root) {
-      let minutes = 45;
+      let minutes = startMins;
+      checkinPrefill = null;
       root.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => {
         minutes = Number(b.getAttribute('data-m'));
         root.querySelectorAll('[data-m]').forEach((x) => x.classList.toggle('on', x === b));
@@ -1631,6 +1646,288 @@ function notFound() {
 }
 
 // ======================================================================
+// MLS SHEETS
+// ======================================================================
+
+// A photographed or downloaded MLS sheet. The pages stay on the property as a
+// field note; Bestie reads them and offers to fill in the card. Nothing it
+// read is saved until the agent ticks it.
+const MAX_PAGES = 4;
+const MAX_SEND_BYTES = 3.2 * 1024 * 1024; // a request can carry 4.5 MB, and sending adds a third
+const sheetState = { pid: null, files: [], step: 'pick', result: null, error: '' };
+
+function resetSheet(pid) {
+  Object.assign(sheetState, { pid: pid || null, files: [], step: 'pick', result: null, error: '' });
+}
+
+async function addSheetFiles(list) {
+  for (const file of list) {
+    if (sheetState.files.length >= MAX_PAGES) { toast(`Up to ${MAX_PAGES} pages per sheet`); break; }
+    const pdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+    if (pdf && file.size > 20 * 1024 * 1024) { toast('That PDF is over 20 MB'); continue; }
+    // 2000px keeps the small print on a sheet readable.
+    const blob = pdf ? file : await store.shrinkPhoto(file, 2000).catch(() => file);
+    sheetState.files.push({ blob, type: pdf ? 'application/pdf' : blob.type || 'image/jpeg', url: URL.createObjectURL(blob) });
+  }
+}
+
+function toBase64(blob) {
+  return new Promise((ok, fail) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).split(',')[1] || '');
+    r.onerror = () => fail(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+
+async function readSheet() {
+  const size = sheetState.files.reduce((n, f) => n + f.blob.size, 0);
+  if (size > MAX_SEND_BYTES) {
+    Object.assign(sheetState, { step: 'error', error: 'This file is too big for Bestie to read. Save it to the property, or snap photos of the pages instead.' });
+    return render();
+  }
+  sheetState.step = 'reading';
+  render();
+  try {
+    const files = await Promise.all(sheetState.files.map(async (f) => ({ type: f.type, data: await toBase64(f.blob) })));
+    const r = await api('/api/read-sheet', { method: 'POST', body: JSON.stringify({ files }) });
+    sheetState.result = r.sheet;
+    sheetState.step = 'review';
+    if (!sheetState.pid && r.sheet.address) {
+      const m = matchProperty(r.sheet.address, props());
+      if (m) sheetState.pid = m.id;
+    }
+  } catch (e) {
+    Object.assign(sheetState, { step: 'error', error: navigator.onLine ? e.message : 'No signal right now. Save the sheet to the property and read it later.' });
+  }
+  render();
+}
+
+// The pages go on the property as one note, whether or not they were read.
+async function fileSheet(pid, text) {
+  const files = [];
+  for (const f of sheetState.files) {
+    const id = store.uid();
+    await store.putPhoto(id, f.blob);
+    files.push({ id, type: f.type });
+  }
+  store.save('notes', { property_id: pid, text: text || 'MLS sheet', source: 'mls_sheet', files });
+}
+
+function sheetValue(field, v) {
+  if (field === 'price') return fullMoney(v);
+  if (field === 'occupancy') return v === 'O' ? 'Occupied' : v === 'V' ? 'Vacant' : v;
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  return String(v);
+}
+
+function viewSheet(pid) {
+  if (pid && !prop(pid)) return notFound();
+  // A different property starts a fresh sheet; one being read or reviewed is kept.
+  if ((pid || null) !== sheetState.pid && !['review', 'reading'].includes(sheetState.step)) resetSheet(pid);
+  const s = sheetState;
+  const target = s.pid ? prop(s.pid) : null;
+  const pages = s.files.length ? html`<div class="pages">${s.files.map((f, i) => html`<span class="page">${f.type === 'application/pdf' ? html`<span class="pdf">PDF</span>` : html`<img alt="" src="${f.url}">`}${s.step === 'pick' ? html`<button type="button" class="x" data-rm="${i}" aria-label="Remove page">×</button>` : ''}</span>`)}</div>` : '';
+  const fileUnder = (value) => fieldHtml({ name: 'target', label: 'File under', type: 'select', options: [...(s.result && s.result.address && !target ? [['__new', `New property: ${s.result.address}`]] : [['', '— choose a property —']]), ...props().map((p) => [p.id, p.address])] }, value);
+  let body;
+
+  if (s.step === 'review') {
+    const sheet = s.result;
+    const base = target || {};
+    const changes = sheetChanges(sheet, base);
+    const extras = sheetExtras(sheet, { access: target ? store.where('access', 'property_id', target.id) : [], people: target ? store.where('people', 'property_id', target.id) : [] });
+    body = html`
+      ${fileUnder(target ? target.id : '__new')}
+      ${!target ? fieldHtml({ name: 'status', label: 'Status', type: 'select', options: Object.entries(STATUS) }, 'tour') : ''}
+      <section class="sec">
+        <div class="label accent">${target ? 'Update the card' : 'Fill in the card'} · ${changes.length}</div>
+        <div class="card list">${changes.length ? changes.map((c) => html`<label class="row pick"><input type="checkbox" data-pick="f:${c.field}" ${c.checked ? raw('checked') : ''}><span class="grow"><span class="t">${c.label}: ${sheetValue(c.field, c.value)}</span>${c.current != null ? html`<span class="s wait">Card now says ${sheetValue(c.field, c.current)}</span>` : ''}</span></label>`) : html`<div class="empty">Nothing new for the card.</div>`}</div>
+      </section>
+      ${extras.codes.length ? html`<section class="sec"><div class="label accent">Getting in</div><div class="card list">${extras.codes.map((c, i) => html`<label class="row pick"><input type="checkbox" data-pick="c:${i}" checked><span class="grow"><span class="t">${c.label || KINDS[c.kind || 'lockbox']?.label}${c.code ? html` · <span class="num">${c.code}</span>` : ''}</span><span class="s">${c.where || ''}</span></span></label>`)}</div></section>` : ''}
+      ${extras.people.length ? html`<section class="sec"><div class="label accent">People</div><div class="card list">${extras.people.map((m, i) => html`<label class="row pick"><input type="checkbox" data-pick="p:${i}" checked><span class="grow"><span class="t">${m.name}</span><span class="s">${[m.role, m.phone, m.email].filter(Boolean).join(' · ')}</span></span></label>`)}</div></section>` : ''}
+      <label class="field"><span>Field notes (kept with the sheet)</span><textarea name="note" style="min-height:160px">${sheetNoteText(sheet)}</textarea></label>
+      ${pages}
+      <button class="btn dark big block" type="button" id="savesheet">Save to the property</button>
+      <button class="btn ghost block" type="button" id="startover">Start over</button>`;
+  } else if (s.step === 'reading') {
+    body = html`${pages}<div class="note-box"><b>Reading the sheet…</b> This takes about half a minute.</div>`;
+  } else {
+    body = html`
+      ${s.step === 'error' ? html`<div class="warn-box">${s.error}</div>` : ''}
+      ${pages}
+      ${s.step === 'pick' ? html`<div class="btns">
+        <label class="btn big">${icon('photo', 20)}${s.files.length ? 'Snap another page' : 'Snap the sheet'}<input type="file" accept="image/*" capture="environment" id="snap" hidden></label>
+        <label class="btn big">${icon('sheet', 20)}Photo or PDF<input type="file" accept="image/*,application/pdf" multiple id="pick" hidden></label>
+      </div>` : ''}
+      ${s.files.length ? html`
+        <button class="btn dark big block" type="button" id="readit">${s.step === 'error' ? 'Try reading it again' : 'Read it'}</button>
+        <div class="sec">${fileUnder(s.pid || '')}<button class="btn block" type="button" id="justsave">Just save it to the property</button></div>` : html`<div class="hint">Snap each page, or choose a PDF from your phone. Bestie reads the price, MLS #, showing instructions, lockbox and contacts, and you tick what to keep.</div>`}`;
+  }
+
+  return {
+    form: true,
+    html: html`${header({ back: pid ? `#/p/${pid}` : '#/props', kicker: 'MLS sheet', title: target ? target.address : 'Snap an MLS sheet', sub: s.step === 'review' ? 'Tick what to keep. Nothing is saved until you press Save.' : 'The pages stay with the property as field notes.' })}
+    <main class="wrap"><div class="sec">${body}</div></main>`,
+    mount(root) {
+      const add = async (input) => { await addSheetFiles([...input.files]); render(); };
+      root.querySelector('#snap')?.addEventListener('change', (e) => add(e.target));
+      root.querySelector('#pick')?.addEventListener('change', (e) => add(e.target));
+      root.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', () => { s.files.splice(Number(b.getAttribute('data-rm')), 1); render(); }));
+      root.querySelector('#readit')?.addEventListener('click', readSheet);
+      root.querySelector('#startover')?.addEventListener('click', () => { resetSheet(pid); render(); });
+      const sel = root.querySelector('[name=target]');
+      if (s.step === 'review') sel.addEventListener('change', () => { s.pid = sel.value && sel.value !== '__new' ? sel.value : null; render(); });
+      root.querySelector('#justsave')?.addEventListener('click', async () => {
+        const to = sel.value;
+        if (!to) return toast('Pick the property first');
+        await fileSheet(to, 'MLS sheet');
+        resetSheet();
+        hubFor = to; hubTab = 'notes';
+        toast(`Saved to ${addr(to)}`);
+        location.hash = `#/p/${to}`;
+      });
+      root.querySelector('#savesheet')?.addEventListener('click', async () => {
+        const sheet = s.result;
+        const picked = new Set([...root.querySelectorAll('[data-pick]:checked')].map((x) => x.getAttribute('data-pick')));
+        let to = sel.value === '__new' ? null : sel.value;
+        if (sel.value === '') return toast('Pick the property first');
+        const base = to ? prop(to) : {};
+        const patch = Object.fromEntries(sheetChanges(sheet, base).filter((c) => picked.has('f:' + c.field)).map((c) => [c.field, c.value]));
+        const extras = sheetExtras(sheet, { access: to ? store.where('access', 'property_id', to) : [], people: to ? store.where('people', 'property_id', to) : [] });
+        if (!to) {
+          const address = patch.address || sheet.address;
+          if (!address) return toast('The sheet has no address: pick the property');
+          to = store.save('properties', { status: root.querySelector('[name=status]').value, ...patch, address }).id;
+          const fresh = prop(to);
+          geocode([fresh.address, fresh.city].filter(Boolean).join(', ')).then((g) => { if (g && !g.approximate) store.save('properties', { id: to, lat: g.lat, lng: g.lng }); });
+        } else if (Object.keys(patch).length) {
+          store.save('properties', { id: to, ...patch });
+        }
+        extras.codes.forEach((c, i) => {
+          if (!picked.has('c:' + i)) return;
+          const kind = c.kind || 'lockbox';
+          store.save('access', { property_id: to, kind, label: c.label || KINDS[kind].label, code: c.code || '', location_note: c.where || '', ...(KINDS[kind].tracked ? { status: 'out' } : {}) });
+        });
+        extras.people.forEach((m, i) => { if (picked.has('p:' + i)) store.save('people', { property_id: to, name: m.name, role: m.role || '', phone: m.phone || '', email: m.email || '' }); });
+        await fileSheet(to, root.querySelector('[name=note]').value.trim());
+        resetSheet();
+        hubFor = to; hubTab = 'overview';
+        toast(`Saved to ${addr(to)}`);
+        location.hash = `#/p/${to}`;
+      });
+    }
+  };
+}
+
+async function openFile(id, path) {
+  const url = await store.photoUrl(id, path);
+  if (url) window.open(url, '_blank', 'noopener');
+  else toast('That page is on another phone and has not uploaded yet');
+}
+
+// ======================================================================
+// TELL BESTIE (voice commands)
+// ======================================================================
+
+let checkinPrefill = null;
+
+// The property a command is about when the agent names none: the one on
+// screen, else the one they are standing at.
+function focusProperty() {
+  const m = (location.hash || '').match(/^#\/(?:p|sheet)\/([^/]+)/);
+  if (m && prop(m[1])) return m[1];
+  return here && here.p ? here.p.id : null;
+}
+
+const NEEDS_PROPERTY = ['note', 'code', 'date', 'person'];
+
+function tellBestie() {
+  const focus = focusProperty();
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);text-transform:uppercase;font-weight:700;font-size:24px">Tell Bestie</div>
+    <div class="small">${focus ? html`Files to <b>${addr(focus)}</b> unless you name another property.` : 'Say the property and what to add.'}</div>
+    <label class="field"><span>What you said</span><textarea id="say" placeholder="Gate code at Echo is 2580. Remind me Friday to order the home warranty."></textarea></label>
+    <button class="btn big block" type="button" data-mic="say">${icon('mic', 22)}Tap and talk</button>
+    <button class="btn dark big block" type="button" id="doit">Do it</button>
+    <div id="tbout" class="sec"></div>
+    <div class="hint">Try: “Lockbox at 433 Highway 4 is on the hose bib, code 1234.” · “To-do tomorrow: call the appraiser.” · “Drove 42 miles for showings.” · “Plan a tour: 1143 Echo Street Angels Camp, then 324 Augusta Court Valley Springs at 11.”</div>
+    <button class="btn ghost block" type="button" data-cancel>Close</button>
+  </div>`, (s) => {
+    wireMics(s);
+    s.querySelector('[data-cancel]').addEventListener('click', closeSheet);
+    s.querySelector('#doit').addEventListener('click', () => runCommand(s, focus));
+    if (Recognition) s.querySelector('[data-mic]').click(); // start listening straight away
+  });
+}
+
+async function runCommand(s, focus) {
+  const say = s.querySelector('#say');
+  const mic = s.querySelector('[data-mic]');
+  // Stop listening first, keeping what is in the box: stopping rewrites the box
+  // from what was heard, which would wipe anything typed meanwhile.
+  const typed = say.value;
+  if (mic.classList.contains('dark')) { mic.click(); say.value = typed; }
+  const text = typed.trim();
+  const out = s.querySelector('#tbout');
+  if (!text) return toast('Say or type what you need');
+  out.innerHTML = str(html`<div class="note-box">Working it out…</div>`);
+  let actions;
+  try {
+    const r = await api('/api/assist', { method: 'POST', body: JSON.stringify({ text, today: todayIso(), focus, properties: props().map((p) => ({ id: p.id, address: p.address, city: p.city || '' })) }) });
+    actions = r.actions || [];
+  } catch (e) {
+    // Bestie can't be reached: what they said is still worth keeping.
+    out.innerHTML = str(html`<div class="warn-box">${navigator.onLine ? e.message : 'No signal right now.'} You can still keep what you said:</div>
+      <div class="btns"><button class="btn" type="button" data-keep="task">Save as a to-do</button>${focus ? html`<button class="btn" type="button" data-keep="note">Save as a note</button>` : ''}</div>`);
+    out.querySelectorAll('[data-keep]').forEach((b) => b.addEventListener('click', () => {
+      if (b.getAttribute('data-keep') === 'note') store.save('notes', { property_id: focus, text });
+      else store.save('tasks', { text, due: todayIso(), property_id: focus, done: false });
+      closeSheet();
+      toast('Saved');
+    }));
+    return;
+  }
+  const items = actions.map((a) => ({ a, p: actionPlan(a, { today: todayIso() }) }));
+  const paint = () => {
+    out.innerHTML = str(html`${items.length ? html`<div class="label accent">Bestie will</div>
+      <div class="card list">${items.map(({ a, p }, i) => p.error ? html`<div class="row pick">
+        <input type="checkbox" data-act="${i}" disabled aria-label="Can't save yet">
+        <span class="grow"><span class="t">${a.summary}</span><span class="s wait">${p.error}</span>
+          ${NEEDS_PROPERTY.includes(a.type) ? html`<select data-fix="${i}" aria-label="Property"><option value="">— choose the property —</option>${props().map((x) => html`<option value="${x.id}">${x.address}</option>`)}</select>` : ''}
+        </span></div>` : html`<label class="row pick">
+        <input type="checkbox" data-act="${i}" checked>
+        <span class="grow"><span class="t">${a.summary}</span>${p.row && p.row.property_id ? html`<span class="s">${addr(p.row.property_id)}</span>` : ''}</span></label>`)}</div>
+      <button class="btn dark big block" type="button" id="apply">Save</button>` : html`<div class="warn-box">Bestie didn't find anything to do. Try saying it another way.</div>`}`);
+    out.querySelectorAll('[data-fix]').forEach((sel) => sel.addEventListener('change', () => {
+      const it = items[Number(sel.getAttribute('data-fix'))];
+      it.a = { ...it.a, property_id: sel.value || null };
+      it.p = actionPlan(it.a, { today: todayIso() });
+      paint();
+    }));
+    out.querySelector('#apply')?.addEventListener('click', () => {
+      let saved = 0;
+      let go = null;
+      out.querySelectorAll('[data-act]:checked').forEach((box) => {
+        const { p } = items[Number(box.getAttribute('data-act'))];
+        if (p.table) {
+          const row = store.save(p.table, p.row);
+          saved++;
+          if (p.table === 'properties') geocode([row.address, row.city].filter(Boolean).join(', ')).then((g) => { if (g && !g.approximate) store.save('properties', { id: row.id, lat: g.lat, lng: g.lng }); });
+        } else if (p.go && !go) go = p;
+      });
+      closeSheet();
+      if (saved) toast(`Saved ${saved} thing${saved === 1 ? '' : 's'}`);
+      if (go) {
+        if (go.plan) Object.assign(plan, { step: 'talk', text: go.plan, stops: [], result: null, manual: false, order: [] });
+        if (go.checkin) checkinPrefill = go.checkin;
+        location.hash = go.go;
+      }
+    });
+  };
+  paint();
+}
+
+// ======================================================================
 // ROUTER
 // ======================================================================
 
@@ -1641,6 +1938,7 @@ const ROUTES = [
   [/^#\/p\/([^/]+)\/edit$/, (m) => viewPropEdit(m[1]), 'props'],
   [/^#\/p\/([^/]+)$/, (m) => viewHub(m[1]), 'props'],
   [/^#\/quick(?:\/([a-z]+))?(?:\/([^/]+))?$/, (m) => viewQuick(m[1], m[2]), 'quick'],
+  [/^#\/sheet(?:\/([^/]+))?$/, (m) => viewSheet(m[1]), 'props'],
   [/^#\/signs$/, () => viewSigns(), 'signs'],
   [/^#\/plan$/, () => viewPlan(), 'tours'],
   [/^#\/tours$/, () => viewTours(), 'tours'],
@@ -1664,6 +1962,7 @@ function render() {
   wire($view);
   if (view.mount) view.mount($view);
   $nav.querySelectorAll('a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
+  $fab.hidden = !!view.form; // a screen with its own form has its own mic
   document.getElementById('offline').hidden = navigator.onLine;
 }
 
@@ -1685,6 +1984,7 @@ store.onChange(() => {
 window.addEventListener('online', render);
 window.addEventListener('offline', render);
 
+$fab.addEventListener('click', tellBestie);
 render();
 store.startCloud();
 setInterval(watchCheckin, 20000);

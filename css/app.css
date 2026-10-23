@@ -207,3 +207,19 @@ img { max-width: 100%; display: block; }
 .stop .btns > *, .wrap > .btns > * { flex: 1 1 130px; }
 .code-pill { flex-wrap: wrap; max-width: 100%; }
 html, body { max-width: 100%; overflow-x: hidden; }
+
+/* Tell Bestie: the mic that is on every screen without its own form. */
+.fab { position: fixed; right: 16px; bottom: calc(var(--nav-h) + 14px + env(safe-area-inset-bottom)); z-index: 19; display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 18px 0 14px; border: 0; border-radius: 26px; background: var(--ink); color: #fff; font: 700 15px/1 var(--sans, inherit); box-shadow: 0 6px 18px rgba(0,0,0,.25); cursor: pointer; }
+.fab svg { color: var(--teal-on-dark); }
+.fab[hidden] { display: none; }
+.wrap { padding-bottom: 84px; }
+
+/* MLS sheet pages */
+.pages { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.page { position: relative; width: 72px; height: 92px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--bg); padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.page img { width: 100%; height: 100%; object-fit: cover; }
+.page .pdf { font: 700 14px/1 var(--tall); letter-spacing: .06em; color: var(--ink-2); }
+.page .x { position: absolute; top: 2px; right: 2px; width: 26px; height: 26px; border-radius: 13px; border: 0; background: rgba(0,0,0,.65); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
+.row.pick { cursor: pointer; }
+.row.pick input[type=checkbox] { width: 22px; height: 22px; flex-shrink: 0; accent-color: var(--teal-text); }
+.row.pick select { margin-top: 6px; width: 100%; min-height: 40px; }

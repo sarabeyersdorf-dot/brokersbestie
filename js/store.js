@@ -299,15 +299,19 @@ export async function syncNow() {
   }
 }
 
+// Photos, and the pages of an MLS sheet (a photo or a PDF).
 async function uploadPhoto(id, blob) {
   if (!cloud.user || !cloud.teamId) return;
-  const path = `${cloud.teamId}/${id}.jpg`;
-  const { error } = await cloud.client.storage.from('photos').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+  const pdf = blob.type === 'application/pdf';
+  const path = `${cloud.teamId}/${id}.${pdf ? 'pdf' : 'jpg'}`;
+  const { error } = await cloud.client.storage.from('photos').upload(path, blob, { contentType: pdf ? 'application/pdf' : 'image/jpeg', upsert: true });
   if (error) return console.warn('Photo upload failed; it is still on this phone', error);
   for (const t of ['access', 'expenses']) {
     const row = all(t).find((r) => r.photo_id === id);
     if (row) save(t, { id: row.id, photo_path: path });
   }
+  const note = all('notes').find((n) => (n.files || []).some((f) => f.id === id));
+  if (note) save('notes', { id: note.id, files: note.files.map((f) => (f.id === id ? { ...f, path } : f)) });
 }
 
 if (typeof window !== 'undefined') {

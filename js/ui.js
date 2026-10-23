@@ -139,7 +139,8 @@ const P = {
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
   edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
   check: 'M5 12l5 5 9-10',
-  grip: 'M5 8h14M5 12h14M5 16h14'
+  grip: 'M5 8h14M5 12h14M5 16h14',
+  sheet: 'M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M9 16h7'
 };
 export function icon(name, size = 22, extra = '') {
   return raw(`<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}><path d="${P[name] || P.plus}"></path></svg>`);

@@ -50,6 +50,7 @@ Dropbox, read an MLS sheet into a listing, brokerage owner view, App Store versi
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Server checks who is asking and reads overdue check-ins |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | Sends the safety texts |
 | `CRON_SECRET` | Any long random string; protects the every-5-minutes safety job |
+| `ANTHROPIC_API_KEY` | Reads MLS sheets and understands "Tell Bestie" voice commands. From console.anthropic.com → API keys. Without it, sheets still save as photos and voice commands offer to save the words as a to-do or note. |
 | `GOOGLE_MAPS_API_KEY` (optional) | Better address lookup for tour routes on rural roads. Without it the free OpenStreetMap lookup is used. |
 
 The safety job is set to run **once a day** (`vercel.json`) so the site deploys on

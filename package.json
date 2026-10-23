@@ -10,5 +10,8 @@
   "scripts": {
     "dev": "vercel dev",
     "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.2.0"
   }
 }

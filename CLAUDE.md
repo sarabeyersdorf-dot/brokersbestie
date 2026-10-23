@@ -45,3 +45,21 @@ plain words, and let her choose.
 
 Legacy Properties DRE 02254944 · Sara Cooper DRE 02141987 · James Beyersdorf DRE
 02122175. `02554944` is a known wrong transposition.
+
+## MLS sheets and Tell Bestie (2026-10-23)
+
+- **MLS sheet** (`#/sheet`, `#/sheet/<property>`): snap pages or pick a photo/PDF.
+  `api/read-sheet.js` reads it with Claude; the phone shows what was found and
+  saves only what is ticked. A blank field is filled (ticked); a field that
+  already differs is offered UNticked, so a sheet never overwrites what the agent
+  typed (`sheetChanges` in `js/assist.js`). The pages stay on the property as a
+  note (`notes.source = 'mls_sheet'`, `notes.files` = [{id, type, path}], db/002),
+  even when reading fails.
+- **Tell Bestie** (the floating mic, hidden on screens with their own form):
+  `api/assist.js` turns what was said into actions; each shows as a line to
+  confirm. Note/code/date/person with no property ask for one. If Bestie can't be
+  reached, the words can still be saved as a to-do or note.
+- Both need `ANTHROPIC_API_KEY` in Vercel and a signed-in agent (they cost money
+  per use). `api/_lib/ai.js` is the one place that calls Claude; it uses
+  `fallbacks: 'default'` so a declined request is retried on a fallback model.
+- `dictate()` finishes once and leaves typed words alone if nothing was heard.
