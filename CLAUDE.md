@@ -102,3 +102,8 @@ written to a CRM.
   the CRM accepted is re-keyed to `crm:<team>:e:<crm id>` so it is not doubled.
   A CRM that answers 405 to POST keeps the changes waiting and says so.
 - db/004: `dates.crm_dirty`, `events.crm_dirty`, `events.cancelled`.
+- **CRM tasks** (Sara: "I dont show any tasks at all for me in the crm echo
+  deal"): the feed's `tasks` (Legacy `agent_tasks` with a deal) come in as
+  to-dos on their property (`crm:<team>:t:<id>`, db/005 `tasks.source`,
+  `tasks.crm_dirty`), ticks go both ways like deadlines (`doneTasks` only ever
+  ticks). Tasks with no deal are not in the feed.

@@ -91,6 +91,7 @@ test('everything a spoken command saves has a column', () => {
 
 test('the two-way CRM sync has its columns', () => {
   assert.ok(columns('dates').has('crm_dirty'));
+  for (const k of ['source', 'crm_dirty']) assert.ok(columns('tasks').has(k), `tasks.${k}`);
   for (const k of ['crm_dirty', 'cancelled']) assert.ok(columns('events').has(k), `events.${k}`);
 });
 
