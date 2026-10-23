@@ -853,52 +853,119 @@ function viewSigns() {
 // PLAN A TOUR (talk or type) and TOUR MODE
 // ======================================================================
 
-const plan = { text: '', result: null, start: null, startMinutes: 600, busy: false, client: '', date: todayIso() };
+// Planning a tour is three steps: say it, check the stops, see the route.
+// Dictation gets things wrong, so the agent always sees and can fix each stop
+// before the route is built, and can come back to fix one after (Sara,
+// 2026-10-23: "add a correct route, not a start over").
+const plan = { step: 'talk', text: '', stops: [], startText: '10:00', start: null, result: null, busy: false, client: '', date: todayIso() };
+
+function planStop(address = '', at = null) {
+  return { id: store.uid(), address, atText: at != null ? formatClock(at) : '', lat: null, lng: null, property_id: null, tried: false };
+}
 
 function viewPlan() {
   const r = plan.result;
+  const step = plan.step;
+  const title = step === 'route' && r ? `${r.legs.length} home${r.legs.length === 1 ? '' : 's'}` : step === 'check' ? 'Check the stops' : 'Talk to build a route';
+  const sub = step === 'route' && r ? `About ${Math.round(r.miles)} mi · ${driveMinutes(r.miles)} min driving · back by ${formatClock(r.end)}`
+    : step === 'check' ? 'Fix anything dictation got wrong, then build the route.' : 'Read me the addresses in any order.';
   return {
     form: true,
-    html: html`${header({ back: '#/tours', kicker: 'Plan a tour', title: r ? `${r.legs.length} homes` : 'Talk to build a route', sub: r ? `About ${Math.round(r.miles)} mi · ${driveMinutes(r.miles)} min driving · back by ${formatClock(r.end)}` : 'Read me the addresses in any order.' })}
+    html: html`${header({ back: '#/tours', kicker: 'Plan a tour', title, sub })}
     <main class="wrap">
-      ${!r ? html`<section class="sec">
-        <label class="field"><span>Addresses</span><textarea id="tt" style="min-height:150px" placeholder="Start at the office at 10. 433 East Highway 4 Murphys, 701 Mark Twain Road Angels Camp, 635 South Main at 11:30">${plan.text}</textarea></label>
+      ${step === 'talk' ? html`<section class="sec">
+        <label class="field"><span>Addresses</span><textarea id="tt" style="min-height:150px" placeholder="Start at 10. 433 East Highway 4 Murphys, go to 324 Augusta Court Valley Springs, then 1143 Echo Street Angels Camp at 11:30">${plan.text}</textarea></label>
         <button class="btn big block" type="button" data-mic="tt">${icon('mic', 22)}Tap and talk</button>
-        <div class="hint">Say “start at … at 10”, then each address. “At 11:30” after an address keeps that time.</div>
+        <div class="hint">Say “start at 10”, then each address with its town. “At 11:30” after an address keeps that time. You'll check every stop next.</div>
         <div class="grid2">${fieldHtml({ name: 'client', label: 'Client', placeholder: 'Buyer name' }, plan.client)}${fieldHtml({ name: 'date', label: 'Date', type: 'date' }, plan.date)}</div>
+        <button class="btn dark big block" type="button" id="read">Next: check the stops</button>
+        <button class="btn ghost block" type="button" id="typeit">Or type them one at a time</button>
+      </section>` : ''}
+
+      ${step === 'check' ? html`<section class="sec">
+        <div class="grid2">
+          ${fieldHtml({ name: 'starttime', label: 'Start time', placeholder: '10:00' }, plan.startText)}
+          ${fieldHtml({ name: 'date', label: 'Date', type: 'date' }, plan.date)}
+        </div>
+        <div class="card list">${plan.stops.map((s, i) => html`<div class="row" style="align-items:flex-start;flex-wrap:wrap">
+          <span class="dot" style="background:var(--ink);width:30px;height:30px;font-family:var(--tall);font-size:15px;margin-top:8px">${i + 1}</span>
+          <div class="grow" style="gap:6px">
+            <input class="stopaddr" data-i="${i}" value="${s.address}" placeholder="Street number, street, town" aria-label="Stop ${i + 1} address" style="min-height:44px;border:1px solid ${s.tried && s.lat == null ? 'var(--pending)' : '#b9c1be'};border-radius:8px;padding:8px 10px;font-size:16px;width:100%">
+            ${s.tried && s.lat == null ? html`<span class="small wait">Couldn't find this on the map. Check the number and add the town.</span>` : ''}
+            <input class="stoptime" data-i="${i}" value="${s.atText}" placeholder="Any time (or a set time like 11:30)" aria-label="Stop ${i + 1} time" style="min-height:40px;border:1px solid #d5dad8;border-radius:8px;padding:6px 10px;font-size:15px;width:100%">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <button class="icon-btn" type="button" data-up="${i}" aria-label="Move up" ${i === 0 ? raw('disabled') : ''}>${icon('back', 16, 'style="transform:rotate(90deg)"')}</button>
+            <button class="icon-btn" type="button" data-rm="${i}" aria-label="Remove stop">${icon('trash', 16)}</button>
+          </div>
+        </div>`)}</div>
+        <button class="btn block" type="button" id="addstop">+ Add a stop</button>
         <button class="btn dark big block" type="button" id="build" ${plan.busy ? raw('disabled') : ''}>${plan.busy ? 'Finding the addresses…' : 'Build the route'}</button>
-      </section>` : html`
+        <button class="btn ghost block" type="button" id="totalk">${icon('mic', 18)}Back to talking</button>
+      </section>` : ''}
+
+      ${step === 'route' && r ? html`
         ${r.savedMinutes > 2 ? html`<div class="note-box"><b>Saves about ${r.savedMinutes} minutes</b> over the order you said.</div>` : ''}
-        ${r.late > 0 ? html`<div class="warn-box">One time an agent gave can't be met in this order. Ask to move it, or edit the times on the tour.</div>` : ''}
-        ${r.unplaced.length ? html`<div class="warn-box">I couldn't find ${r.unplaced.map((u) => u.address).join(', ')} on the map, so ${r.unplaced.length > 1 ? 'they are' : 'it is'} at the end. Drag the order on the tour if needed.</div>` : ''}
+        ${r.late > 0 ? html`<div class="warn-box">A time an agent gave can't be met in this order. Change the time in Edit the stops, or ask the agent to move it.</div>` : ''}
+        ${r.unplaced.length ? html`<div class="warn-box">I couldn't find ${r.unplaced.map((u) => u.address).join(', ')} on the map, so ${r.unplaced.length > 1 ? 'they are' : 'it is'} at the end. Tap <b>Edit the stops</b> to fix ${r.unplaced.length > 1 ? 'them' : 'it'}.</div>` : ''}
         <div class="card list">${r.legs.map((l, i) => html`<div class="row">
           <span class="dot" style="background:var(--ink);width:30px;height:30px;font-family:var(--tall);font-size:15px">${i + 1}</span>
-          <span class="grow"><span class="t">${l.address}</span><span class="s">${[l.at != null ? `Fixed at ${formatClock(l.at)}` : '', l.property_id ? 'Saved property · codes on file' : '', l.lat != null ? `${Math.round(l.legMiles * 10) / 10} mi · ${l.legMinutes} min from the last stop` : ''].filter(Boolean).join(' · ')}</span></span>
+          <span class="grow"><span class="t">${l.address}</span><span class="s">${[l.at != null ? `Set time ${formatClock(l.at)}` : '', l.property_id ? 'Saved property · codes on file' : '', l.lat != null ? (i === 0 ? `${Math.round(l.legMiles * 10) / 10} mi from the start` : `${Math.round(l.legMiles * 10) / 10} mi · ${l.legMinutes} min from the last stop`) : 'Not found on the map'].filter(Boolean).join(' · ')}</span></span>
           <span class="num" style="font-size:18px">${formatClock(l.arrive)}</span></div>`)}</div>
         <div class="hint">Drive times are estimates from distance. “Open in Maps” has the real ones.</div>
         <a class="btn block" href="${mapsUrl(plan.start, r.legs)}" target="_blank" rel="noopener">${icon('pin', 18)}Open in Maps</a>
         <button class="btn dark big block" type="button" id="savetour">Save as the tour</button>
-        <button class="btn ghost block" type="button" id="again">Start over</button>`}
+        <button class="btn block" type="button" id="edit">${icon('edit', 18)}Edit the stops</button>
+        <button class="btn ghost block" type="button" id="again">Start over</button>` : ''}
     </main>`,
     mount(root) {
       wireMics(root);
       const tt = root.querySelector('#tt');
       tt?.addEventListener('input', () => (plan.text = tt.value));
       root.querySelector('[name=client]')?.addEventListener('input', (e) => (plan.client = e.target.value));
-      root.querySelector('[name=date]')?.addEventListener('input', (e) => (plan.date = e.target.value));
+      root.querySelectorAll('[name=date]').forEach((el) => el.addEventListener('input', (e) => (plan.date = e.target.value)));
+      root.querySelector('[name=starttime]')?.addEventListener('input', (e) => (plan.startText = e.target.value));
+      // Typing in a stop updates it in place; a changed address is looked up again.
+      root.querySelectorAll('.stopaddr').forEach((el) => el.addEventListener('input', () => {
+        const s = plan.stops[Number(el.dataset.i)];
+        s.address = el.value; s.lat = null; s.lng = null; s.property_id = null; s.tried = false;
+      }));
+      root.querySelectorAll('.stoptime').forEach((el) => el.addEventListener('input', () => (plan.stops[Number(el.dataset.i)].atText = el.value)));
+      root.querySelector('#read')?.addEventListener('click', () => {
+        const parsed = parseTourText(plan.text);
+        if (parsed.startMinutes != null) plan.startText = formatClock(parsed.startMinutes);
+        plan.stops = parsed.stops.map((s) => planStop(s.address, s.at));
+        if (!plan.stops.length) plan.stops = [planStop()];
+        plan.step = 'check';
+        render();
+      });
+      root.querySelector('#typeit')?.addEventListener('click', () => { plan.stops = [planStop(), planStop(), planStop()]; plan.step = 'check'; render(); });
+      root.querySelector('#addstop')?.addEventListener('click', () => { plan.stops.push(planStop()); render(); root.ownerDocument.querySelectorAll('.stopaddr')[plan.stops.length - 1]?.focus(); });
+      root.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', () => { plan.stops.splice(Number(b.dataset.rm), 1); render(); }));
+      root.querySelectorAll('[data-up]').forEach((b) => b.addEventListener('click', () => {
+        const i = Number(b.dataset.up);
+        if (i > 0) [plan.stops[i - 1], plan.stops[i]] = [plan.stops[i], plan.stops[i - 1]];
+        render();
+      }));
+      root.querySelector('#totalk')?.addEventListener('click', () => { plan.step = 'talk'; render(); });
       root.querySelector('#build')?.addEventListener('click', buildPlan);
-      root.querySelector('#again')?.addEventListener('click', () => { plan.result = null; render(); });
+      root.querySelector('#edit')?.addEventListener('click', () => { plan.step = 'check'; render(); });
+      root.querySelector('#again')?.addEventListener('click', () => {
+        if (!confirm('Clear these stops and start again?')) return;
+        Object.assign(plan, { step: 'talk', text: '', stops: [], result: null });
+        render();
+      });
       root.querySelector('#savetour')?.addEventListener('click', () => {
         const tour = store.save('tours', {
           name: plan.client ? `${plan.client} · home tour` : 'Home tour',
           date: plan.date || todayIso(),
           start_place: plan.start?.address || 'Start',
           start_lat: plan.start?.lat ?? null, start_lng: plan.start?.lng ?? null,
-          start_minutes: plan.startMinutes,
+          start_minutes: parseClock(plan.startText) ?? 600,
           miles: Math.round(plan.result.miles * 10) / 10,
           stops: plan.result.legs.map((l) => tourStop(l))
         });
-        plan.result = null; plan.text = '';
+        Object.assign(plan, { step: 'talk', text: '', stops: [], result: null });
         location.hash = `#/tour/${tour.id}`;
       });
     }
@@ -923,32 +990,46 @@ function tourStop(l) {
   };
 }
 
+// The geocoder does far better with a state. Agents say "Murphys", not
+// "Murphys, CA"; add the agent's state when the address has none.
+function withState(address) {
+  const st = (store.settings().state || 'CA').trim();
+  return /,\s*[A-Z]{2}\b|\b\d{5}\b/.test(address) ? address : `${address}, ${st}`;
+}
+
 async function buildPlan() {
-  const parsed = parseTourText(plan.text);
-  if (!parsed.stops.length) return toast('Add at least one address that starts with a street number');
+  plan.stops = plan.stops.filter((s) => s.address.trim());
+  if (!plan.stops.length) return toast('Add at least one address');
+  const startMinutes = parseClock(plan.startText.replace(/\s/g, ''));
+  if (startMinutes == null) return toast('Check the start time, for example 10:00');
   plan.busy = true;
   render();
-  if (parsed.startMinutes != null) plan.startMinutes = parsed.startMinutes;
   const s = store.settings();
-  if (parsed.startPlace && /office|home/i.test(parsed.startPlace) && s.homeBase) plan.start = s.homeBase;
-  else plan.start = s.homeBase || null;
+  plan.start = s.homeBase || null;
   if (!plan.start) {
     const fix = await locate({ quiet: true });
     plan.start = fix ? { address: 'My location', lat: fix.lat, lng: fix.lng } : null;
   }
-  const stops = [];
-  for (const st of parsed.stops) {
+  for (const st of plan.stops) {
+    if (st.lat != null) continue; // already found; only changed stops are looked up again
     const p = matchProperty(st.address, props());
-    if (p && p.lat != null) { stops.push({ ...st, address: p.address, property_id: p.id, lat: p.lat, lng: p.lng }); continue; }
-    const g = await geocode(st.address);
-    stops.push({ ...st, property_id: p ? p.id : null, lat: g?.lat ?? null, lng: g?.lng ?? null });
+    if (p && p.lat != null) Object.assign(st, { address: p.address, property_id: p.id, lat: p.lat, lng: p.lng });
+    else {
+      const g = await geocode(withState(st.address));
+      Object.assign(st, { property_id: p ? p.id : null, lat: g?.lat ?? null, lng: g?.lng ?? null });
+    }
+    st.tried = true;
   }
   if (!plan.start) {
-    const first = stops.find((x) => x.lat != null);
+    const first = plan.stops.find((x) => x.lat != null);
     plan.start = first ? { address: first.address, lat: first.lat, lng: first.lng } : null;
   }
-  plan.result = planRoute({ start: plan.start, startMinutes: plan.startMinutes, stops });
+  const stops = plan.stops.map((st) => ({ id: st.id, address: st.address, property_id: st.property_id, lat: st.lat, lng: st.lng, at: st.atText ? parseClock(st.atText.replace(/\s/g, '')) : null }));
+  plan.result = planRoute({ start: plan.start, startMinutes, stops });
   plan.busy = false;
+  // Nothing found at all: stay on the check screen with each problem marked.
+  plan.step = stops.some((x) => x.lat != null) ? 'route' : 'check';
+  if (plan.step === 'check') toast('None of these were found on the map. Check the numbers and towns.');
   render();
 }
 
@@ -1335,6 +1416,7 @@ function viewSettings() {
         <div class="small">${s.homeBase ? `${s.homeBase.address} · pinned` : 'Not set. Tours start from where you are.'}</div>
         <label class="field"><span>Address</span><input id="hb" value="${s.homeBase?.address || ''}" placeholder="Office address"></label>
         <div class="btns"><button class="btn" type="button" id="hbhere">${icon('pin', 18)}I'm here now</button><button class="btn" type="button" id="hbfind">Find it</button></div>
+        <label class="field"><span>Your state (helps find addresses)</span><input id="st" maxlength="2" autocapitalize="characters" value="${s.state || 'CA'}"></label>
       </section>
 
       <section class="card pad sec">
@@ -1387,6 +1469,7 @@ function viewSettings() {
         if (g) { store.saveSettings({ homeBase: { address: hb.value, lat: g.lat, lng: g.lng } }); toast('Home base saved'); }
         else toast('Could not find it. Use “I’m here now” at the office.');
       });
+      root.querySelector('#st').addEventListener('change', (e) => { store.saveSettings({ state: e.target.value.trim().toUpperCase() || 'CA' }); toast('Saved'); });
       root.querySelector('#saverate').addEventListener('click', () => { store.saveSettings({ irsRate: root.querySelector('#rate').value }); toast('Saved'); });
       root.querySelector('#clearsample')?.addEventListener('click', () => { store.clearSample(); toast('Sample data cleared'); });
       root.querySelector('#loadsample')?.addEventListener('click', () => { store.loadSample(sampleData()); toast('Sample data added'); });

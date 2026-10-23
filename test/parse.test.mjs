@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTourText, wordsToClock, matchProperty, search, tripsCsv, tidyAddress } from '../js/parse.js';
+import { parseTourText, wordsToClock, matchProperty, search, tripsCsv, tidyAddress, fixDictation } from '../js/parse.js';
 
 test('a spoken tour becomes a start time and one stop per address', () => {
   const r = parseTourText('Saturday for the Smiths, start at the office at ten. 433 East Highway 4 Murphys, 701 Mark Twain Road Angels Camp and 635 South Main Street at 11:30');
@@ -9,6 +9,24 @@ test('a spoken tour becomes a start time and one stop per address', () => {
   assert.deepEqual(r.stops.map((s) => s.address), ['433 E Hwy 4 Murphys', '701 Mark Twain Rd Angels Camp', '635 S Main St']);
   assert.equal(r.stops[2].at, 690);
   assert.equal(r.stops[0].at, null);
+});
+
+test('Sara’s first dictated tour: clock-style house numbers and "go to / followed by"', () => {
+  // What iPhone dictation produced on 2026-10-23.
+  const r = parseTourText("Start at 10 433 East Highway 4 Murphy's, go to 324 Augusta Valley Springs followed by 11:43 Echo Street Angels Camp");
+  assert.equal(r.startMinutes, 600);
+  assert.deepEqual(r.stops.map((s) => s.address), ['433 E Hwy 4 Murphys', '324 Augusta Valley Springs', '1143 Echo St Angels Camp']);
+});
+
+test('no commas at all still splits at each new street number', () => {
+  const r = parseTourText('433 East Highway 4 Murphys 324 Augusta Court Valley Springs 2841 Fowler Road Space 144 Copperopolis');
+  assert.deepEqual(r.stops.map((s) => s.address), ['433 E Hwy 4 Murphys', '324 Augusta Ct Valley Springs', '2841 Fowler Rd Space 144 Copperopolis']);
+});
+
+test('a real showing time is kept as a time, not turned into a house number', () => {
+  const r = parseTourText('635 South Main Street at 11:30, 701 Mark Twain Road at 2 pm and 1143 Echo Street');
+  assert.deepEqual(r.stops.map((s) => [s.address, s.at]), [['635 S Main St', 690], ['701 Mark Twain Rd', 840], ['1143 Echo St', null]]);
+  assert.equal(fixDictation('at 11:30 and 4:33 East Highway 4'), 'at 11:30 and 433 East Highway 4');
 });
 
 test('one address per line works too', () => {

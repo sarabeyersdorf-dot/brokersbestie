@@ -18,11 +18,27 @@ export function wordsToClock(text) {
 
 const TIME_WORD = '(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm|a\\.m\\.|p\\.m\\.)?|(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:\\s+(?:fifteen|thirty|forty[- ]five))?\\s*(?:am|pm)?)';
 
-// "Start at the office at ten. 433 East Highway 4 Murphys, 701 Mark Twain at
-// 11:30 and 635 South Main" -> start time, start place, and one stop per address.
-// A new stop begins wherever a street number begins.
+const STREET = '(?:st|street|rd|road|dr|drive|ln|lane|ave|avenue|ct|court|way|hwy|highway|cir|circle|pl|place|blvd|boulevard|trl|trail|loop|pkwy|parkway|ter|terrace|grade|run|path|row|sq)';
+const CONNECTOR = '(?:and|then|go|followed|next|after)';
+
+// iPhone dictation writes "1143 Echo Street" as "11:43 Echo Street". A clock
+// that is followed, before any comma or "and/then", by a street name is a
+// house number (Sara's first real test, 2026-10-23).
+export function fixDictation(text) {
+  const re = new RegExp(`\\b(\\d{1,2}):(\\d{2})(?=\\s+(?!(?:am|pm|a\\.m|p\\.m|${CONNECTOR})\\b)(?:[A-Za-z][\\w'.]*\\s+){0,4}${STREET}\\b)`, 'gi');
+  return String(text || '').replace(re, '$1$2');
+}
+
+// Words that come right before a number that is NOT a new address:
+// "Highway 4", "Space 144", "Suite 2".
+const NO_BREAK = /^(hwy|highway|route|rte|sr|state|county|road|rd|space|spc|suite|ste|unit|apt|lot|box|#|no\.?|number|interstate|i-?)$/i;
+
+// "Start at the office at ten. 433 East Highway 4 Murphys, go to 701 Mark
+// Twain at 11:30 followed by 635 South Main" -> start time, start place, and
+// one stop per address. A new stop begins at "go to / followed by / then /
+// and", at a comma or full stop, or wherever a new street number begins.
 export function parseTourText(text) {
-  let rest = ` ${String(text || '').replace(/[ \t]+/g, ' ')} `;
+  let rest = ` ${fixDictation(text).replace(/[ \t]+/g, ' ')} `;
   let startMinutes = null;
   let startPlace = null;
   const startRe = new RegExp(`\\bstart(?:ing)?\\s+(?:(?:at|from)\\s+(?:the\\s+)?([a-z][a-z' ]{1,30}?)\\s+)?at\\s+${TIME_WORD}`, 'i');
@@ -35,7 +51,10 @@ export function parseTourText(text) {
   // Break at commas, line ends, sentence ends and "and/then/next". A piece that
   // starts with a street number is a new stop; one that doesn't ("Valley
   // Springs" after a comma) belongs to the stop before it.
-  const pieces = rest.split(/[,;\n]|\.\s|\s(?:and|then|next)\s/i).map((c) => c.trim()).filter(Boolean);
+  rest = rest
+    .replace(/\s(?:and then|then go to|go to|head to|drive to|followed by|after that|and|then|next)\s/gi, '\n')
+    .replace(/(\S+)\s+(?=\d{1,6}\s+(?!(?:am|pm|a\.m|p\.m)\b)[A-Za-z]{2,})/gi, (m, prev) => (NO_BREAK.test(prev) ? m : `${prev}\n`));
+  const pieces = rest.split(/[,;\n]|\.\s/).map((c) => c.trim()).filter(Boolean);
   const stops = [];
   for (const raw of pieces) {
     let c = raw.replace(/[.]+$/, '');
@@ -63,7 +82,8 @@ const ABBR = [
 ];
 
 export function tidyAddress(s) {
-  let out = String(s).trim();
+  // "Murphy's" (dictation's spelling) -> "Murphys" (the town's).
+  let out = String(s).trim().replace(/([A-Za-z])['’]s\b/g, '$1s');
   for (const [re, to] of ABBR) out = out.replace(re, to);
   return out.replace(/\s{2,}/g, ' ');
 }
