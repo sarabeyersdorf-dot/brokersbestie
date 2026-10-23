@@ -68,7 +68,12 @@ begin
   return t;
 end $$;
 
-revoke all on function public.bb_create_team(text), public.bb_invite_code(uuid), public.bb_join_team(text) from anon;
+-- New functions are runnable by PUBLIC by default; revoking from anon alone
+-- leaves that grant in place.
+revoke all on function public.bb_create_team(text), public.bb_invite_code(uuid), public.bb_join_team(text) from public, anon;
+-- bb_is_member is only for signed-in members' policies; a signed-out visitor
+-- has no reason to call it.
+revoke all on function public.bb_is_member(uuid) from public, anon;
 grant execute on function public.bb_create_team(text), public.bb_invite_code(uuid), public.bb_join_team(text), public.bb_is_member(uuid) to authenticated;
 
 -- ---------- the agent's data ----------

@@ -34,12 +34,14 @@ Dropbox, read an MLS sheet into a listing, brokerage owner view, App Store versi
 
 ## Turn on team mode (one time)
 
-1. **Database.** Create a new project at supabase.com (not Legacy's). In its SQL
-   editor, paste and run `db/001_schema.sql`. Then in Authentication → URL
-   Configuration, add `https://brokersbestie.app` as the Site URL.
-2. **App settings.** Put the project's URL and anon (publishable) key into
-   `js/config.js`. Both are safe in the browser: row-level security only lets a
-   signed-in team member reach their own team's rows.
+1. **Database.** Done 2026-10-23: Supabase project `bycsdukxwzkahaxnkmgb`
+   ("Brokers Bestie Project", its own organization, not Legacy's), set up from
+   `db/001_schema.sql` and tested: a member sees their team's rows, a stranger
+   and a signed-out visitor see nothing. Still to do in the dashboard:
+   Authentication → URL Configuration → Site URL `https://brokersbestie.app`.
+2. **App settings.** Done: the project URL and anon key are in `js/config.js`.
+   Both are safe in the browser: row-level security only lets a signed-in team
+   member reach their own team's rows.
 3. **Hosting.** Import this repo into Vercel, point brokersbestie.app at it, and add
    these environment variables:
 

@@ -166,14 +166,21 @@ export const cloud = { enabled: !!(SUPABASE_URL && SUPABASE_ANON_KEY), client: n
 async function client() {
   if (!cloud.enabled) return null;
   if (!cloud.client) {
-    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm');
-    cloud.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, detectSessionInUrl: true } });
+    // With no signal the sign-in library can't load. The app keeps working on
+    // the phone and tries again when the signal comes back.
+    try {
+      const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm');
+      cloud.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, detectSessionInUrl: true } });
+    } catch {
+      cloud.status = 'error';
+      throw new Error('No connection right now. Everything is still saved on this phone.');
+    }
   }
   return cloud.client;
 }
 
 export async function startCloud() {
-  const c = await client();
+  const c = await client().catch(() => null);
   if (!c) return;
   const { data: s } = await c.auth.getSession();
   cloud.user = s.session ? s.session.user : null;
@@ -304,7 +311,7 @@ async function uploadPhoto(id, blob) {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('online', () => syncNow());
+  window.addEventListener('online', () => (cloud.client ? syncNow() : startCloud()));
 }
 
 // ---------- sample data ----------
