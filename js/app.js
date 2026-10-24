@@ -7,8 +7,9 @@ import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMil
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
 import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
+import { installCard, wireInstall, isInstalled } from './install.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace } from './faces.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -354,6 +355,7 @@ function todoItems() {
   return items;
 }
 
+const installHidden = () => { try { return localStorage.getItem('bb:installhide') === '1'; } catch { return false; } };
 function viewToday() {
   const results = searchText ? search(searchText, store.snapshot()) : [];
   const tours = store.all('tours').filter((x) => x.date === todayIso() && !x.finished);
@@ -370,6 +372,7 @@ function viewToday() {
       extra: html`<label class="search">${icon('search', 18)}<input id="q" type="search" placeholder="Search everything: address, code, name…" value="${searchText}" aria-label="Search everything" autocomplete="off"></label>`
     })}
     <main class="wrap">
+      ${!searchText && !isInstalled() && !installHidden() ? installCard({ dismissable: true }) : ''}
       ${searchText ? html`<section class="sec">
         <div class="sec-head"><div class="label accent">${results.length} found</div><button class="btn ghost" type="button" id="clearq" style="min-height:36px">Clear</button></div>
         <div class="card list">${results.length ? results.slice(0, 40).map((r) => html`<a class="row" href="${r.propertyId ? '#/p/' + r.propertyId : '#/'}">
@@ -431,6 +434,7 @@ function viewToday() {
       ${!store.cloud.enabled ? html`<div class="hint" style="text-align:center">Everything is saved on this phone.</div>` : ''}
     </main>`,
     mount(root) {
+      wireInstall(root, { onHide: () => { try { localStorage.setItem('bb:installhide', '1'); } catch {} } });
       const q = root.querySelector('#q');
       q.addEventListener('input', () => {
         searchText = q.value;
@@ -1041,7 +1045,7 @@ function viewPlan() {
         <label class="field"><span>Addresses</span><textarea id="tt" style="min-height:150px" placeholder="Start at 10. 433 East Highway 4 Murphys, go to 324 Augusta Court Valley Springs, then 1143 Echo Street Angels Camp at 11:30">${plan.text}</textarea></label>
         <button class="btn big block" type="button" data-mic="tt">${icon('mic', 22)}Tap and talk</button>
         <div class="hint">Say “start at 10”, then each address with its town. “At 11:30” after an address keeps that time. You'll check every stop next.</div>
-        <div class="grid2">${fieldHtml({ name: 'client', label: 'Client', placeholder: 'Buyer name' }, plan.client)}${fieldHtml({ name: 'date', label: 'Date', type: 'date' }, plan.date)}</div>
+        <div class="grid2">${fieldHtml({ name: 'client', label: 'Who is it for?', placeholder: 'Buyer name' }, plan.client)}${fieldHtml({ name: 'date', label: 'Date', type: 'date' }, plan.date)}</div>
         <button class="btn dark big block" type="button" id="read">Next: check the stops</button>
         <button class="btn ghost block" type="button" id="typeit">Or type them one at a time</button>
       </section>` : ''}
@@ -1136,6 +1140,7 @@ function viewPlan() {
       root.querySelector('#savetour')?.addEventListener('click', () => {
         const tour = store.save('tours', {
           name: plan.client ? `${plan.client} · home tour` : 'Home tour',
+          buyer: (plan.client || '').trim(),
           date: plan.date || todayIso(),
           start_place: plan.start?.address || 'Start',
           start_lat: plan.start?.lat ?? null, start_lng: plan.start?.lng ?? null,
@@ -1214,6 +1219,7 @@ function viewTours() {
     html: html`${header({ kicker: 'Tours', title: 'Showing tours', right: html`<a class="btn teal" href="#/plan" style="min-height:40px">+ Plan</a>` })}
     <main class="wrap">
       <a class="card row" href="#/plan">${icon('mic', 22)}<span class="grow"><span class="t">Talk to plan a tour</span><span class="s">Addresses in any order; I'll route them</span></span>${icon('chev', 18)}</a>
+      <a class="card row" href="#/buyers">${raw(reactionFace('like', { size: 26, label: '' }))}<span class="grow"><span class="t">Buyers</span><span class="s">Every home each buyer saw, and what they thought</span></span>${icon('chev', 18)}</a>
       <div class="card list">${list.length ? list.map((t) => html`<a class="row" href="#/tour/${t.id}"><span class="grow"><span class="t">${t.name}</span><span class="s">${niceDate(t.date)} · ${(t.stops || []).length} stops${t.finished ? ' · done' : ''}</span></span>${icon('chev', 18)}</a>`) : html`<div class="empty">No tours yet.</div>`}</div>
     </main>`
   };
@@ -1232,6 +1238,7 @@ function viewTour(id) {
     html: html`${header({
       back: '#/tours', kicker: 'Tour mode', title: t.name,
       sub: `${niceDate(t.date)}${t.start_minutes != null ? ' · starts ' + formatClock(t.start_minutes) : ''} · ${stops.length} stops · about ${t.miles || 0} mi`,
+      right: buyerOf(t) ? html`<a class="btn" href="#/buyer/${encodeURIComponent(buyerKey(buyerOf(t)))}" style="min-height:40px;background:transparent;color:#fff;border-color:var(--teal-on-dark)">${buyerOf(t)} ›</a>` : html`<button class="btn" type="button" id="setbuyer" style="min-height:40px;background:transparent;color:#fff;border-color:var(--teal-on-dark)">Who is it for?</button>`,
       extra: html`<div class="btns"><button class="btn" type="button" id="late" style="background:transparent;color:#fff;border-color:var(--teal-on-dark)">Running late</button><a class="btn teal" href="${mapsUrl(t.start_lat != null ? { address: t.start_place, lat: t.start_lat, lng: t.start_lng } : null, stops)}" target="_blank" rel="noopener">Route in Maps</a></div>`
     })}
     <main class="wrap">
@@ -1326,7 +1333,57 @@ function viewTour(id) {
           }
         });
       });
+      root.querySelector('#setbuyer')?.addEventListener('click', () => formSheet({
+        title: 'Who is this tour for?',
+        fields: [{ name: 'buyer', label: 'Buyer', placeholder: 'The Smiths', hint: 'Their faces from every tour collect on one buyer page.' }],
+        values: { buyer: buyerOf(t) },
+        onSave(v) { if (v.buyer.trim()) save({ buyer: v.buyer.trim() }); }
+      }));
       root.querySelector('#deltour').addEventListener('click', () => { if (confirm('Delete this tour?')) { store.remove('tours', id); location.hash = '#/tours'; } });
+    }
+  };
+}
+
+// ======================================================================
+// BUYERS: every home a buyer saw, with their face (Sara, 2026-10-24)
+// ======================================================================
+
+function viewBuyers() {
+  const list = buyers(store.all('tours'));
+  return {
+    html: html`${header({ back: '#/tours', kicker: 'Tours', title: 'Buyers' })}
+    <main class="wrap">
+      <div class="card list">${list.length ? list.map((b) => {
+        const faces = b.homes.filter((h) => h.reaction).slice(0, 5);
+        return html`<a class="row" href="#/buyer/${encodeURIComponent(b.key)}"><span class="grow"><span class="t">${b.name}</span><span class="s">${b.homes.length} home${b.homes.length === 1 ? '' : 's'} seen · ${b.tours.length} tour${b.tours.length === 1 ? '' : 's'} · last ${niceDate(b.last)}</span></span><span class="face-row">${faces.map((h) => raw(reactionFace(h.reaction, { size: 22, label: '' })))}</span>${icon('chev', 18)}</a>`;
+      }) : html`<div class="empty">No buyers yet. When you plan a tour, put the buyer's name in "Who is it for?".</div>`}</div>
+    </main>`
+  };
+}
+
+function viewBuyer(key) {
+  const b = buyers(store.all('tours')).find((x) => x.key === decodeURIComponent(key));
+  if (!b) return notFound();
+  const counts = REACTIONS.map(([k, label]) => [k, label, b.homes.filter((h) => h.reaction === k).length]).filter((r) => r[2]);
+  return {
+    html: html`${header({ back: '#/buyers', kicker: 'Buyer', title: b.name, sub: `${b.homes.length} home${b.homes.length === 1 ? '' : 's'} seen on ${b.tours.length} tour${b.tours.length === 1 ? '' : 's'}` })}
+    <main class="wrap">
+      ${counts.length ? html`<div class="face-tally">${counts.map(([k, label, n]) => html`<span class="tally">${raw(reactionFace(k, { size: 26, label: '' }))}<span>${label}</span><b class="num">${n}</b></span>`)}</div>` : ''}
+      <section class="sec"><div class="label accent">Homes they saw</div>
+      <div class="card list">${b.homes.length ? b.homes.map((h) => html`<div class="row buyer-home">
+        <button class="face-btn" type="button" data-react="${h.tour_id}|${h.stop_id}" aria-label="${h.reaction ? reactionLabel(h.reaction) + '. Tap to change' : 'Add their reaction'}">${h.reaction ? raw(reactionFace(h.reaction, { size: 40, label: '' })) : html`<span class="face-empty">+</span>`}</button>
+        <span class="grow">${h.property_id ? html`<a class="t" href="#/p/${h.property_id}">${h.address}</a>` : html`<span class="t">${h.address}</span>`}
+          <span class="s">${h.reaction ? html`<b>${reactionLabel(h.reaction)}</b> · ` : 'No reaction yet · '}${niceDate(h.date)}</span>
+          ${h.note ? html`<span class="s">“${h.note}”</span>` : ''}</span></div>`) : html`<div class="empty">No homes marked shown yet.</div>`}</div></section>
+      <section class="sec"><div class="label">Tours</div>
+      <div class="card list">${b.tours.map((t) => html`<a class="row" href="#/tour/${t.id}"><span class="grow"><span class="t">${t.name}</span><span class="s">${niceDate(t.date)} · ${(t.stops || []).length} stops</span></span>${icon('chev', 18)}</a>`)}</div></section>
+    </main>`,
+    mount(root) {
+      root.querySelectorAll('[data-react]').forEach((el) => el.addEventListener('click', () => {
+        const [tid, sid] = el.getAttribute('data-react').split('|');
+        const stop = (store.get('tours', tid)?.stops || []).find((x) => x.id === sid);
+        reactionPicker(stop);
+      }));
     }
   };
 }
@@ -1670,12 +1727,10 @@ function viewSettings() {
         <div class="small">Your data is yours: this file has every property, code, person, note, tour, drive and expense.</div>
       </section>
 
-      <section class="card pad sec">
-        <div class="label">Put it on your home screen</div>
-        <div class="small">iPhone: tap Share, then “Add to Home Screen”. Android: tap the ⋮ menu, then “Install app”. It then opens like an app and works with no signal.</div>
-      </section>
+      ${installCard()}
     </main>`,
     mount(root) {
+      wireInstall(root);
       root.querySelector('#signin')?.addEventListener('click', async () => {
         const email = root.querySelector('#email').value.trim();
         if (!email) return toast('Type your email');
@@ -2299,6 +2354,8 @@ const ROUTES = [
   [/^#\/plan$/, () => viewPlan(), 'tours'],
   [/^#\/tours$/, () => viewTours(), 'tours'],
   [/^#\/tour\/([^/]+)$/, (m) => viewTour(m[1]), 'tours'],
+  [/^#\/buyers$/, () => viewBuyers(), 'tours'],
+  [/^#\/buyer\/([^/]+)$/, (m) => viewBuyer(m[1]), 'tours'],
   [/^#\/miles(?:\/(add))?$/, (m) => viewMiles(m[1]), 'today'],
   [/^#\/safety$/, () => viewSafety(), 'today'],
   [/^#\/settings$/, () => viewSettings(), 'today']

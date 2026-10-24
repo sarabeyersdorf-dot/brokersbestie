@@ -103,3 +103,7 @@ test('an MLS sheet note has its columns', () => {
   const c = columns('notes');
   for (const k of ['source', 'files']) assert.ok(c.has(k), `notes.${k}`);
 });
+
+test('a tour knows its buyer', () => {
+  assert.ok(columns('tours').has('buyer'), 'tours.buyer');
+});

@@ -312,3 +312,16 @@ html, body { max-width: 100%; overflow-x: hidden; }
 @keyframes bbTwinkle { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(1.4); } }
 @keyframes bbBreathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.04); } }
 @media (prefers-reduced-motion: reduce) { .react svg, .react svg *, .ok-face svg { animation: none !important; } }
+.face-row { display: flex; gap: 2px; flex: none; }
+.face-tally { display: flex; flex-wrap: wrap; gap: 8px; }
+.tally { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 6px; border-radius: 999px; background: #fff; border: 1px solid var(--line-soft, #e3e7e5); font-weight: 600; font-size: 14px; }
+.tally .num { font-family: var(--tall); font-size: 18px; }
+.buyer-home { align-items: flex-start; gap: 12px; }
+.buyer-home .grow { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.buyer-home a.t { color: var(--ink); }
+.face-btn { flex: none; width: 48px; min-height: 48px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; padding: 0; cursor: pointer; }
+.face-empty { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 12px; border: 2px dashed #b9c1be; color: #7a8582; font-size: 22px; font-weight: 700; }
+.install-head { display: flex; gap: 12px; align-items: center; }
+.install-head svg { flex: none; }
+.install-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; line-height: 1.35; }
+[hidden] { display: none !important; }

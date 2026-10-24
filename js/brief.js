@@ -171,3 +171,39 @@ export function sortProps(list, how) {
   }[how] || null;
   return by ? list.slice().sort(by) : list;
 }
+
+// ---------- buyers: who a tour was for, and what they thought ----------
+// A tour's buyer is its `buyer` field; tours saved before 2026-10-24 carry it
+// only in the name ("Smiths · home tour").
+export function buyerOf(t) {
+  const b = String(t.buyer || '').trim();
+  if (b) return b;
+  const m = String(t.name || '').match(/^(.+?)\s*·\s*home tour$/i);
+  return m ? m[1].trim() : '';
+}
+export const buyerKey = (name) => String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+// Every buyer, newest tour first, each with the homes they saw (newest first).
+// A home seen twice shows once, with its latest reaction.
+export function buyers(tours) {
+  const by = new Map();
+  for (const t of tours || []) {
+    const name = buyerOf(t);
+    if (!name) continue;
+    const k = buyerKey(name);
+    if (!by.has(k)) by.set(k, { key: k, name, tours: [], homes: new Map(), last: '' });
+    const b = by.get(k);
+    b.tours.push(t);
+    if (String(t.date) > b.last) { b.last = String(t.date); b.name = name; }
+    for (const s of t.stops || []) {
+      if (!s.shown && !s.reaction) continue;
+      const hk = s.property_id || buyerKey(s.address);
+      const seen = { address: s.address, property_id: s.property_id || null, date: t.date, tour_id: t.id, stop_id: s.id, reaction: s.reaction || null, note: s.reaction_note || '', at: s.reaction_at || '' };
+      const prev = b.homes.get(hk);
+      if (!prev || `${seen.date}${seen.at}` >= `${prev.date}${prev.at}`) b.homes.set(hk, seen);
+    }
+  }
+  return [...by.values()]
+    .map((b) => ({ ...b, tours: b.tours.sort((x, y) => String(y.date).localeCompare(String(x.date))), homes: [...b.homes.values()].sort((x, y) => `${y.date}${y.at}`.localeCompare(`${x.date}${x.at}`)) }))
+    .sort((a, b) => b.last.localeCompare(a.last) || a.name.localeCompare(b.name));
+}

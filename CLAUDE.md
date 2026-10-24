@@ -143,3 +143,20 @@ nope, pricey, work, again, offer), `reactionFace`, `okFace`, `ICON_SVG`.
   feedback" note. The stop card shows the face; tap it to change.
 - **Safety**: the gentle "You OK?" face on the running check-in and the
   time-up prompt.
+- **Buyer pages** (Sara, 2026-10-24, chose a Bestie page over the CRM):
+  `#/buyers` and `#/buyer/<key>` (from Tours). A tour's buyer is `tours.buyer`
+  (db/008), set by the planner's "Who is it for?" or the tour header; older
+  tours read it from the name "X · home tour" (`buyerOf`). `buyers()` in
+  `js/brief.js` groups every shown home across tours, one row per home with its
+  latest face; tap a face to change it. Nothing goes to the Legacy CRM.
+
+## Add to home screen (2026-10-24)
+
+Sara: "the add to homescreen doesn't work". The site passes Chrome's install
+check (no installability errors), so the help is in the app: `js/install.js`
+shows an "Install Bestie" button when Android offers one
+(`beforeinstallprompt`), otherwise steps for the phone and browser it is in
+(`platform()`), and tells an in-app browser (Gmail, Instagram, Google app) to
+open Safari/Chrome first, since those cannot add to the home screen. Shown
+on Today until installed or "Not now", and always in Settings.
+`[hidden]` is `display:none !important` in css (a `.btn` overrode it).
