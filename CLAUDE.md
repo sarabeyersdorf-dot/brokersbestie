@@ -33,7 +33,12 @@ plain words, and let her choose.
 - `db/001_schema.sql`: every table carries `team_id`, RLS via `bb_is_member()`.
   **Any field the phone writes must have a column**, or the first sync fails;
   `test/schema.test.mjs` checks the edit form and sample data against the SQL.
-- `sw.js` caches the app for offline. **Bump `VERSION` when an app file changes.**
+- `sw.js` caches the app for offline. **Bump `VERSION` when an app file changes,
+  and `APP_VERSION` in `js/config.js` to the same value** (a test checks). The
+  app asks for an update each time it is reopened and reloads itself when the
+  new copy takes over (a button instead if a sheet or form is in use), so a
+  home-screen copy never sits on an old version (James, 2026-10-24, could not
+  see Send feedback). Settings shows the version at the bottom.
 - Safety: the phone keeps its own timer; in team mode `api/cron/checkins.js` texts
   the contact after the time is up (cron is DAILY until Vercel Pro; then set
   `*/5 * * * *` in vercel.json — Hobby refuses to deploy anything more often), claiming the row first so it can
@@ -165,5 +170,6 @@ on Today until installed or "Not now", and always in Settings.
 `[hidden]` is `display:none !important` in css (a `.btn` overrode it).
 - **Send feedback** (Settings, 2026-10-24, for the first outside testers):
   `feedbackLink()` in `js/install.js` opens the tester's own mail app to
-  Sara (`FEEDBACK_TO`) with their phone, browser and sign-in state filled in.
+  Sara (`FEEDBACK_TO`) with their phone, browser, sign-in state and app version
+  filled in. It is the FIRST card in Settings.
   No server, nothing stored.

@@ -80,14 +80,14 @@ export function wireInstall(root, { onHide } = {}) {
 // tester's own mail app addressed to Sara, with what kind of phone and browser
 // they are on filled in, so a bug report says where it happened.
 export const FEEDBACK_TO = 'sarasellscalifornia@gmail.com';
-export function feedbackLink({ where = '', signedIn = false } = {}, p = platform(), ua = navigator.userAgent) {
+export function feedbackLink({ where = '', signedIn = false, version = '' } = {}, p = platform(), ua = navigator.userAgent) {
   const os = (ua.match(/(?:iPhone OS|CPU OS|Android) ([\d_.]+)/) || [])[1];
   const lines = [
     'What happened (or what would make Bestie better):', '', '',
     'What did you expect?', '', '',
     '--- please leave this part, it helps fix things ---',
     `Phone: ${p.os === 'ios' ? 'iPhone' : p.os === 'android' ? 'Android' : 'Computer'}${os ? ' ' + os.replace(/_/g, '.') : ''} · ${p.browser}${isInstalled() ? ' · home screen app' : ''}`,
-    `Signed in: ${signedIn ? 'yes' : 'no'} · Screen: ${where || '-'}`,
+    `Signed in: ${signedIn ? 'yes' : 'no'} · Screen: ${where || '-'}${version ? ' · Version ' + version : ''}`,
     `Sent: ${new Date().toLocaleString()}`
   ];
   return `mailto:${FEEDBACK_TO}?subject=${encodeURIComponent('Brokers Bestie feedback')}&body=${encodeURIComponent(lines.join('\n'))}`;

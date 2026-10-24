@@ -10,3 +10,7 @@ export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // AND the check-in job runs every 5 minutes (Vercel Pro; vercel.json). While
 // off, every agent is told the truth: this phone buzzes and opens the text.
 export const AUTO_SAFETY = false;
+
+// Shown at the bottom of Settings and in feedback emails. Must equal VERSION
+// in sw.js (test/install.test.mjs checks), so it says which copy a phone runs.
+export const APP_VERSION = 'bb-v26';

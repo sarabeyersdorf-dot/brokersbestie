@@ -2,7 +2,7 @@
 // back button, bookmarks and a home-screen launch all land where expected.
 
 import * as store from './store.js';
-import { AUTO_SAFETY } from './config.js';
+import { AUTO_SAFETY, APP_VERSION } from './config.js';
 import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLink, mapLink, todayIso, daysFrom, niceDate, whenText, toast, copy } from './ui.js';
 import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMiles, roadMiles, driveMinutes } from './route.js';
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
@@ -1665,6 +1665,11 @@ function viewSettings() {
     html: html`${header({ back: '#/', kicker: 'Settings', title: 'Brokers Bestie' })}
     <main class="wrap">
       <section class="card pad sec">
+        <div class="label">Tell Sara what you think</div>
+        <div class="small">Something broken, confusing or missing? It opens an email with your phone type already filled in. Screenshots help.</div>
+        <a class="btn dark block" id="feedback" href="${feedbackLink({ where: 'Settings', signedIn: !!store.cloud.user, version: APP_VERSION })}">Send feedback</a>
+      </section>
+      <section class="card pad sec">
         <div class="label accent">Team mode</div>
         ${!c.enabled ? html`<div>Everything is saved on this phone only. Team mode (sign-in, sharing with your team, automatic safety alerts) turns on once the server is set up.</div>`
           : !c.user ? html`<div>Sign in to save to your team and use it on every phone.</div>
@@ -1729,12 +1734,7 @@ function viewSettings() {
       </section>
 
       ${installCard()}
-
-      <section class="card pad sec">
-        <div class="label">Tell Sara what you think</div>
-        <div class="small">Something broken, confusing or missing? It opens an email with your phone type already filled in. Screenshots help.</div>
-        <a class="btn dark block" id="feedback" href="${feedbackLink({ where: 'Settings', signedIn: !!store.cloud.user })}">Send feedback</a>
-      </section>
+      <div class="small" style="text-align:center;color:var(--muted, #7a8582)">Version ${APP_VERSION}</div>
     </main>`,
     mount(root) {
       wireInstall(root);
@@ -2415,4 +2415,24 @@ locationAllowed().then(async (yes) => {
   if (here && (location.hash === '' || location.hash === '#/')) render();
 });
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+// Updates: a phone that reopens Bestie from the home screen resumes the old
+// copy, so ask for a new one each time it comes back, and reload once the new
+// one takes over (unless something is being typed: then offer a button).
+if ('serviceWorker' in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('./sw.js').then((reg) => {
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+  }).catch(() => {});
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    const busy = document.querySelector('.sheet-back') || (current && current.form && document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName));
+    if (!busy) { reloading = true; location.reload(); return; }
+    if (document.querySelector('[data-update]')) return;
+    const bar = document.createElement('button');
+    bar.type = 'button'; bar.className = 'update-bar'; bar.setAttribute('data-update', '');
+    bar.textContent = 'A new version of Bestie is ready. Tap to update.';
+    bar.addEventListener('click', () => location.reload());
+    document.body.appendChild(bar);
+  });
+}

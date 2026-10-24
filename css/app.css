@@ -325,3 +325,4 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .install-head svg { flex: none; }
 .install-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; line-height: 1.35; }
 [hidden] { display: none !important; }
+.update-bar { position: fixed; left: 12px; right: 12px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 60; min-height: 48px; padding: 10px 14px; border: 0; border-radius: 14px; background: var(--teal, #1FBFAE); color: #10201e; font: 700 15px/1.3 var(--sans, inherit); box-shadow: 0 6px 20px rgba(0,0,0,.25); }

@@ -34,3 +34,10 @@ test('feedback opens an email to Sara with the phone filled in', async () => {
   assert.match(body, /Phone: iPhone 18\.0 · safari/);
   assert.match(body, /Signed in: yes · Screen: Settings/);
 });
+
+test('the version shown in Settings is the one the service worker caches', async () => {
+  const fs = await import('node:fs');
+  const { APP_VERSION } = await import('../js/config.js');
+  const sw = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
+  assert.equal(sw.match(/const VERSION = '([^']+)'/)[1], APP_VERSION);
+});
