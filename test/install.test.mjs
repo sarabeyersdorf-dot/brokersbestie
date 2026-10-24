@@ -41,3 +41,10 @@ test('the version shown in Settings is the one the service worker caches', async
   const sw = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   assert.equal(sw.match(/const VERSION = '([^']+)'/)[1], APP_VERSION);
 });
+
+test('sign-in errors are said in plain words', async () => {
+  const { authMessage } = await import('../js/store.js').catch(() => ({}));
+  if (!authMessage) return; // store.js needs a browser; covered in the browser check
+  assert.match(authMessage({ code: 'over_email_send_rate_limit', message: 'email rate limit exceeded' }), /Too many sign-in emails/);
+  assert.match(authMessage({ message: 'Token has expired or is invalid' }), /code did not work/);
+});

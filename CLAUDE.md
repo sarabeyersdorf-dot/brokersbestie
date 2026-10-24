@@ -173,3 +173,15 @@ on Today until installed or "Not now", and always in Settings.
   Sara (`FEEDBACK_TO`) with their phone, browser, sign-in state and app version
   filled in. It is the FIRST card in Settings.
   No server, nothing stored.
+
+## Sign in with a code, not a link (2026-10-24)
+
+James kept being asked to sign in: on iPhone the emailed link opens Safari or
+Gmail's browser, which signs THAT browser in, not the home-screen app (it has
+its own storage). Then repeated requests hit Supabase's built-in email limit
+(a few an hour: `over_email_send_rate_limit` in the auth log). Settings now
+sends a code (`signInWithOtp`) and the app signs itself in with
+`verifyOtp({ type: 'email' })` (`store.verifyCode`); `authMessage` says the
+limit and an expired code in plain words. **The Magic Link and Confirm signup
+email templates in the Supabase dashboard must contain `{{ .Token }}`**, or
+the email has no code to type. Custom SMTP (Resend) lifts the hourly limit.

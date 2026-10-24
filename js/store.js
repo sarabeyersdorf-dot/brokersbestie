@@ -215,10 +215,31 @@ export async function startCloud() {
   emit();
 }
 
+// Sign-in emails carry a code to type into the app AND a link. The code is the
+// way that works from the home screen: on iPhone a link opens Safari or the
+// mail app's browser, which signs THAT browser in, not the installed app
+// (James, 2026-10-24). The built-in email service sends only a few an hour,
+// so a refusal is said in plain words.
 export async function signIn(email) {
   const c = await client();
   const { error } = await c.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
-  if (error) throw error;
+  if (error) throw new Error(authMessage(error));
+}
+
+export async function verifyCode(email, code) {
+  const c = await client();
+  const { data, error } = await c.auth.verifyOtp({ email, token: String(code).replace(/\D/g, ''), type: 'email' });
+  if (error) throw new Error(authMessage(error));
+  cloud.user = data.user || data.session?.user || null;
+  emit();
+  return cloud.user;
+}
+
+export function authMessage(e) {
+  const m = `${e?.code || ''} ${e?.message || e || ''}`;
+  if (/rate|429|over_email/i.test(m)) return 'Too many sign-in emails in the last hour. Use the code in the last email you got, or try again in an hour.';
+  if (/expired|invalid|otp/i.test(m)) return 'That code did not work. It may have expired: use the newest email, or send a new code.';
+  return e?.message || 'Could not sign in right now.';
 }
 
 export async function signOut() {
