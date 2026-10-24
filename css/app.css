@@ -40,8 +40,8 @@ img { max-width: 100%; display: block; }
 /* Header */
 .top { background: var(--ink); color: #fff; padding: calc(12px + env(safe-area-inset-top)) 16px 14px; display: flex; flex-direction: column; gap: 10px; }
 .top-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 44px; }
-.brand { font-family: var(--tall); font-weight: 800; font-size: 24px; letter-spacing: .02em; text-transform: uppercase; color: #fff; }
-.brand span { color: var(--teal-on-dark); }
+.brand { display: flex; align-items: center; gap: 8px; font-family: var(--tall); font-weight: 800; font-size: 24px; letter-spacing: .02em; text-transform: uppercase; color: #fff; }
+.brand-name span { color: var(--teal-on-dark); }
 .back { color: #fff; display: inline-flex; align-items: center; gap: 4px; padding: 10px 0; font-size: 15px; }
 .kicker { font-size: 12px; font-weight: 700; letter-spacing: .14em; color: var(--teal-on-dark); text-transform: uppercase; }
 .title { font-family: var(--tall); font-weight: 700; font-size: 28px; line-height: 1.05; text-transform: uppercase; }

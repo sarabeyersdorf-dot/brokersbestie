@@ -8,7 +8,7 @@ import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './p
 import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
 import { installCard, wireInstall, isInstalled } from './install.js';
-import { REACTIONS, reactionFace, reactionLabel, okFace } from './faces.js';
+import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
 import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey } from './brief.js';
 
 const $view = document.getElementById('view');
@@ -49,7 +49,7 @@ const addr = (id) => (prop(id) || {}).address || '';
 function header({ back, kicker, title, sub, right, extra }) {
   return html`<header class="top">
     <div class="top-row">
-      ${back ? html`<a class="back" href="${back}">${icon('back', 18)}Back</a>` : html`<div class="brand">Brokers <span>Bestie</span></div>`}
+      ${back ? html`<a class="back" href="${back}">${icon('back', 18)}Back</a>` : html`<div class="brand">${raw(winkFace({ size: 26, onDark: true, label: '' }))}<span class="brand-name">Brokers <span>Bestie</span></span></div>`}
       ${right || html`<span></span>`}
     </div>
     ${kicker ? html`<div class="kicker">${kicker}</div>` : ''}
