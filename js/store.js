@@ -244,7 +244,9 @@ export function authMessage(e) {
 
 export async function signOut() {
   const c = await client();
-  await c.auth.signOut();
+  // 'local' forgets this phone's session even with no signal; a server call
+  // that hangs must never leave someone stuck signed in.
+  await c.auth.signOut({ scope: 'local' }).catch(() => {});
   cloud.user = null;
   cloud.teamId = null;
   emit();

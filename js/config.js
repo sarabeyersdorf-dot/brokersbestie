@@ -13,4 +13,4 @@ export const AUTO_SAFETY = false;
 
 // Shown at the bottom of Settings and in feedback emails. Must equal VERSION
 // in sw.js (test/install.test.mjs checks), so it says which copy a phone runs.
-export const APP_VERSION = 'bb-v27';
+export const APP_VERSION = 'bb-v28';

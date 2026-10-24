@@ -1773,7 +1773,11 @@ function viewSettings() {
         } catch (e) { toast(e.message); }
       });
       root.querySelector('#syncnow')?.addEventListener('click', () => store.syncNow());
-      root.querySelector('#signout')?.addEventListener('click', () => store.signOut());
+      root.querySelector('#signout')?.addEventListener('click', async (e) => {
+        e.target.disabled = true;
+        try { await store.signOut(); toast('Signed out. Everything stays saved on this phone.'); } catch (err) { toast(err.message || 'Could not sign out'); }
+        render(); // Settings never repaints by itself (it would wipe typing)
+      });
       root.querySelector('#invite')?.addEventListener('click', async () => {
         try { const code = await store.inviteCode(); await copy(code); openSheet(html`<div class="sec"><div class="label">Invite code</div><div class="num" style="font-size:44px;text-align:center">${code}</div><div class="small">Copied. Your teammate signs in, then enters this code under Settings → Join a team. It works for 7 days.</div><button class="btn block" type="button" onclick="this.closest('.sheet-back').remove()">Done</button></div>`); } catch (e) { toast(e.message); }
       });
