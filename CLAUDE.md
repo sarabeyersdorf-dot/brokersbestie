@@ -15,7 +15,11 @@ plain words, and let her choose.
 - **Their data in one place is the product**; codes and routing are why they open it.
 - **Web app on the home screen first**, App Store later.
 - **Separate from the Legacy CRM.** Its own Supabase project and repo. Legacy is the
-  first customer, never a dependency.
+  first customer, never a dependency. (2026-10-24: the project
+  `bycsdukxwzkahaxnkmgb` was TRANSFERRED into the Legacy Supabase organization
+  so every Claude can reach both. Same URL, keys and data; still its own
+  database, never merged with Legacy's. Its GitHub integration was
+  disconnected to allow the transfer and is not needed.)
 
 ## How it is built
 
