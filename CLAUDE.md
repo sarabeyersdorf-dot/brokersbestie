@@ -127,3 +127,19 @@ A "Mine / James" filter waits until there is a second person on the team.
   without one takes its property's. `both` or empty = the whole team, shown
   under everyone (`isWhose`). Chips appear once `teamNames` finds a second
   person; "Mine" asks for your name if it is not set.
+
+## The lockbox buddy: icon, showing reactions, safety face (2026-10-24)
+
+From Cowork's spec (`20261023_CWtoCC_brokersbestie-reactions-and-icon.md`).
+`js/faces.js` is the one drawing: `REACTIONS` (8, in order: love, like, maybe,
+nope, pricey, work, again, offer), `reactionFace`, `okFace`, `ICON_SVG`.
+- **App icon** = the winking buddy on #202428 (manifest colours match).
+  `icons/*.png` are rendered from `ICON_SVG` (Playwright screenshot); the 32px
+  favicon drops the blush dot. Re-render all of them if the art changes.
+- **Showing reactions**: Mark shown opens "How did they like it?" (4x2 faces,
+  optional note, "Save: <label>"). Saved on the stop as `reaction`,
+  `reaction_note`, `reaction_at` (inside `tours.stops` jsonb, so no migration;
+  in the backup with the tour) and filed to the property as a "Showing
+  feedback" note. The stop card shows the face; tap it to change.
+- **Safety**: the gentle "You OK?" face on the running check-in and the
+  time-up prompt.

@@ -7,6 +7,7 @@ import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMil
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
 import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
+import { REACTIONS, reactionFace, reactionLabel, okFace } from './faces.js';
 import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid } from './brief.js';
 
 const $view = document.getElementById('view');
@@ -1252,6 +1253,8 @@ function viewTour(id) {
           <div style="display:flex;gap:6px">${s.agent_phone ? html`<a class="icon-btn" href="tel:${digits(s.agent_phone)}" aria-label="Call">${icon('phone', 18)}</a><a class="icon-btn" href="${smsLink(s.agent_phone)}" aria-label="Text">${icon('text', 18)}</a>` : ''}</div>
         </div>
         ${s.notes ? html`<div class="small" style="border-top:1px solid var(--line-soft);padding-top:8px"><b>Notes:</b> ${s.notes}</div>` : ''}
+        ${s.reaction ? html`<button class="stop-react" type="button" data-react="${s.id}" aria-label="Their reaction: ${reactionLabel(s.reaction)}. Tap to change">${raw(reactionFace(s.reaction, { size: 34 }))}<span><b>${reactionLabel(s.reaction)}</b>${s.reaction_note ? html`<span class="small"> · ${s.reaction_note}</span>` : ''}</span></button>`
+          : s.shown ? html`<button class="btn ghost block" type="button" data-react="${s.id}">How did they like it?</button>` : ''}
         <div class="btns">
           <a class="btn" href="${mapLink(s)}" target="_blank" rel="noopener">Navigate</a>
           <button class="btn ${s.shown ? 'green' : 'dark'}" type="button" data-shown="${s.id}">${s.shown ? '✓ Shown' : 'Mark shown'}</button>
@@ -1266,7 +1269,10 @@ function viewTour(id) {
       root.querySelectorAll('[data-shown]').forEach((b) => b.addEventListener('click', () => {
         const s = stops.find((x) => x.id === b.getAttribute('data-shown'));
         setStop(s.id, { shown: !s.shown });
-        if (!s.shown) setTimeout(() => feedbackPrompt(s), 300);
+        if (!s.shown) setTimeout(() => reactionPicker(s), 300);
+      }));
+      root.querySelectorAll('[data-react]').forEach((b) => b.addEventListener('click', () => {
+        reactionPicker(stops.find((x) => x.id === b.getAttribute('data-react')));
       }));
       root.querySelectorAll('[data-confirm]').forEach((b) => b.addEventListener('click', () => {
         const s = stops.find((x) => x.id === b.getAttribute('data-confirm'));
@@ -1325,18 +1331,37 @@ function viewTour(id) {
   };
 }
 
-// After a showing: twenty seconds of "how did it go", filed to the property.
-function feedbackPrompt(s) {
-  formSheet({
-    title: 'How did it go?',
-    fields: [{ name: 'text', label: s.address, type: 'textarea', placeholder: 'Loved the yard, kitchen too small', mic: true }],
-    saveLabel: 'Save feedback',
-    onSave(v) {
-      if (!v.text) return;
-      if (s.property_id) store.save('notes', { property_id: s.property_id, text: `Showing feedback: ${v.text}` });
+// After a showing: one tap on a face (Cowork's spec, 2026-10-23), an optional
+// note, saved on the stop and filed to the property as showing feedback.
+function reactionPicker(s) {
+  if (!s) return;
+  let pick = s.reaction || null;
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">How did they like it?</div>
+    <div class="small">${s.address}</div>
+    <div class="react-grid" role="group" aria-label="Their reaction">${REACTIONS.map(([k, label]) => html`<button class="react" type="button" data-k="${k}" aria-pressed="${String(pick === k)}">${raw(reactionFace(k, { size: 48, label: '' }))}<span>${label}</span></button>`)}</div>
+    ${fieldHtml({ name: 'rnote', label: 'Add a note (optional)', type: 'textarea', placeholder: 'Loved the yard, kitchen too small', mic: true }, s.reaction_note)}
+    <button class="btn dark big block" type="button" id="rsave" ${pick ? '' : raw('disabled')}>${pick ? 'Save: ' + reactionLabel(pick) : 'Pick a face'}</button>
+  </div>`, (sh) => {
+    const btn = sh.querySelector('#rsave');
+    sh.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => {
+      pick = b.getAttribute('data-k');
+      sh.querySelectorAll('[data-k]').forEach((x) => { x.setAttribute('aria-pressed', String(x === b)); x.classList.remove('bb-on'); });
+      void b.offsetWidth; // restart the animation on every tap
+      b.classList.add('bb-on');
+      btn.disabled = false;
+      btn.textContent = 'Save: ' + reactionLabel(pick);
+    }));
+    btn.addEventListener('click', () => {
+      if (!pick) return;
+      const note = sh.querySelector('[name=rnote]').value.trim();
       const tour = store.all('tours').find((t) => (t.stops || []).some((x) => x.id === s.id));
-      if (tour) store.save('tours', { id: tour.id, stops: tour.stops.map((x) => (x.id === s.id ? { ...x, notes: [x.notes, v.text].filter(Boolean).join(' · ') } : x)) });
-    }
+      if (tour) store.save('tours', { id: tour.id, stops: tour.stops.map((x) => (x.id === s.id ? { ...x, reaction: pick, reaction_note: note, reaction_at: new Date().toISOString() } : x)) });
+      if (s.property_id && (pick !== s.reaction || note !== (s.reaction_note || ''))) store.save('notes', { property_id: s.property_id, text: `Showing feedback: ${reactionLabel(pick)}${note ? ' · ' + note : ''}` });
+      closeSheet();
+      toast(`Saved: ${reactionLabel(pick)}`);
+      render();
+    });
   });
 }
 
@@ -1453,6 +1478,7 @@ function viewSafety() {
       html: html`${header({ back: '#/', kicker: 'Safety check-in', title: 'Check-in is on' })}
       <main class="wrap">
         <div class="card pad sec" style="align-items:center">
+          <div class="ok-face">${raw(okFace({ size: 96, label: 'You OK?' }))}</div>
           <div class="label">I'll check on you in</div>
           <div class="timer" id="timer">${mm}:${ss}</div>
           <div class="small" style="text-align:center">${c.place || 'Showing'} · ${c.contact_name || 'your contact'} is on standby</div>
@@ -1551,6 +1577,7 @@ function watchCheckin() {
   if (navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 400]);
   try { if (Notification.permission === 'granted') new Notification('Brokers Bestie: are you OK?', { body: 'Your check-in time is up.', requireInteraction: true }); } catch {}
   openSheet(html`<div class="sec" data-due-prompt>
+    <div class="ok-face">${raw(okFace({ size: 96, label: 'You OK?' }))}</div>
     <div class="title" style="font-family:var(--tall);font-weight:800;font-size:30px;text-transform:uppercase">Are you OK?</div>
     <div class="muted">Your check-in at ${c.place || 'the showing'} is up.</div>
     <button class="btn green big block" type="button" id="dok">I'm OK</button>

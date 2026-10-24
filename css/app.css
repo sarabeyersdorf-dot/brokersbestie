@@ -280,3 +280,35 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .row.st-escrow { box-shadow: inset 5px 0 0 var(--k-deadline); }
 .row.st-tour { box-shadow: inset 5px 0 0 var(--k-appt); }
 .row.st-closed, .row.st-cancelled { box-shadow: inset 5px 0 0 #c5ccc9; }
+
+/* ---------- the lockbox buddy: showing reactions, safety face ---------- */
+.react-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.react { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px; min-height: 88px; min-width: 0; padding: 8px 2px; border: 2px solid var(--line, #d6dbd9); border-radius: 14px; background: #fff; color: var(--ink); font: 700 12px/1.15 var(--sans, inherit); text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.react span { overflow-wrap: anywhere; }
+.react[aria-pressed="true"] { background: #FFF3C9; border-color: #202428; }
+.react svg { overflow: visible; transform-origin: 50% 80%; }
+.stop-react { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 10px; border: 1px solid var(--line-soft, #e3e7e5); border-radius: 12px; background: #FFF9E6; color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.stop-react svg { flex: none; }
+.ok-face { display: flex; justify-content: center; }
+.ok-face svg { animation: bbBreathe 3.2s ease-in-out infinite; transform-origin: 50% 90%; }
+.bb-on.react[data-k="love"] svg { animation: bbBeat .6s ease 1; }
+.bb-on.react[data-k="love"] .bb-heart { animation: bbBeat .6s ease 2; transform-box: fill-box; transform-origin: center; }
+.bb-on.react[data-k="like"] svg { animation: bbNod .5s ease 1; }
+.bb-on.react[data-k="maybe"] svg { animation: bbTilt .7s ease 1; }
+.bb-on.react[data-k="nope"] svg { animation: bbShake .45s ease 1; }
+.bb-on.react[data-k="pricey"] svg { animation: bbShiver .4s linear 1; }
+.bb-on.react[data-k="work"] svg { animation: bbDroop .7s ease 1; }
+.bb-on.react[data-k="again"] svg { animation: bbPeek .6s ease 1; }
+.bb-on.react[data-k="offer"] svg { animation: bbJump .6s cubic-bezier(.3,1.6,.5,1) 1; }
+.bb-on.react[data-k="offer"] .bb-spark { animation: bbTwinkle .6s ease 2; transform-box: fill-box; transform-origin: center; }
+@keyframes bbBeat { 0%,100% { transform: scale(1); } 30% { transform: scale(1.18); } 60% { transform: scale(.95); } }
+@keyframes bbNod { 0%,100% { transform: translateY(0); } 40% { transform: translateY(5px); } }
+@keyframes bbTilt { 0%,100% { transform: rotate(0); } 30% { transform: rotate(-9deg); } 70% { transform: rotate(7deg); } }
+@keyframes bbShake { 0%,100% { transform: translateX(0); } 20%,60% { transform: translateX(-5px); } 40%,80% { transform: translateX(5px); } }
+@keyframes bbShiver { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+@keyframes bbDroop { 0%,100% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(4px) scaleY(.93); } }
+@keyframes bbPeek { 0%,100% { transform: scale(1); } 40% { transform: scale(1.12) translateY(-3px); } }
+@keyframes bbJump { 0%,100% { transform: translateY(0); } 40% { transform: translateY(-12px) rotate(-4deg); } }
+@keyframes bbTwinkle { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(1.4); } }
+@keyframes bbBreathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+@media (prefers-reduced-motion: reduce) { .react svg, .react svg *, .ok-face svg { animation: none !important; } }
