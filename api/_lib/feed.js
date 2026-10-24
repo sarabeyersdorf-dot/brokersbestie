@@ -18,6 +18,10 @@ const int = (v) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Math.
 // The id a CRM row gets in our tables: stable, so the next sync updates the
 // same row, and scoped to the team, so two teams on one feed never collide.
 // Only plain characters, so the id is safe inside a database filter.
+// A CRM's agent field ("sara", "James Beyersdorf", "both") -> an owner key:
+// the first name in lower case. Empty -> null (the whole team).
+export const ownerKey = (v) => (String(v || '').trim().split(/\s+/)[0] || '').toLowerCase().replace(/[^a-z'-]/g, '') || null;
+
 export const crmId = (teamId, kind, ext) => `crm:${teamId}:${kind}:${s(ext, 200).replace(/[^A-Za-z0-9._:@-]/g, '_')}`;
 
 // The CRM owns what it sends (address, status, price, dates); codes, notes,
@@ -27,13 +31,15 @@ export function mapFeed(feed, teamId) {
   const props = (feed.properties || []).filter((p) => p && p.ext_id && p.address);
   const pid = new Map(props.map((p) => [String(p.ext_id), crmId(teamId, 'p', p.ext_id)]));
   const at = (ext) => (ext != null && pid.has(String(ext)) ? pid.get(String(ext)) : null);
+  const owners = new Map(props.map((p) => [String(p.ext_id), ownerKey(p.agent)]));
+  const ownerOf = (ext) => (ext != null ? owners.get(String(ext)) || null : null);
   return {
     properties: props.map((p) => ({
       id: pid.get(String(p.ext_id)), team_id: teamId, source: 'crm',
       address: s(p.address, 200), city: s(p.city, 120),
       status: STATUSES.includes(p.status) ? p.status : 'listing',
       price: Number.isFinite(Number(p.price)) && p.price !== null ? Number(p.price) : null,
-      mls: s(p.mls, 40), coe_date: day(p.coe_date)
+      mls: s(p.mls, 40), coe_date: day(p.coe_date), owner: ownerKey(p.agent)
     })),
     people: (feed.people || []).filter((m) => m && m.ext_id && m.name && at(m.property_ext)).map((m) => ({
       id: crmId(teamId, 'm', m.ext_id), team_id: teamId, source: 'crm', property_id: at(m.property_ext),
@@ -56,7 +62,8 @@ export function mapFeed(feed, teamId) {
       id: crmId(teamId, 'e', e.ext_id), team_id: teamId, source: 'crm', property_id: at(e.property_ext),
       title: s(e.title, 160) || 'Appointment', kind: s(e.kind, 30) || 'other', date: day(e.date),
       start_minutes: int(e.start), minutes: int(e.minutes), location: s(e.location, 200),
-      notes: e.with ? `With ${s(e.with, 120)}` : ''
+      notes: e.with ? `With ${s(e.with, 120)}` : '',
+      owner: ownerKey(e.agent) || ownerOf(e.property_ext)
     }))
   };
 }

@@ -83,3 +83,18 @@ test('filters by kind and by property; sorts properties', () => {
   assert.deepEqual(sortProps(props, 'price').map((p) => p.address), ['A', 'B', 'C']);
   assert.deepEqual(sortProps(props, 'az').map((p) => p.address), ['A', 'B', 'C']);
 });
+
+import { isWhose, teamNames, firstName } from '../js/brief.js';
+
+test('Mine / James: shared things show for everyone', () => {
+  assert.ok(isWhose('sara', 'sara'));
+  assert.ok(!isWhose('james', 'sara'));
+  assert.ok(isWhose('both', 'james'));
+  assert.ok(isWhose(null, 'james'));
+  assert.ok(isWhose('james', null));
+  const d = { properties: [{ id: 'p1', owner: 'james' }, { id: 'p2', owner: 'both' }], events: [{ id: 'e1', owner: 'sara', date: today, title: 'x' }, { id: 'e2', date: today, property_id: 'p1', title: 'y' }] };
+  assert.deepEqual(teamNames(d, 'sara'), ['james']);
+  assert.deepEqual(filterItems(dayItems(d, today), { who: 'sara' }).map((i) => i.id), ['e1']);
+  assert.deepEqual(filterItems(dayItems(d, today), { who: 'james' }).map((i) => i.id), ['e2'], 'an appointment takes its property\'s owner');
+  assert.equal(firstName(' Sara Cooper '), 'sara');
+});

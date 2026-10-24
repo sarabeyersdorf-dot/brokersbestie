@@ -11,6 +11,8 @@ export function addDays(iso, n) {
 }
 
 const where = (data, pid) => ((data.properties || []).find((p) => p.id === pid) || {}).address || '';
+// Whose: the item's own owner, else its property's. null = the whole team.
+const ownerFor = (data, own, pid) => own || ((data.properties || []).find((p) => p.id === pid) || {}).owner || null;
 
 // Everything on one day, timed items first in time order, then all-day ones.
 // kind: event | tour | date | task. Each item carries what the screen needs.
@@ -18,20 +20,20 @@ export function dayItems(data, day) {
   const items = [];
   for (const e of data.events || []) {
     if (e.date !== day || e.cancelled) continue;
-    items.push({ kind: 'event', id: e.id, start: e.start_minutes ?? null, minutes: e.minutes || null, title: e.title || 'Appointment', where: e.location || where(data, e.property_id), property_id: e.property_id || null, done: !!e.done, sub: e.kind || '' });
+    items.push({ kind: 'event', id: e.id, start: e.start_minutes ?? null, minutes: e.minutes || null, title: e.title || 'Appointment', where: e.location || where(data, e.property_id), property_id: e.property_id || null, done: !!e.done, sub: e.kind || '', owner: ownerFor(data, e.owner, e.property_id) });
   }
   for (const t of data.tours || []) {
     if (t.date !== day) continue;
     const stops = t.stops || [];
-    items.push({ kind: 'tour', id: t.id, start: t.start_minutes ?? null, title: t.name || 'Showing tour', where: `${stops.length} stop${stops.length === 1 ? '' : 's'}`, done: !!t.finished });
+    items.push({ kind: 'tour', id: t.id, start: t.start_minutes ?? null, title: t.name || 'Showing tour', where: `${stops.length} stop${stops.length === 1 ? '' : 's'}`, done: !!t.finished, owner: t.owner || null });
   }
   for (const d of data.dates || []) {
     if (d.due !== day) continue;
-    items.push({ kind: 'date', id: d.id, start: null, title: d.label, where: where(data, d.property_id), property_id: d.property_id || null, done: !!d.done });
+    items.push({ kind: 'date', id: d.id, start: null, title: d.label, where: where(data, d.property_id), property_id: d.property_id || null, done: !!d.done, owner: ownerFor(data, null, d.property_id) });
   }
   for (const t of data.tasks || []) {
     if (t.due !== day || t.done) continue;
-    items.push({ kind: 'task', id: t.id, start: null, title: t.text, where: where(data, t.property_id), property_id: t.property_id || null, done: false });
+    items.push({ kind: 'task', id: t.id, start: null, title: t.text, where: where(data, t.property_id), property_id: t.property_id || null, done: false, owner: ownerFor(data, t.owner, t.property_id) });
   }
   const order = { event: 0, tour: 0, date: 1, task: 2 };
   return items.sort((a, b) => (a.start == null) - (b.start == null) || (a.start ?? 0) - (b.start ?? 0) || order[a.kind] - order[b.kind]);
@@ -119,9 +121,21 @@ export function isLate(i, day, today) {
 }
 
 // Keep only the chosen kind (null = all) and property (null = all).
-export function filterItems(items, { kind = null, property = null } = {}) {
-  return items.filter((i) => (!kind || itemKind(i) === kind) && (!property || i.property_id === property));
+export function filterItems(items, { kind = null, property = null, who = null } = {}) {
+  return items.filter((i) => (!kind || itemKind(i) === kind) && (!property || i.property_id === property) && isWhose(i.owner, who));
 }
+
+// Mine / <name>: a thing with no owner, or "both", belongs to everyone.
+export function isWhose(owner, who) {
+  return !who || !owner || owner === 'both' || owner === who;
+}
+// The people on a team, from who owns what, without "both" and without me.
+export function teamNames(data, me) {
+  const names = new Set();
+  for (const t of ['properties', 'events', 'tasks', 'tours']) for (const r of data[t] || []) if (r.owner && r.owner !== 'both' && r.owner !== me) names.add(r.owner);
+  return [...names].sort();
+}
+export const firstName = (v) => (String(v || '').trim().split(/\s+/)[0] || '').toLowerCase().replace(/[^a-z'-]/g, '');
 
 // Properties list order.
 export const PROP_SORTS = [['az', 'A–Z'], ['closing', 'Closing soonest'], ['newest', 'Newest'], ['price', 'Price, high to low']];

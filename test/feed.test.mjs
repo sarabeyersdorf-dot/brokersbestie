@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mapFeed, crmId, icsCalendar } from '../api/_lib/feed.js';
+import { mapFeed, crmId, icsCalendar, ownerKey } from '../api/_lib/feed.js';
 
 const team = '11111111-2222-3333-4444-555555555555';
 const feed = {
@@ -82,4 +82,12 @@ test('only CRM-linked changes are sent, in the shape the CRM takes', () => {
 test('a CRM task list is not brought in: Bestie is not a CRM', () => {
   const r = mapFeed({ ...feed, tasks: [{ ext_id: 'k1', property_ext: '433-hwy4', text: 'Order the warranty' }] }, team);
   assert.equal(r.tasks, undefined);
+});
+
+test('the CRM agent becomes the owner, and an appointment inherits its property\'s', () => {
+  const r = mapFeed({ ...feed, properties: [{ ...feed.properties[0], agent: 'James' }], events: [{ ext_id: 'a1', property_ext: '433-hwy4', title: 'T', date: '2026-10-24', start: 600 }, { ext_id: 'a2', property_ext: '433-hwy4', title: 'U', date: '2026-10-24', agent: 'sara' }] }, team);
+  assert.equal(r.properties[0].owner, 'james');
+  assert.deepEqual(r.events.map((e) => e.owner), ['james', 'sara']);
+  assert.equal(ownerKey('both'), 'both');
+  assert.equal(ownerKey(''), null);
 });

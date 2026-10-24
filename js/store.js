@@ -13,6 +13,7 @@ const DELETED = 'bb:_deleted';
 const SETTINGS = 'bb:settings';
 
 const listeners = new Set();
+const OWNED = ['properties', 'events', 'tasks', 'tours'];
 const data = {};
 
 function readJson(key, fallback) {
@@ -92,6 +93,8 @@ export function save(table, row) {
     for (const fn of crmListeners) fn();
   }
   if (!existing) next.created_at = now;
+  // Whose it is, for the Mine / <name> filter: whoever made it on this phone.
+  if (!existing && OWNED.includes(table) && !next.owner && settings().myName) next.owner = settings().myName;
   data[table] = existing ? all(table).map((r) => (r.id === next.id ? next : r)) : [next, ...all(table)];
   writeJson(KEY(table), data[table]);
   emit();

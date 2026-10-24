@@ -89,6 +89,10 @@ test('everything a spoken command saves has a column', () => {
   assert.ok(rows >= 8);
 });
 
+test('whose it is has a column wherever the phone sets it', () => {
+  for (const t of ['properties', 'events', 'tasks', 'tours']) assert.ok(columns(t).has('owner'), `${t}.owner`);
+});
+
 test('the two-way CRM sync has its columns', () => {
   assert.ok(columns('dates').has('crm_dirty'));
   for (const k of ['source', 'crm_dirty']) assert.ok(columns('tasks').has(k), `tasks.${k}`);

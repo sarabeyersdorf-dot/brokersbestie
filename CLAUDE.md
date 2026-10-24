@@ -120,3 +120,10 @@ Coming soon purple, In escrow orange, Showing/other agent blue, Closed grey.
 Filter chips on Today and Calendar (+ one-property picker on Calendar), saved
 per phone in `bb:filter`; Properties has a Sort (`PROP_SORTS`, `bb:propsort`).
 A "Mine / James" filter waits until there is a second person on the team.
+- **Mine / <name>** (2026-10-24, after James joined): `owner` (db/007) on
+  properties, events, tasks, tours = a first name in lower case. The phone
+  stamps it on anything new from Settings -> Your first name (`store.save`);
+  the CRM sync sets it from the CRM's agent (`ownerKey`), and an appointment
+  without one takes its property's. `both` or empty = the whole team, shown
+  under everyone (`isWhose`). Chips appear once `teamNames` finds a second
+  person; "Mine" asks for your name if it is not set.

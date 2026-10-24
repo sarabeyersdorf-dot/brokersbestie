@@ -7,7 +7,7 @@ import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMil
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
 import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -332,7 +332,7 @@ function todoItems() {
   for (const x of store.all('tasks')) {
     if (x.done) continue;
     if (x.due && x.due > t) continue;
-    items.push({ table: 'tasks', id: x.id, text: x.text, sub: [addr(x.property_id), x.due && x.due < t ? `Was due ${niceDate(x.due)}` : ''].filter(Boolean).join(' · '), pid: x.property_id, ck: 'todo', late: !!(x.due && x.due < t) });
+    items.push({ table: 'tasks', id: x.id, text: x.text, sub: [addr(x.property_id), x.due && x.due < t ? `Was due ${niceDate(x.due)}` : ''].filter(Boolean).join(' · '), pid: x.property_id, ck: 'todo', late: !!(x.due && x.due < t), owner: x.owner || prop(x.property_id)?.owner || null });
   }
   for (const d of store.all('dates')) {
     if (d.done) continue;
@@ -340,14 +340,14 @@ function todoItems() {
     // Due today or overdue only: the week ahead is in the briefing card, and a
     // closing 6 days out is not something to do today.
     if (n == null || n > 0) continue;
-    items.push({ table: 'dates', id: d.id, text: `${d.label} · ${addr(d.property_id)}`, sub: n < 0 ? `${-n} days past · confirm it happened` : whenText(d.due), pid: d.property_id, late: n < 0, ck: itemKind({ kind: 'date', title: d.label }) });
+    items.push({ table: 'dates', id: d.id, text: `${d.label} · ${addr(d.property_id)}`, sub: n < 0 ? `${-n} days past · confirm it happened` : whenText(d.due), pid: d.property_id, late: n < 0, ck: itemKind({ kind: 'date', title: d.label }), owner: prop(d.property_id)?.owner || null });
   }
   for (const a of pickups()) {
-    items.push({ pickup: true, ck: 'todo', pid: a.property_id, id: a.id, text: `Pick up ${a.label || KINDS[a.kind].label} at ${addr(a.property_id)}`, sub: `${STATUS[prop(a.property_id)?.status] || ''} · ${a.location_note || ''}` });
+    items.push({ pickup: true, ck: 'todo', pid: a.property_id, owner: prop(a.property_id)?.owner || null, id: a.id, text: `Pick up ${a.label || KINDS[a.kind].label} at ${addr(a.property_id)}`, sub: `${STATUS[prop(a.property_id)?.status] || ''} · ${a.location_note || ''}` });
   }
   for (const tour of store.all('tours').filter((x) => x.date === t && !x.finished)) {
     for (const s of tour.stops || []) {
-      if (s.code_pending) items.push({ tour: tour.id, ck: 'showing', id: s.id, text: `Get the code for ${s.address}`, sub: s.agent ? `Ask ${s.agent}` : 'Before the tour' });
+      if (s.code_pending) items.push({ tour: tour.id, ck: 'showing', owner: tour.owner || null, id: s.id, text: `Get the code for ${s.address}`, sub: s.agent ? `Ask ${s.agent}` : 'Before the tour' });
     }
   }
   return items;
@@ -358,7 +358,7 @@ function viewToday() {
   const tours = store.all('tours').filter((x) => x.date === todayIso() && !x.finished);
   const live = props().filter((p) => LIVE.includes(p.status)).sort((a, b) => (a.status === 'escrow' ? -1 : 0) - (b.status === 'escrow' ? -1 : 0));
   const todos = todoItems();
-  const shownTodos = todos.filter((t) => !viewFilter.kind || t.ck === viewFilter.kind);
+  const shownTodos = todos.filter((t) => (!viewFilter.kind || t.ck === viewFilter.kind) && isWhose(t.owner, viewFilter.who));
   const empty = !props().length;
   const s = store.settings();
   const hp = here && here.p;
@@ -498,18 +498,20 @@ let propFilter = 'live';
 function viewProps() {
   const groups = { live: (p) => LIVE.includes(p.status), escrow: (p) => p.status === 'escrow', tour: (p) => p.status === 'tour', done: (p) => p.status === 'closed' || p.status === 'cancelled' };
   const sortBy = (() => { try { return localStorage.getItem('bb:propsort') || 'az'; } catch { return 'az'; } })();
-  const list = sortProps(props().filter(groups[propFilter]), sortBy);
+  const list = sortProps(props().filter(groups[propFilter]).filter((p) => isWhose(p.owner, viewFilter.who)), sortBy);
   const tab = (k, l) => html`<button class="tab ${propFilter === k ? 'on' : ''}" type="button" data-f="${k}">${l}</button>`;
   return {
     html: html`${header({ kicker: 'Properties', title: `${props().filter(groups.live).length} active`, right: html`<a class="btn teal" href="#/p/new" style="min-height:40px">+ Add</a>` })}
     <main class="wrap">
       <a class="card row" href="#/sheet"><span class="tile" style="border:0;padding:0"><span class="ic t">${icon('sheet', 22)}</span></span><span class="grow"><span class="t">Snap an MLS sheet</span><span class="s">Bestie reads it and fills in the property card</span></span>${icon('chev', 18)}</a>
       <div class="tabs">${tab('live', 'Active')}${tab('escrow', 'In escrow')}${tab('tour', 'Showing')}${tab('done', 'Closed')}</div>
+      ${whoChips()}
       <label class="sortby">Sort<select id="propsort">${PROP_SORTS.map(([k, l]) => html`<option value="${k}" ${k === sortBy ? raw('selected') : ''}>${l}</option>`)}</select></label>
       <div class="card list">${list.length ? list.map(propRow) : html`<div class="empty">Nothing here yet.</div>`}</div>
     </main>`,
     mount(root) {
       root.querySelectorAll('[data-f]').forEach((b) => b.addEventListener('click', () => { propFilter = b.getAttribute('data-f'); render(); }));
+      wireFilter(root);
       root.querySelector('#propsort').addEventListener('change', (e) => { try { localStorage.setItem('bb:propsort', e.target.value); } catch {} render(); });
     }
   };
@@ -1610,6 +1612,12 @@ function viewSettings() {
       </section>` : ''}
 
       <section class="card pad sec">
+        <div class="label">Your first name</div>
+        <label class="field"><span>Used for “Mine” and your morning greeting</span><input id="myname" autocomplete="given-name" placeholder="Sara" value="${s.myName ? s.myName[0].toUpperCase() + s.myName.slice(1) : ''}"></label>
+        <div class="hint">Use the name your CRM gives you, so your listings and appointments show as yours.</div>
+      </section>
+
+      <section class="card pad sec">
         <div class="label">Home base (where tours start)</div>
         <div class="small">${s.homeBase ? `${s.homeBase.address} · pinned` : 'Not set. Tours start from where you are.'}</div>
         <label class="field"><span>Address</span><input id="hb" value="${s.homeBase?.address || ''}" placeholder="Office address"></label>
@@ -1701,6 +1709,7 @@ function viewSettings() {
         root.querySelector('#crmrun').addEventListener('click', (e) => call({ op: 'run' }, e.currentTarget));
         root.querySelector('#crmoff').addEventListener('click', (e) => { if (confirm('Stop syncing from this CRM? What already came in stays.')) call({ op: 'disconnect' }, e.currentTarget); });
       }
+      root.querySelector('#myname').addEventListener('change', (e) => { store.saveSettings({ myName: firstName(e.target.value) }); toast('Saved'); });
       const hb = root.querySelector('#hb');
       root.querySelector('#hbhere').addEventListener('click', async () => {
         const fix = await locate();
@@ -1761,11 +1770,42 @@ function setFilter(patch) {
 function filterBar({ withProperty = false } = {}) {
   const chip = (k, label) => html`<button type="button" class="chip ${(viewFilter.kind || null) === k ? 'on' : ''}" data-kind="${k || ''}">${k ? html`<span class="dot ${colorClass(k)}"></span>` : ''}${label}</button>`;
   return html`<div class="filters">
+    ${whoChips()}
     <div class="chips">${chip(null, 'All')}${COLOR_KINDS.map(([k, l]) => chip(k, l + 's'))}</div>
     ${withProperty ? html`<select class="prop-filter" id="propfilter" aria-label="Show one property"><option value="">All properties</option>${props().slice().sort((a, b) => a.address.localeCompare(b.address)).map((p) => html`<option value="${p.id}" ${viewFilter.property === p.id ? raw('selected') : ''}>${p.address}</option>`)}</select>` : ''}
   </div>`;
 }
+// Everyone · Mine · <each other person>. Shown once a team has two people.
+function whoChips() {
+  const me = myName();
+  const others = teamNames(store.snapshot(), me);
+  if (!others.length) return '';
+  const who = viewFilter.who || null;
+  const c = (v, label) => html`<button type="button" class="chip who ${who === v ? 'on' : ''}" data-who="${v || ''}">${label}</button>`;
+  return html`<div class="chips">${c(null, 'Everyone')}${c(me || '__me', 'Mine')}${others.map((n) => c(n, n[0].toUpperCase() + n.slice(1)))}</div>`;
+}
+const myName = () => firstName(store.settings().myName);
+
+function askMyName(then) {
+  formSheet({
+    title: 'What is your first name?',
+    fields: [{ name: 'name', label: 'First name', placeholder: 'Sara', hint: 'Use the name your CRM gives you, so your listings and appointments show as Mine.' }],
+    values: { name: store.settings().myName || '' },
+    onSave(v) {
+      const n = firstName(v.name);
+      if (!n) { toast('Type your first name'); return false; }
+      store.saveSettings({ myName: n });
+      if (then) then(n);
+    }
+  });
+}
+
 function wireFilter(root) {
+  root.querySelectorAll('[data-who]').forEach((b) => b.addEventListener('click', () => {
+    const v = b.getAttribute('data-who');
+    if (v === '__me') return askMyName((n) => setFilter({ who: n }));
+    setFilter({ who: v || null });
+  }));
   root.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => setFilter({ kind: b.getAttribute('data-kind') || null })));
   root.querySelector('#propfilter')?.addEventListener('change', (e) => setFilter({ property: e.target.value || null }));
 }
@@ -1859,9 +1899,9 @@ function briefingCard() {
   const data = store.snapshot();
   const b = briefing(data, todayIso(), { pickups: pickups().length });
   const hour = new Date().getHours();
-  const hello = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const hello = (hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening') + (myName() ? `, ${myName()[0].toUpperCase()}${myName().slice(1)}` : '');
   const timed = b.today.filter((i) => i.kind !== 'task' && i.kind !== 'date');
-  const shownTimed = filterItems(timed, { kind: viewFilter.kind });
+  const shownTimed = filterItems(timed, { kind: viewFilter.kind, who: viewFilter.who });
   const facts = [
     timed.length ? `${timed.length} appointment${timed.length === 1 ? '' : 's'} today${timed[0].start != null ? `, first at ${formatClock(timed[0].start)}` : ''}` : 'No appointments today',
     b.closings.length ? `${b.closings.length} closing${b.closings.length === 1 ? '' : 's'} this week` : '',
@@ -1884,7 +1924,7 @@ function readBriefing(button) {
   if (speechSynthesis.speaking) { speechSynthesis.cancel(); return; }
   const data = store.snapshot();
   const hour = new Date().getHours();
-  const text = briefingText(briefing(data, todayIso(), { pickups: pickups().length }), data, { hello: hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening' });
+  const text = briefingText(briefing(data, todayIso(), { pickups: pickups().length }), data, { hello: hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening', name: myName() ? myName()[0].toUpperCase() + myName().slice(1) : '' });
   const say = new SpeechSynthesisUtterance(text);
   say.lang = 'en-US';
   say.rate = 1;
