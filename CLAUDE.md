@@ -195,3 +195,13 @@ the email has no code to type. Custom SMTP (Resend) lifts the hourly limit.
   is verified in Resend (3 DNS records at GoDaddy). Email limit 30/hour. Both
   templates ("Magic link or OTP", "Confirm sign up") carry `{{ .Token }}`.
   Templates are locked again if custom SMTP is ever turned off.
+
+## MLS sheet: From Dropbox (2026-10-24)
+
+Sara: "in the upload MLS option add a dropbox option". `js/dropbox.js` opens
+Dropbox's own Chooser (`dropins.js`, `linkType: 'direct'`): the agent signs in
+to their own Dropbox in Dropbox's window and Bestie downloads only the picked
+files (short-lived links), then they go through `addSheetFiles` like any other
+page. No token is stored. Needs `DROPBOX_APP_KEY` in `js/config.js` (public;
+allowed domains are set in the Dropbox App Console). With no key the button
+explains the Files-app route (Photo or PDF -> Browse -> Dropbox).

@@ -8,6 +8,7 @@ import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMil
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
 import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
+import { chooseFromDropbox, dropboxReady } from './dropbox.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
 import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey } from './brief.js';
@@ -2169,6 +2170,21 @@ function sheetValue(field, v) {
   return String(v);
 }
 
+const DBX_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#0061FE" d="M7 3 2 6.2l5 3.2 5-3.2zm10 0-5 3.2 5 3.2 5-3.2zM2 12.6l5 3.2 5-3.2-5-3.2zm15-3.2-5 3.2 5 3.2 5-3.2zM7 17l5 3.2 5-3.2-5-3.2z"/></svg>';
+
+// Until a Dropbox app key is set, the phone's own file picker reaches Dropbox.
+function dropboxHelp() {
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">From Dropbox</div>
+    <div class="small">Use <b>Photo or PDF</b>, then:</div>
+    <ol class="install-steps">
+      <li><b>iPhone:</b> tap <b>Choose File</b>, then <b>Browse</b>, then <b>Dropbox</b> under Locations. Not there? Tap <b>•••</b> → <b>Edit</b> and turn Dropbox on. You need the Dropbox app installed.</li>
+      <li><b>Android:</b> tap the <b>☰</b> menu in the picker and choose <b>Dropbox</b>.</li>
+    </ol>
+    <button class="btn dark block" type="button" id="dbxok">Got it</button>
+  </div>`, (sh) => sh.querySelector('#dbxok').addEventListener('click', closeSheet));
+}
+
 function viewSheet(pid) {
   if (pid && !prop(pid)) return notFound();
   // A different property starts a fresh sheet; one being read or reviewed is kept.
@@ -2206,7 +2222,8 @@ function viewSheet(pid) {
       ${s.step === 'pick' ? html`<div class="btns">
         <label class="btn big">${icon('photo', 20)}${s.files.length ? 'Snap another page' : 'Snap the sheet'}<input type="file" accept="image/*" capture="environment" id="snap" hidden></label>
         <label class="btn big">${icon('sheet', 20)}Photo or PDF<input type="file" accept="image/*,application/pdf" multiple id="pick" hidden></label>
-      </div>` : ''}
+      </div>
+      <button class="btn big block" type="button" id="dbx">${raw(DBX_ICON)}From Dropbox</button>` : ''}
       ${s.files.length ? html`
         <button class="btn dark big block" type="button" id="readit">${s.step === 'error' ? 'Try reading it again' : 'Read it'}</button>
         <div class="sec">${fileUnder(s.pid || '')}<button class="btn block" type="button" id="justsave">Just save it to the property</button></div>` : html`<div class="hint">Snap each page, or choose a PDF from your phone. Bestie reads the price, MLS #, showing instructions, lockbox and contacts, and you tick what to keep.</div>`}`;
@@ -2220,6 +2237,15 @@ function viewSheet(pid) {
       const add = async (input) => { await addSheetFiles([...input.files]); render(); };
       root.querySelector('#snap')?.addEventListener('change', (e) => add(e.target));
       root.querySelector('#pick')?.addEventListener('change', (e) => add(e.target));
+      root.querySelector('#dbx')?.addEventListener('click', async (e) => {
+        if (!dropboxReady()) return dropboxHelp();
+        const b = e.currentTarget; b.disabled = true;
+        try {
+          const files = await chooseFromDropbox();
+          if (files.length) { await addSheetFiles(files); toast(`Added ${files.length} from Dropbox`); render(); }
+        } catch (err) { toast(err.message || 'Could not get it from Dropbox'); }
+        finally { b.disabled = false; }
+      });
       root.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', () => { s.files.splice(Number(b.getAttribute('data-rm')), 1); render(); }));
       root.querySelector('#readit')?.addEventListener('click', readSheet);
       root.querySelector('#startover')?.addEventListener('click', () => { resetSheet(pid); render(); });
