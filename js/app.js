@@ -7,7 +7,7 @@ import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMil
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
 import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -1903,18 +1903,18 @@ function briefingCard() {
   const timed = b.today.filter((i) => i.kind !== 'task' && i.kind !== 'date');
   const shownTimed = filterItems(timed, { kind: viewFilter.kind, who: viewFilter.who });
   const facts = [
-    timed.length ? `${timed.length} appointment${timed.length === 1 ? '' : 's'} today${timed[0].start != null ? `, first at ${formatClock(timed[0].start)}` : ''}` : 'No appointments today',
-    b.closings.length ? `${b.closings.length} closing${b.closings.length === 1 ? '' : 's'} this week` : '',
+    timed.length ? `${bookedSummary(timed)} today${timed[0].start != null ? `, first at ${formatClock(timed[0].start)}` : ''}` : 'Nothing booked today',
+    ...b.closings.map((c) => `${c.address} closes ${whenSaid(c.date, b.day)}`),
     b.deadlines.length ? `${b.deadlines.length} deadline${b.deadlines.length === 1 ? '' : 's'} in the next 7 days` : '',
     b.late.length ? `${b.late.length} overdue to-do${b.late.length === 1 ? '' : 's'}` : '',
     b.lateDates.length ? `${b.lateDates.length} deadline${b.lateDates.length === 1 ? '' : 's'} passed, not marked done` : ''
   ].filter(Boolean);
   return html`<section class="card pad sec brief">
     <div class="sec-head"><div><div class="label accent">${hello}</div><div class="brief-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div></div>
-      <button class="btn" type="button" id="readbrief" style="min-height:40px">${icon('speak', 18)}Read it to me</button></div>
+      <button class="btn" type="button" id="readbrief" style="min-height:40px;white-space:nowrap">${icon('speak', 18)}Read it to me</button></div>
     <ul class="brief-facts">${facts.map((f) => html`<li>${f}</li>`)}</ul>
     ${shownTimed.length ? html`<div class="card list">${shownTimed.map((i) => dayItemRow(i))}</div>` : ''}
-    ${b.closings.length || b.deadlines.length ? html`<div class="small">${[...b.closings.map((p) => `${p.address} closes ${niceDate(p.coe_date)}`), ...b.deadlines.slice(0, 4).map((d) => `${d.label} · ${addr(d.property_id)} · ${niceDate(d.due)}`)].join(' — ')}</div>` : ''}
+    ${b.deadlines.length ? html`<div class="small">${b.deadlines.slice(0, 4).map((d) => `${d.label} · ${addr(d.property_id)} · ${whenSaid(d.due, b.day)}`).join(' — ')}</div>` : ''}
     <a class="small" href="#/calendar" style="color:var(--teal-text);font-weight:600">Open the calendar →</a>
   </section>`;
 }

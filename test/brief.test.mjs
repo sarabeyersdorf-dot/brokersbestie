@@ -30,12 +30,12 @@ test('the briefing finds late work, closings and the week ahead', () => {
   const b = briefing(data, today, { pickups: 2 });
   assert.deepEqual(b.late.map((t) => t.id), ['t2']);
   assert.deepEqual(b.lateDates.map((d) => d.id), ['d2']);
-  assert.deepEqual(b.closings.map((p) => p.id), ['p1']);
+  assert.deepEqual(b.closings.map((c) => c.property_id), ['p1']);
   assert.deepEqual(b.deadlines.map((d) => d.id), ['d1']);
   const text = briefingText(b, data);
-  assert.match(text, /Today you have 3 appointments\./);
+  assert.match(text, /Today you have 1 showing and 2 appointments\./);
   assert.match(text, /At 10:00 AM, Walk-through at 433 E Highway 4\./);
-  assert.match(text, /433 E Highway 4 closes Tuesday\./);
+  assert.match(text, /433 E Highway 4 closes Tuesday, Oct 27\./);
   assert.match(briefingText(briefing({ properties: [{ address: '1 Main', status: 'escrow', coe_date: today }] }, today), {}), /1 Main closes today/);
   assert.match(text, /2 signs or lockboxes to pick up/);
 });
@@ -97,4 +97,26 @@ test('Mine / James: shared things show for everyone', () => {
   assert.deepEqual(filterItems(dayItems(d, today), { who: 'sara' }).map((i) => i.id), ['e1']);
   assert.deepEqual(filterItems(dayItems(d, today), { who: 'james' }).map((i) => i.id), ['e2'], 'an appointment takes its property\'s owner');
   assert.equal(firstName(' Sara Cooper '), 'sara');
+});
+
+import { whenSaid, bookedSummary } from '../js/brief.js';
+
+test('a closing is said by its day and counted once, never also as a deadline', () => {
+  const fri = '2026-10-23';
+  const d = { properties: [{ id: 'echo', address: '1143 Echo St', status: 'escrow', coe_date: '2026-10-29' }], dates: [
+    { id: 'w', property_id: 'echo', label: "Buyer's final walk-through", due: '2026-10-24' },
+    { id: 'c', property_id: 'echo', label: 'Close of escrow', due: '2026-10-29' }] };
+  const b = briefing(d, fri);
+  assert.deepEqual(b.closings, [{ property_id: 'echo', address: '1143 Echo St', date: '2026-10-29' }]);
+  assert.deepEqual(b.deadlines.map((x) => x.id), ['w'], 'Close of escrow is a closing, not a second deadline');
+  assert.equal(whenSaid('2026-10-29', fri), 'Thursday, Oct 29');
+  assert.equal(whenSaid('2026-10-24', fri), 'tomorrow');
+  const t = briefingText(b, d);
+  assert.match(t, /1143 Echo St closes Thursday, Oct 29\./);
+  assert.doesNotMatch(t, /this week/);
+});
+
+test('what is booked is counted by kind', () => {
+  assert.equal(bookedSummary([{ kind: 'tour' }, { kind: 'event', sub: 'showing' }]), '2 showings');
+  assert.equal(bookedSummary([{ kind: 'tour' }, { kind: 'event', sub: 'inspection' }]), '1 showing and 1 appointment');
 });

@@ -55,14 +55,37 @@ export function briefing(data, today, { pickups = 0 } = {}) {
   const week = addDays(today, 7);
   const todayItems = dayItems(data, today).filter((i) => !i.done);
   const late = (data.tasks || []).filter((t) => !t.done && t.due && t.due < today);
-  const deadlines = (data.dates || []).filter((d) => !d.done && d.due > today && d.due <= week).sort((a, b) => a.due.localeCompare(b.due));
-  const closings = (data.properties || []).filter((p) => p.status === 'escrow' && p.coe_date && p.coe_date >= today && p.coe_date <= week);
+  // A closing is counted once: from the deal's "Close of escrow" deadline when
+  // there is one, else the property's closing date. It is never also counted
+  // as a deadline (it was, so "1 closing" and "2 deadlines" shared an item).
+  const open = (data.dates || []).filter((d) => !d.done && d.due > today && d.due <= week);
+  const deadlines = open.filter((d) => !CLOSING.test(d.label || '')).sort((a, b) => a.due.localeCompare(b.due));
+  const byProp = new Map();
+  for (const d of open.filter((x) => CLOSING.test(x.label || ''))) byProp.set(d.property_id || d.id, { property_id: d.property_id, address: where(data, d.property_id) || d.label, date: d.due });
+  for (const p of data.properties || []) {
+    if (p.status === 'escrow' && p.coe_date && p.coe_date >= today && p.coe_date <= week && !byProp.has(p.id)) byProp.set(p.id, { property_id: p.id, address: p.address, date: p.coe_date });
+  }
+  const closings = [...byProp.values()].sort((a, b) => a.date.localeCompare(b.date));
   const lateDates = (data.dates || []).filter((d) => !d.done && d.due && d.due < today && d.due >= addDays(today, -14));
   return { day: today, today: todayItems, late, deadlines, closings, lateDates, pickups, quiet: !todayItems.length && !late.length && !deadlines.length && !closings.length && !lateDates.length && !pickups };
 }
 
 const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 const weekday = (iso) => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+// "today", "tomorrow", "Thursday, Oct 29": never "this week" for something
+// that may be next week.
+export function whenSaid(iso, today) {
+  if (iso === today) return 'today';
+  if (iso === addDays(today, 1)) return 'tomorrow';
+  return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+// What is booked today, by kind: "2 showings", "1 showing and 1 appointment".
+export function bookedSummary(items) {
+  const n = { showing: 0, appt: 0, closing: 0 };
+  for (const i of items) { const k = itemKind(i); if (k in n) n[k]++; }
+  const parts = [n.showing && plural(n.showing, 'showing'), n.appt && plural(n.appt, 'appointment'), n.closing && plural(n.closing, 'closing')].filter(Boolean);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0] || '';
+}
 
 // The same briefing in sentences, for reading aloud.
 export function briefingText(b, data, { name, hello = 'Good morning' } = {}) {
@@ -71,14 +94,14 @@ export function briefingText(b, data, { name, hello = 'Good morning' } = {}) {
   const timed = b.today.filter((i) => i.start != null && i.kind !== 'task');
   const allDay = b.today.filter((i) => i.start == null || i.kind === 'task');
   if (timed.length) {
-    lines.push(`Today you have ${plural(timed.length, 'appointment')}.`);
+    lines.push(`Today you have ${bookedSummary(timed)}.`);
     for (const i of timed) lines.push(`At ${formatClock(i.start)}, ${i.title}${i.where && i.kind !== 'tour' ? ' at ' + i.where : ''}.`);
-  } else lines.push('No appointments today.');
+  } else lines.push('Nothing booked today.');
   if (allDay.length) lines.push(`Also due today: ${allDay.map((i) => i.title).join('; ')}.`);
   if (b.late.length) lines.push(`${plural(b.late.length, 'to-do')} ${b.late.length === 1 ? 'is' : 'are'} overdue: ${b.late.slice(0, 3).map((t) => t.text).join('; ')}.`);
   if (b.lateDates.length) lines.push(`${plural(b.lateDates.length, 'deadline')} passed without being marked done: ${b.lateDates.slice(0, 3).map((d) => `${d.label} at ${where(data, d.property_id)}`).join('; ')}.`);
-  for (const p of b.closings) lines.push(`${p.address} closes ${p.coe_date === b.day ? 'today' : p.coe_date === addDays(b.day, 1) ? 'tomorrow' : weekday(p.coe_date)}.`);
-  if (b.deadlines.length) lines.push(`Coming up this week: ${b.deadlines.slice(0, 4).map((d) => `${d.label}${where(data, d.property_id) ? ' at ' + where(data, d.property_id) : ''} on ${weekday(d.due)}`).join('; ')}.`);
+  for (const c of b.closings) lines.push(`${c.address} closes ${whenSaid(c.date, b.day)}.`);
+  if (b.deadlines.length) lines.push(`Deadlines in the next 7 days: ${b.deadlines.slice(0, 4).map((d) => `${d.label}${where(data, d.property_id) ? ' at ' + where(data, d.property_id) : ''}, ${whenSaid(d.due, b.day)}`).join('; ')}.`);
   if (b.pickups) lines.push(`${plural(b.pickups, 'sign or lockbox', 'signs or lockboxes')} to pick up.`);
   return lines.join(' ');
 }
