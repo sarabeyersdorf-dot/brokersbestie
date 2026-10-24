@@ -5,3 +5,8 @@
 // device and nothing leaves it.
 export const SUPABASE_URL = 'https://bycsdukxwzkahaxnkmgb.supabase.co';
 export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5Y3NkdWt4d3prYWhheG5rbWdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NTg4OTQsImV4cCI6MjEwODMzNDg5NH0.wBBbeQDO94gy8k0neP1u3CtrtSP6uZrnNBgSTKLhziI';
+
+// Automatic safety texts from the server. Off until Twilio is set up in Vercel
+// AND the check-in job runs every 5 minutes (Vercel Pro; vercel.json). While
+// off, every agent is told the truth: this phone buzzes and opens the text.
+export const AUTO_SAFETY = false;

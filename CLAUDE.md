@@ -38,6 +38,9 @@ plain words, and let her choose.
   the contact after the time is up (cron is DAILY until Vercel Pro; then set
   `*/5 * * * *` in vercel.json — Hobby refuses to deploy anything more often), claiming the row first so it can
   never text twice. Never describe phone-only mode as automatic.
+  `AUTO_SAFETY` in `js/config.js` is false until Twilio is set AND the job runs
+  every 5 minutes: while false every agent sees phone-only wording and nothing
+  is registered with the server (2026-10-24, before outside testers).
 - Everything typed is escaped by `html``…``  in `js/ui.js`. Don't build markup by
   string concatenation outside it.
 

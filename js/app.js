@@ -2,6 +2,7 @@
 // back button, bookmarks and a home-screen launch all land where expected.
 
 import * as store from './store.js';
+import { AUTO_SAFETY } from './config.js';
 import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLink, mapLink, todayIso, daysFrom, niceDate, whenText, toast, copy } from './ui.js';
 import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMiles, roadMiles, driveMinutes } from './route.js';
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
@@ -1527,7 +1528,7 @@ function viewSafety() {
   const c = activeCheckin();
   const s = store.settings();
   const contact = s.checkinContact || {};
-  const serverOn = store.cloud.enabled && store.cloud.user;
+  const serverOn = AUTO_SAFETY && store.cloud.enabled && store.cloud.user;
   if (c) {
     const left = Math.max(0, Math.round((new Date(c.due_at) - Date.now()) / 1000));
     const mm = Math.floor(left / 60), ss = String(left % 60).padStart(2, '0');
@@ -1543,7 +1544,7 @@ function viewSafety() {
         <button class="btn green big block" type="button" id="ok">I'm OK · end check-in</button>
         <button class="btn block" type="button" id="extend">Add 15 minutes</button>
         <button class="btn red big block" type="button" id="help">Send help now</button>
-        <div class="${serverOn ? 'note-box' : 'warn-box'}">${serverOn ? html`<b>Automatic alert is on.</b> If the timer runs out and you don't answer, ${c.contact_name || 'your contact'} gets a text from Brokers Bestie with where you are and who you're with, even if your phone is off.` : html`<b>Phone-only mode.</b> If the timer runs out, this phone will buzz and open a text to ${c.contact_name || 'your contact'} for you to send. Turn on team mode for alerts that go out on their own.`}</div>
+        <div class="${serverOn ? 'note-box' : 'warn-box'}">${serverOn ? html`<b>Automatic alert is on.</b> If the timer runs out and you don't answer, ${c.contact_name || 'your contact'} gets a text from Brokers Bestie with where you are and who you're with, even if your phone is off.` : html`<b>Phone-only mode.</b> If the timer runs out, this phone will buzz and open a text to ${c.contact_name || 'your contact'} for you to send. Keep this phone with you and the sound on.`}</div>
       </main>`,
       mount(root) {
         clearInterval(tick);
@@ -1578,7 +1579,7 @@ function viewSafety() {
       <div class="grid2">${fieldHtml({ name: 'contact_name', label: 'Name', placeholder: 'James' }, contact.name)}${fieldHtml({ name: 'contact_phone', label: 'Phone', type: 'tel' }, contact.phone)}</div>
       <div class="hint">They get where you are, who you're meeting and that person's phone number.</div>
       <button class="btn dark big block" type="submit">${icon('shield', 20)}Start check-in</button>
-      ${!serverOn ? html`<div class="warn-box"><b>Phone-only mode:</b> when time is up this phone buzzes and opens the text for you. Automatic alerts need team mode (Settings).</div>` : ''}
+      ${!serverOn ? html`<div class="warn-box"><b>Phone-only mode:</b> when time is up this phone buzzes and opens the text for you. Keep it with you with the sound on.</div>` : ''}
     </form></main>`,
     mount(root) {
       let minutes = startMins;
@@ -1605,7 +1606,7 @@ function viewSafety() {
 }
 
 async function serverCheckin(op, row) {
-  if (!(store.cloud.enabled && store.cloud.user)) return;
+  if (!(AUTO_SAFETY && store.cloud.enabled && store.cloud.user)) return;
   try { await store.syncNow(); await api('/api/checkin', { method: 'POST', body: JSON.stringify({ op, id: row.id, due_at: row.due_at }) }); }
   catch (e) { toast('Could not reach the server; the phone timer is still on'); }
 }
