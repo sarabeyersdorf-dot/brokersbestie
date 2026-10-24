@@ -185,3 +185,9 @@ sends a code (`signInWithOtp`) and the app signs itself in with
 limit and an expired code in plain words. **The Magic Link and Confirm signup
 email templates in the Supabase dashboard must contain `{{ .Token }}`**, or
 the email has no code to type. Custom SMTP (Resend) lifts the hourly limit.
+- **Done 2026-10-24 (by Cowork):** Supabase sends through Resend
+  (`smtp.resend.com:465`, user `resend`, key "Brokers Bestie Supabase") from
+  "Brokers Bestie" <noreply@send.brokersbestie.app>; `send.brokersbestie.app`
+  is verified in Resend (3 DNS records at GoDaddy). Email limit 30/hour. Both
+  templates ("Magic link or OTP", "Confirm sign up") carry `{{ .Token }}`.
+  Templates are locked again if custom SMTP is ever turned off.
