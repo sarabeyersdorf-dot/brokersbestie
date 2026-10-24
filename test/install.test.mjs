@@ -24,3 +24,13 @@ test('an in-app browser is told to open Safari first', () => {
   assert.match(installSteps({ os: 'ios', browser: 'safari' }).join(' '), /Add to Home Screen/);
   assert.match(installSteps({ os: 'android', browser: 'samsung' }).join(' '), /Home screen/);
 });
+
+test('feedback opens an email to Sara with the phone filled in', async () => {
+  const { feedbackLink } = await import('../js/install.js');
+  globalThis.window ??= { matchMedia: () => ({ matches: false }), navigator: {} };
+  const link = feedbackLink({ where: 'Settings', signedIn: true }, platform(SAFARI), SAFARI);
+  assert.match(link, /^mailto:sarasellscalifornia@gmail\.com\?subject=Brokers%20Bestie%20feedback&body=/);
+  const body = decodeURIComponent(link.split('body=')[1]);
+  assert.match(body, /Phone: iPhone 18\.0 · safari/);
+  assert.match(body, /Signed in: yes · Screen: Settings/);
+});

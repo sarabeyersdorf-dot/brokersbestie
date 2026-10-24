@@ -163,3 +163,7 @@ shows an "Install Bestie" button when Android offers one
 open Safari/Chrome first, since those cannot add to the home screen. Shown
 on Today until installed or "Not now", and always in Settings.
 `[hidden]` is `display:none !important` in css (a `.btn` overrode it).
+- **Send feedback** (Settings, 2026-10-24, for the first outside testers):
+  `feedbackLink()` in `js/install.js` opens the tester's own mail app to
+  Sara (`FEEDBACK_TO`) with their phone, browser and sign-in state filled in.
+  No server, nothing stored.

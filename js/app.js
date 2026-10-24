@@ -8,7 +8,7 @@ import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMil
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
 import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
-import { installCard, wireInstall, isInstalled } from './install.js';
+import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
 import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey } from './brief.js';
 
@@ -1729,6 +1729,12 @@ function viewSettings() {
       </section>
 
       ${installCard()}
+
+      <section class="card pad sec">
+        <div class="label">Tell Sara what you think</div>
+        <div class="small">Something broken, confusing or missing? It opens an email with your phone type already filled in. Screenshots help.</div>
+        <a class="btn dark block" id="feedback" href="${feedbackLink({ where: 'Settings', signedIn: !!store.cloud.user })}">Send feedback</a>
+      </section>
     </main>`,
     mount(root) {
       wireInstall(root);
