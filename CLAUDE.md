@@ -107,3 +107,16 @@ written to a CRM.
   `runSync` clears any `tasks.source = 'crm'` rows. Bestie is the field
   companion: properties, codes, contacts, appointments, contract deadlines. Do
   not add CRM back-office data (task lists, pipelines, lead stages) without her.
+
+## Colours and filters (2026-10-24)
+
+Sara: "work on the colors so things are easy to spot and differentiate. also
+want a filter". One colour per KIND of thing, the same on every screen, always
+with its word beside it (`ktag`): Showing teal, Appointment blue, Deadline
+orange (red "Overdue" once past), Closing green, To-do grey. Yellow stays for
+codes only. `COLOR_KINDS` / `itemKind` in `js/brief.js` are the one
+definition; css `.c-<kind>` sets `--k`. Property status: My listing teal,
+Coming soon purple, In escrow orange, Showing/other agent blue, Closed grey.
+Filter chips on Today and Calendar (+ one-property picker on Calendar), saved
+per phone in `bb:filter`; Properties has a Sort (`PROP_SORTS`, `bb:propsort`).
+A "Mine / James" filter waits until there is a second person on the team.

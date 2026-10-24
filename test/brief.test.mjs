@@ -59,3 +59,27 @@ test('"walk-through tomorrow at 10" becomes an appointment, not a to-do', () => 
   assert.ok(actionPlan({ type: 'event', text: 'Meet', due: null }, { today }).error);
   assert.equal(eventKind('Final signing at title'), 'closing');
 });
+
+import { itemKind, filterItems, sortProps } from '../js/brief.js';
+
+test('every thing on a day has one colour kind', () => {
+  const items = dayItems({ ...data, events: [...data.events, { id: 'e9', date: today, title: 'Signing', kind: 'closing' }, { id: 'e8', date: today, title: 'Open', kind: 'open' }], dates: [...data.dates, { id: 'd9', label: 'Close of escrow', due: today }] }, today);
+  const k = Object.fromEntries(items.map((i) => [i.id, itemKind(i)]));
+  assert.equal(k.r1, 'showing');
+  assert.equal(k.e8, 'showing');
+  assert.equal(k.e1, 'appt');
+  assert.equal(k.e9, 'closing');
+  assert.equal(k.d9, 'closing');
+  assert.equal(k.t1, 'todo');
+  assert.equal(itemKind({ kind: 'date', title: 'Appraisal' }), 'deadline');
+});
+
+test('filters by kind and by property; sorts properties', () => {
+  const items = dayItems(data, today);
+  assert.deepEqual(filterItems(items, { kind: 'appt' }).map((i) => i.id), ['e1', 'e2']);
+  assert.deepEqual(filterItems(items, { property: 'p2' }).map((i) => i.id), ['e2']);
+  const props = [{ address: 'B', coe_date: '2026-11-01', price: 5 }, { address: 'A', price: 9 }, { address: 'C', coe_date: '2026-10-30', price: 1 }];
+  assert.deepEqual(sortProps(props, 'closing').map((p) => p.address), ['C', 'B', 'A']);
+  assert.deepEqual(sortProps(props, 'price').map((p) => p.address), ['A', 'B', 'C']);
+  assert.deepEqual(sortProps(props, 'az').map((p) => p.address), ['A', 'B', 'C']);
+});

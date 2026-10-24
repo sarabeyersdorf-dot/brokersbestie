@@ -7,7 +7,7 @@ import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMil
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
 import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -332,7 +332,7 @@ function todoItems() {
   for (const x of store.all('tasks')) {
     if (x.done) continue;
     if (x.due && x.due > t) continue;
-    items.push({ table: 'tasks', id: x.id, text: x.text, sub: [addr(x.property_id), x.due && x.due < t ? `Was due ${niceDate(x.due)}` : ''].filter(Boolean).join(' · '), pid: x.property_id });
+    items.push({ table: 'tasks', id: x.id, text: x.text, sub: [addr(x.property_id), x.due && x.due < t ? `Was due ${niceDate(x.due)}` : ''].filter(Boolean).join(' · '), pid: x.property_id, ck: 'todo', late: !!(x.due && x.due < t) });
   }
   for (const d of store.all('dates')) {
     if (d.done) continue;
@@ -340,14 +340,14 @@ function todoItems() {
     // Due today or overdue only: the week ahead is in the briefing card, and a
     // closing 6 days out is not something to do today.
     if (n == null || n > 0) continue;
-    items.push({ table: 'dates', id: d.id, text: `${d.label} · ${addr(d.property_id)}`, sub: n < 0 ? `${-n} days past · confirm it happened` : whenText(d.due), pid: d.property_id, late: n < 0 });
+    items.push({ table: 'dates', id: d.id, text: `${d.label} · ${addr(d.property_id)}`, sub: n < 0 ? `${-n} days past · confirm it happened` : whenText(d.due), pid: d.property_id, late: n < 0, ck: itemKind({ kind: 'date', title: d.label }) });
   }
   for (const a of pickups()) {
-    items.push({ pickup: true, id: a.id, text: `Pick up ${a.label || KINDS[a.kind].label} at ${addr(a.property_id)}`, sub: `${STATUS[prop(a.property_id)?.status] || ''} · ${a.location_note || ''}` });
+    items.push({ pickup: true, ck: 'todo', pid: a.property_id, id: a.id, text: `Pick up ${a.label || KINDS[a.kind].label} at ${addr(a.property_id)}`, sub: `${STATUS[prop(a.property_id)?.status] || ''} · ${a.location_note || ''}` });
   }
   for (const tour of store.all('tours').filter((x) => x.date === t && !x.finished)) {
     for (const s of tour.stops || []) {
-      if (s.code_pending) items.push({ tour: tour.id, id: s.id, text: `Get the code for ${s.address}`, sub: s.agent ? `Ask ${s.agent}` : 'Before the tour' });
+      if (s.code_pending) items.push({ tour: tour.id, ck: 'showing', id: s.id, text: `Get the code for ${s.address}`, sub: s.agent ? `Ask ${s.agent}` : 'Before the tour' });
     }
   }
   return items;
@@ -358,6 +358,7 @@ function viewToday() {
   const tours = store.all('tours').filter((x) => x.date === todayIso() && !x.finished);
   const live = props().filter((p) => LIVE.includes(p.status)).sort((a, b) => (a.status === 'escrow' ? -1 : 0) - (b.status === 'escrow' ? -1 : 0));
   const todos = todoItems();
+  const shownTodos = todos.filter((t) => !viewFilter.kind || t.ck === viewFilter.kind);
   const empty = !props().length;
   const s = store.settings();
   const hp = here && here.p;
@@ -381,6 +382,7 @@ function viewToday() {
         <div class="btns"><a class="btn dark" href="#/p/new">Add a listing</a><button class="btn" type="button" id="sample">Show sample data</button></div>
       </section>` : ''}
 
+      ${!empty && !searchText ? filterBar() : ''}
       ${!empty && !searchText ? briefingCard() : ''}
 
       ${hp ? html`<section class="sec">
@@ -397,10 +399,10 @@ function viewToday() {
       </section>` : !empty ? html`<button class="btn block" type="button" id="findme">${icon('pin', 18)}Where am I? Show this property's codes</button>` : ''}
 
       ${todos.length || !empty ? html`<section class="sec">
-        <div class="sec-head"><div class="label">To do today · ${todos.length}</div><button class="btn ghost" type="button" id="addtodo" style="min-height:36px">+ Add</button></div>
-        <div class="card list">${todos.length ? todos.map((t) => t.pickup ? html`<a class="row" href="#/signs"><span class="check" style="border-color:var(--pending)"></span><span class="grow"><span class="t">${t.text}</span><span class="s">${t.sub}</span></span>${icon('chev', 18)}</a>`
-          : t.tour ? html`<a class="row" href="#/tour/${t.tour}"><span class="check" style="border-color:var(--pending)"></span><span class="grow"><span class="t">${t.text}</span><span class="s">${t.sub}</span></span>${icon('chev', 18)}</a>`
-          : html`<button class="row" type="button" data-done="${t.table}:${t.id}"><span class="check"></span><span class="grow"><span class="t">${t.text}</span><span class="s ${t.late ? 'wait' : ''}">${t.sub}</span></span></button>`) : html`<div class="empty">Nothing due. Nice.</div>`}</div>
+        <div class="sec-head"><div class="label">To do today · ${shownTodos.length}</div><button class="btn ghost" type="button" id="addtodo" style="min-height:36px">+ Add</button></div>
+        <div class="card list">${shownTodos.length ? shownTodos.map((t) => t.pickup ? html`<a class="row ${colorClass(t.ck, t.late)}" href="#/signs"><span class="check" style="border-color:var(--pending)"></span><span class="grow"><span class="t">${t.text}</span><span class="s">${ktag(t.ck, t.late)}${t.sub}</span></span>${icon('chev', 18)}</a>`
+          : t.tour ? html`<a class="row ${colorClass(t.ck, t.late)}" href="#/tour/${t.tour}"><span class="check" style="border-color:var(--pending)"></span><span class="grow"><span class="t">${t.text}</span><span class="s">${ktag(t.ck, t.late)}${t.sub}</span></span>${icon('chev', 18)}</a>`
+          : html`<button class="row ${colorClass(t.ck, t.late)}" type="button" data-done="${t.table}:${t.id}"><span class="check"></span><span class="grow"><span class="t">${t.text}</span><span class="s ${t.late ? 'wait' : ''}">${ktag(t.ck, t.late)}${t.sub}</span></span></button>`) : html`<div class="empty">${todos.length ? 'Nothing of that kind today.' : 'Nothing due. Nice.'}</div>`}</div>
       </section>` : ''}
 
       <section class="sec">
@@ -447,6 +449,7 @@ function viewToday() {
       });
       root.querySelector('#addtodo')?.addEventListener('click', () => addTaskSheet());
       root.querySelector('#readbrief')?.addEventListener('click', (e) => readBriefing(e.currentTarget));
+      wireFilter(root);
       wireDayRows(root.querySelector('.brief') || document.createElement('div'));
       autoCrmSync();
       root.querySelectorAll('[data-done]').forEach((b) => b.addEventListener('click', () => {
@@ -465,8 +468,8 @@ function viewToday() {
 
 function propRow(p) {
   const codes = codesOf(p.id).filter((a) => a.code).length;
-  return html`<a class="row" href="#/p/${p.id}">
-    <span class="grow"><span class="t">${p.address}</span><span class="s">${[p.city, STATUS[p.status], codes ? `${codes} code${codes > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ')}</span></span>
+  return html`<a class="row st-${p.status || 'listing'}" href="#/p/${p.id}">
+    <span class="grow"><span class="t">${p.address}</span><span class="s"><span class="pill sm ${p.status || 'listing'}">${STATUS[p.status] || 'Listing'}</span>${[p.city, p.status === 'escrow' && p.coe_date ? `Closes ${niceDate(p.coe_date)}` : '', codes ? `${codes} code${codes > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ')}</span></span>
     ${p.price ? html`<span class="num" style="font-size:16px">${money(p.price)}</span>` : ''}
   </a>`;
 }
@@ -494,17 +497,20 @@ function addTaskSheet(pid) {
 let propFilter = 'live';
 function viewProps() {
   const groups = { live: (p) => LIVE.includes(p.status), escrow: (p) => p.status === 'escrow', tour: (p) => p.status === 'tour', done: (p) => p.status === 'closed' || p.status === 'cancelled' };
-  const list = props().filter(groups[propFilter]).sort((a, b) => a.address.localeCompare(b.address));
+  const sortBy = (() => { try { return localStorage.getItem('bb:propsort') || 'az'; } catch { return 'az'; } })();
+  const list = sortProps(props().filter(groups[propFilter]), sortBy);
   const tab = (k, l) => html`<button class="tab ${propFilter === k ? 'on' : ''}" type="button" data-f="${k}">${l}</button>`;
   return {
     html: html`${header({ kicker: 'Properties', title: `${props().filter(groups.live).length} active`, right: html`<a class="btn teal" href="#/p/new" style="min-height:40px">+ Add</a>` })}
     <main class="wrap">
       <a class="card row" href="#/sheet"><span class="tile" style="border:0;padding:0"><span class="ic t">${icon('sheet', 22)}</span></span><span class="grow"><span class="t">Snap an MLS sheet</span><span class="s">Bestie reads it and fills in the property card</span></span>${icon('chev', 18)}</a>
       <div class="tabs">${tab('live', 'Active')}${tab('escrow', 'In escrow')}${tab('tour', 'Showing')}${tab('done', 'Closed')}</div>
+      <label class="sortby">Sort<select id="propsort">${PROP_SORTS.map(([k, l]) => html`<option value="${k}" ${k === sortBy ? raw('selected') : ''}>${l}</option>`)}</select></label>
       <div class="card list">${list.length ? list.map(propRow) : html`<div class="empty">Nothing here yet.</div>`}</div>
     </main>`,
     mount(root) {
       root.querySelectorAll('[data-f]').forEach((b) => b.addEventListener('click', () => { propFilter = b.getAttribute('data-f'); render(); }));
+      root.querySelector('#propsort').addEventListener('change', (e) => { try { localStorage.setItem('bb:propsort', e.target.value); } catch {} render(); });
     }
   };
 }
@@ -1736,15 +1742,45 @@ const dayHeading = (iso) => {
   return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' });
 };
 
+// ---------- colours and the filter ----------
+// One colour per kind of thing (js/brief.js COLOR_KINDS), always with its word
+// beside it, so nothing is told apart by colour alone.
+const kindWord = (k) => (COLOR_KINDS.find(([v]) => v === k) || [k, ''])[1];
+const colorClass = (ck, late) => `c-${late ? 'late' : ck}`;
+const ktag = (ck, late) => html`<span class="ktag ${colorClass(ck, late)}">${late ? 'Overdue' : kindWord(ck)}</span>`;
+
+const FILTER_KEY = 'bb:filter';
+let viewFilter = (() => { try { return JSON.parse(localStorage.getItem(FILTER_KEY)) || {}; } catch { return {}; } })();
+function setFilter(patch) {
+  viewFilter = { ...viewFilter, ...patch };
+  try { localStorage.setItem(FILTER_KEY, JSON.stringify(viewFilter)); } catch {}
+  render();
+}
+// The chip row: All, then one chip per colour kind. withProperty adds the
+// one-house picker (Calendar).
+function filterBar({ withProperty = false } = {}) {
+  const chip = (k, label) => html`<button type="button" class="chip ${(viewFilter.kind || null) === k ? 'on' : ''}" data-kind="${k || ''}">${k ? html`<span class="dot ${colorClass(k)}"></span>` : ''}${label}</button>`;
+  return html`<div class="filters">
+    <div class="chips">${chip(null, 'All')}${COLOR_KINDS.map(([k, l]) => chip(k, l + 's'))}</div>
+    ${withProperty ? html`<select class="prop-filter" id="propfilter" aria-label="Show one property"><option value="">All properties</option>${props().slice().sort((a, b) => a.address.localeCompare(b.address)).map((p) => html`<option value="${p.id}" ${viewFilter.property === p.id ? raw('selected') : ''}>${p.address}</option>`)}</select>` : ''}
+  </div>`;
+}
+function wireFilter(root) {
+  root.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => setFilter({ kind: b.getAttribute('data-kind') || null })));
+  root.querySelector('#propfilter')?.addEventListener('change', (e) => setFilter({ property: e.target.value || null }));
+}
+
 // One row of the calendar or the Today schedule. Tapping opens what it is.
-function dayItemRow(i) {
+function dayItemRow(i, day = todayIso()) {
+  const ck = itemKind(i);
+  const late = isLate(i, day, todayIso());
   const time = i.start != null && i.kind !== 'task' ? html`<span class="num cal-time">${formatClock(i.start).replace(':00 ', ' ')}</span>` : html`<span class="cal-time allday">${{ date: 'Due', task: 'To do', event: 'All day', tour: '' }[i.kind]}</span>`;
   const kl = i.kind === 'event' ? kindLabel(i.sub) : '';
-  const sub = [i.kind === 'event' ? (kl && !i.title.toLowerCase().includes(kl.toLowerCase().split(' ')[0]) ? kl : '') : i.kind === 'date' ? 'Deadline' : i.kind === 'tour' ? 'Tour' : '', i.where].filter(Boolean).join(' · ');
+  const sub = [i.kind === 'event' ? (kl && !i.title.toLowerCase().includes(kl.toLowerCase().split(' ')[0]) ? kl : '') : '', i.where].filter(Boolean).join(' · ');
   const attrs = i.kind === 'tour' ? raw(`href="#/tour/${esc(i.id)}"`) : i.kind === 'event' ? raw(`data-event="${esc(i.id)}"`) : i.kind === 'date' ? raw(`data-cal-date="${esc(i.id)}"`) : raw(`data-cal-task="${esc(i.id)}"`);
   const tag = i.kind === 'tour' ? 'a' : 'button';
-  return html`${raw(`<${tag} class="row cal-row k-${i.kind}${i.done ? ' done-row' : ''}" ${tag === 'button' ? 'type="button"' : ''} `)}${attrs}${raw('>')}
-    ${time}<span class="grow"><span class="t ${i.done ? 'done-text' : ''}">${i.title}</span>${sub ? html`<span class="s">${sub}</span>` : ''}</span>${raw(`</${tag}>`)}`;
+  return html`${raw(`<${tag} class="row cal-row k-${i.kind} ${colorClass(ck, late)}${i.done ? ' done-row' : ''}" ${tag === 'button' ? 'type="button"' : ''} `)}${attrs}${raw('>')}
+    ${time}<span class="grow"><span class="t ${i.done ? 'done-text' : ''}">${i.title}</span><span class="s">${ktag(ck, late)}${sub}</span></span>${raw(`</${tag}>`)}`;
 }
 
 function wireDayRows(root) {
@@ -1787,7 +1823,9 @@ let calFrom = null;
 function viewCalendar() {
   const today = todayIso();
   calFrom = calFrom || today;
-  const days = agenda(store.snapshot(), calFrom, 45);
+  if (viewFilter.property && !prop(viewFilter.property)) viewFilter.property = null;
+  const days = agenda(store.snapshot(), calFrom, 45).map((d) => ({ ...d, items: filterItems(d.items, viewFilter) })).filter((d) => d.items.length);
+  const filtered = !!(viewFilter.kind || viewFilter.property);
   const link = store.cloud.user ? null : 'Sign in (Settings) to see it in your phone calendar too.';
   return {
     html: html`${header({ kicker: 'Calendar', title: calFrom === today ? 'Coming up' : `From ${niceDate(calFrom)}`, sub: 'Appointments, tours, deadlines and to-dos in one list.', right: html`<button class="btn teal" type="button" id="addevent" style="min-height:40px">+ Add</button>` })}
@@ -1797,10 +1835,11 @@ function viewCalendar() {
         <button class="tab" type="button" data-from="${addDays(calFrom, -7)}">‹ Week before</button>
         <label class="tab cal-pick">Jump to…<input type="date" id="jump" value="${calFrom}"></label>
       </div>
+      ${filterBar({ withProperty: true })}
       ${days.length ? days.map(({ day, items }) => html`<section class="sec">
         <div class="sec-head"><div class="label ${day === today ? 'accent' : ''}">${dayHeading(day)}${day !== today && day !== addDays(today, 1) ? '' : html` · ${niceDate(day)}`}</div><button class="btn ghost" type="button" data-addon="${day}" style="min-height:32px">+</button></div>
-        <div class="card list">${items.map(dayItemRow)}</div>
-      </section>`) : html`<div class="card empty">Nothing in the next 45 days. Tap + Add, or tell Bestie: “Walk-through tomorrow at 10 at 433 Highway 4.”</div>`}
+        <div class="card list">${items.map((i) => dayItemRow(i, day))}</div>
+      </section>`) : html`<div class="card empty">${filtered ? 'Nothing of that kind in the next 45 days. Tap All to see everything.' : 'Nothing in the next 45 days. Tap + Add, or tell Bestie: “Walk-through tomorrow at 10 at 433 Highway 4.”'}</div>`}
       ${link ? html`<div class="hint" style="text-align:center">${link}</div>` : html`<a class="hint" href="#/settings" style="text-align:center;display:block">Put this calendar on your phone's own calendar →</a>`}
     </main>`,
     mount(root) {
@@ -1809,6 +1848,7 @@ function viewCalendar() {
       root.querySelectorAll('[data-from]').forEach((b) => b.addEventListener('click', () => { calFrom = b.getAttribute('data-from'); render(); }));
       root.querySelector('#jump').addEventListener('change', (ev) => { if (ev.target.value) { calFrom = ev.target.value; render(); } });
       wireDayRows(root);
+      wireFilter(root);
     }
   };
 }
@@ -1821,6 +1861,7 @@ function briefingCard() {
   const hour = new Date().getHours();
   const hello = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const timed = b.today.filter((i) => i.kind !== 'task' && i.kind !== 'date');
+  const shownTimed = filterItems(timed, { kind: viewFilter.kind });
   const facts = [
     timed.length ? `${timed.length} appointment${timed.length === 1 ? '' : 's'} today${timed[0].start != null ? `, first at ${formatClock(timed[0].start)}` : ''}` : 'No appointments today',
     b.closings.length ? `${b.closings.length} closing${b.closings.length === 1 ? '' : 's'} this week` : '',
@@ -1832,7 +1873,7 @@ function briefingCard() {
     <div class="sec-head"><div><div class="label accent">${hello}</div><div class="brief-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div></div>
       <button class="btn" type="button" id="readbrief" style="min-height:40px">${icon('speak', 18)}Read it to me</button></div>
     <ul class="brief-facts">${facts.map((f) => html`<li>${f}</li>`)}</ul>
-    ${timed.length ? html`<div class="card list">${timed.map(dayItemRow)}</div>` : ''}
+    ${shownTimed.length ? html`<div class="card list">${shownTimed.map((i) => dayItemRow(i))}</div>` : ''}
     ${b.closings.length || b.deadlines.length ? html`<div class="small">${[...b.closings.map((p) => `${p.address} closes ${niceDate(p.coe_date)}`), ...b.deadlines.slice(0, 4).map((d) => `${d.label} · ${addr(d.property_id)} · ${niceDate(d.due)}`)].join(' — ')}</div>` : ''}
     <a class="small" href="#/calendar" style="color:var(--teal-text);font-weight:600">Open the calendar →</a>
   </section>`;

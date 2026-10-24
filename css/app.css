@@ -234,3 +234,49 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .cal-pick input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
 .brief .brief-date { font: 700 22px/1.1 var(--tall); text-transform: uppercase; }
 .brief-facts { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+
+/* ---------- One colour per kind of thing (Sara, 2026-10-24) ----------
+   Same meaning on every screen, always with its word beside it. Yellow stays
+   for codes only. */
+:root {
+  --k-showing: #0b7a6e;
+  --k-appt: #2457b8;
+  --k-deadline: #b85508;
+  --k-late: #c8262e;
+  --k-closing: #1d7a43;
+  --k-todo: #6b7478;
+  --k-prep: #6a3fb5;
+}
+.c-showing { --k: var(--k-showing); }
+.c-appt { --k: var(--k-appt); }
+.c-deadline { --k: var(--k-deadline); }
+.c-late { --k: var(--k-late); }
+.c-closing { --k: var(--k-closing); }
+.c-todo { --k: var(--k-todo); }
+.row[class*="c-"] { box-shadow: inset 5px 0 0 var(--k); }
+.ktag { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 3px; background: var(--k); color: #fff; font: 700 10px/1.6 var(--sans); letter-spacing: .06em; text-transform: uppercase; vertical-align: 1px; }
+.cal-time.allday { color: var(--k, var(--ink-2)); }
+
+/* Filter chips */
+.filters { display: flex; flex-direction: column; gap: 8px; }
+.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 14px; border: 1.5px solid var(--line); border-radius: 19px; background: var(--card); color: var(--ink); font: 600 14px var(--sans); cursor: pointer; }
+.chip.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.chip .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--k); }
+.prop-filter, .sortby select { min-height: 40px; border: 1.5px solid var(--line); border-radius: 8px; background: var(--card); padding: 0 10px; font: 500 15px var(--sans); color: var(--ink); max-width: 100%; }
+.sortby { display: flex; align-items: center; gap: 10px; font: 700 12px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+.sortby select { flex: 1; text-transform: none; letter-spacing: 0; }
+
+/* Property status: the same five colours everywhere */
+.pill.listing { background: var(--teal-on-dark); color: var(--ink); }
+.pill.prep { background: var(--k-prep); color: #fff; }
+.pill.escrow { background: var(--k-deadline); color: #fff; }
+.pill.tour { background: var(--k-appt); color: #fff; }
+.pill.closed, .pill.cancelled { background: #c5ccc9; color: var(--ink); }
+.pill.sm { font-size: 10px; padding: 1px 6px; margin-right: 6px; vertical-align: 1px; }
+.row.st-listing { box-shadow: inset 5px 0 0 var(--teal); }
+.row.st-prep { box-shadow: inset 5px 0 0 var(--k-prep); }
+.row.st-escrow { box-shadow: inset 5px 0 0 var(--k-deadline); }
+.row.st-tour { box-shadow: inset 5px 0 0 var(--k-appt); }
+.row.st-closed, .row.st-cancelled { box-shadow: inset 5px 0 0 #c5ccc9; }

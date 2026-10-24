@@ -89,3 +89,48 @@ export function timeToMinutes(v) {
 export function minutesToTime(m) {
   return m == null ? '' : `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
+
+// ---------- colour kinds: one definition for every screen ----------
+// Each thing on a day is one of these, and each has one colour (css: .c-<key>)
+// and a word, so it is never told apart by colour alone.
+export const COLOR_KINDS = [
+  ['showing', 'Showing'],
+  ['appt', 'Appointment'],
+  ['deadline', 'Deadline'],
+  ['closing', 'Closing'],
+  ['todo', 'To-do']
+];
+const CLOSING = /close of escrow|\bcoe\b|closing|recording/i;
+
+// A dayItems() item -> its colour kind. `late` is a deadline past its day.
+export function itemKind(i, today) {
+  if (i.kind === 'tour') return 'showing';
+  if (i.kind === 'task') return 'todo';
+  if (i.kind === 'event') {
+    if (i.sub === 'showing' || i.sub === 'open') return 'showing';
+    if (i.sub === 'closing') return 'closing';
+    return 'appt';
+  }
+  if (i.kind === 'date') return CLOSING.test(i.title || '') ? 'closing' : 'deadline';
+  return 'todo';
+}
+export function isLate(i, day, today) {
+  return (i.kind === 'date' || i.kind === 'task') && !i.done && day < today;
+}
+
+// Keep only the chosen kind (null = all) and property (null = all).
+export function filterItems(items, { kind = null, property = null } = {}) {
+  return items.filter((i) => (!kind || itemKind(i) === kind) && (!property || i.property_id === property));
+}
+
+// Properties list order.
+export const PROP_SORTS = [['az', 'A–Z'], ['closing', 'Closing soonest'], ['newest', 'Newest'], ['price', 'Price, high to low']];
+export function sortProps(list, how) {
+  const by = {
+    az: (a, b) => String(a.address).localeCompare(String(b.address)),
+    closing: (a, b) => (a.coe_date || '9999').localeCompare(b.coe_date || '9999') || String(a.address).localeCompare(String(b.address)),
+    newest: (a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')),
+    price: (a, b) => (Number(b.price) || 0) - (Number(a.price) || 0)
+  }[how] || null;
+  return by ? list.slice().sort(by) : list;
+}
