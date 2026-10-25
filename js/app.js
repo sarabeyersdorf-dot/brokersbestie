@@ -560,11 +560,11 @@ function viewPropEdit(id) {
         <div class="label accent">Getting in, notes & MLS sheet</div>
         <div class="grid2">
           <label class="field"><span>Code is for</span><select name="x_kind">${['lockbox', 'gate', 'alarm', 'keypad'].filter((k) => KINDS[k]).map((k) => html`<option value="${k}">${KINDS[k].label}</option>`)}</select></label>
-          <label class="field"><span>Code</span><input name="x_code" class="codein" autocomplete="off" autocapitalize="characters" placeholder="1234"></label>
+          <label class="field"><span>Code</span><input name="x_code" class="codein" autocomplete="off" autocapitalize="characters" placeholder="Type the code"></label>
         </div>
         <label class="field"><span>Notes</span><textarea name="x_notes" rows="2" placeholder="Supra on the side door, dog in the yard"></textarea></label>
         <label class="field"><span>MLS link</span><input name="x_mls" type="url" inputmode="url" placeholder="Paste the listing link" autocomplete="off"></label>
-        <div class="pages" id="xthumbs"></div>
+        <div class="fitems" id="xthumbs"></div>
         <div class="btns">
           <label class="btn">${icon('photo', 18)}Snap MLS sheet<input type="file" accept="image/*" capture="environment" id="xsnap" hidden></label>
           <label class="btn">${icon('sheet', 18)}Photo or PDF<input type="file" accept="image/*,application/pdf" multiple id="xpick" hidden></label>
@@ -585,7 +585,7 @@ function viewPropEdit(id) {
           const f = { id: store.uid(), type: pdf ? 'application/pdf' : 'image/jpeg', kind: 'mls' };
           await store.putPhoto(f.id, blob);
           sheetFiles.push(f);
-          root.querySelector('#xthumbs').insertAdjacentHTML('beforeend', str(fileThumb(f)));
+          root.querySelector('#xthumbs').insertAdjacentHTML('beforeend', str(fileItem(f)));
         }
         input.value = '';
         loadPhotos(root);
@@ -615,7 +615,9 @@ function viewPropEdit(id) {
           const x = (n) => (form.querySelector(`[name=${n}]`)?.value || '').trim();
           if (x('x_code')) store.save('access', { property_id: saved.id, kind: x('x_kind') || 'lockbox', label: KINDS[x('x_kind')]?.label || 'Lockbox', code: x('x_code'), ...(KINDS[x('x_kind')]?.tracked ? { status: 'out' } : {}) });
           if (x('x_notes')) store.save('notes', { property_id: saved.id, text: x('x_notes') });
-          if (x('x_mls') || sheetFiles.length) store.save('notes', { property_id: saved.id, text: x('x_mls') ? `MLS listing: ${x('x_mls')}` : 'MLS sheet', source: 'mls_sheet', files: sheetFiles });
+          const files = withFileNotes(sheetFiles, root);
+          const said = files.map((f) => f.note).filter(Boolean);
+          if (x('x_mls') || files.length) store.save('notes', { property_id: saved.id, text: [x('x_mls') ? `MLS listing: ${x('x_mls')}` : 'MLS sheet', ...said].join(' · '), source: 'mls_sheet', files });
         }
         location.hash = `#/p/${saved.id}`;
       });
@@ -704,7 +706,7 @@ function viewHub(id) {
       ${hubTab === 'notes' ? html`<section class="sec">
         <label class="field"><span>New note</span><textarea id="newnote" placeholder="Buyer wants the shed gone"></textarea></label>
         <div class="btns"><button class="btn" type="button" data-mic="newnote">${icon('mic', 18)}Talk</button><button class="btn dark" type="button" id="savenote">Save note</button><a class="btn" href="#/sheet/${id}">${icon('sheet', 18)}MLS sheet</a></div>
-        <div class="card list">${notes.length ? notes.map((n) => html`<div class="row" style="align-items:flex-start"><span class="grow"><span class="s">${niceDate(n.created_at)}</span><span style="white-space:pre-line">${n.text}</span>${(n.files || []).length ? html`<span class="pages">${n.files.map((f) => html`<button type="button" class="page" data-file="${f.id}" data-path="${f.path || ''}" aria-label="Open page">${f.type === 'application/pdf' ? html`<span class="pdf">PDF</span>` : html`<img alt="" data-photo="${f.id}" data-path="${f.path || ''}">`}</button>`)}</span>` : ''}</span><button class="icon-btn" type="button" data-delnote="${n.id}" aria-label="Delete note">${icon('trash', 16)}</button></div>`) : html`<div class="empty">No notes yet.</div>`}</div>
+        <div class="card list">${notes.length ? notes.map((n) => html`<div class="row" style="align-items:flex-start"><span class="grow"><span class="s">${niceDate(n.created_at)}</span><span style="white-space:pre-line">${n.text}</span>${(n.files || []).length ? html`<span class="fitems" data-notefiles="${n.id}">${n.files.map(fileItem)}</span>` : ''}</span><button class="icon-btn" type="button" data-delnote="${n.id}" aria-label="Delete note">${icon('trash', 16)}</button></div>`) : html`<div class="empty">No notes yet.</div>`}</div>
       </section>` : ''}
     </main>`,
     mount(root) {
@@ -723,7 +725,15 @@ function viewHub(id) {
         store.save('notes', { property_id: id, text: t });
         toast('Note saved');
       });
-      root.querySelectorAll('[data-file]').forEach((b) => b.addEventListener('click', () => openFile(b.getAttribute('data-file'), b.getAttribute('data-path'))));
+      root.querySelectorAll('[data-openf]').forEach((b) => b.addEventListener('click', () => openFile(b.getAttribute('data-openf'), b.getAttribute('data-path'))));
+      // A picture's note is saved where it sits, without redrawing the page.
+      root.querySelectorAll('[data-notefiles]').forEach((box) => box.addEventListener('change', (e) => {
+        if (!e.target.matches('[data-fnote]')) return;
+        const n = store.get('notes', box.getAttribute('data-notefiles'));
+        if (!n) return;
+        store.save('notes', { id: n.id, files: withFileNotes(n.files, box) }, { quiet: true });
+        toast('Note saved');
+      }));
       root.querySelectorAll('[data-delnote]').forEach((b) => b.addEventListener('click', () => { if (confirm('Delete this note?')) store.remove('notes', b.getAttribute('data-delnote')); }));
       loadPhotos(root);
     }
@@ -1074,15 +1084,24 @@ function fileThumb(f) {
   const path = store.photoPath(f);
   return html`<button type="button" class="page" data-openf="${f.id}" data-path="${path}" aria-label="Open ${f.kind === 'mls' ? 'MLS sheet' : 'photo'}">${f.type === 'application/pdf' ? html`<span class="pdf">PDF</span>` : html`<img alt="" data-photo="${f.id}" data-path="${path}">`}${f.kind === 'mls' ? html`<span class="ftag">MLS</span>` : ''}</button>`;
 }
+// Every picture carries its own note (Sara, 2026-10-25: "each photo must have
+// a note field"): what it shows, said once, beside it.
+function fileItem(f) {
+  return html`<div class="fitem" data-fid="${f.id}">${fileThumb(f)}<label class="fnote"><span class="sr">Note for this ${f.kind === 'mls' ? 'MLS sheet' : 'photo'}</span><textarea data-fnote rows="3" placeholder="${f.kind === 'mls' ? 'Note: which page, anything to watch for' : 'Note: what this shows (cracked tile, back deck view)'}">${f.note || ''}</textarea></label></div>`;
+}
+const withFileNotes = (files, box) => (files || []).map((f) => {
+  const el = box.querySelector(`[data-fid="${f.id}"] [data-fnote]`);
+  return el ? { ...f, note: el.value.trim() } : f;
+});
 
 function stopFieldsHtml(s, key, { live = false } = {}) {
   return html`<div class="stopf" data-stopf="${key}">
     <div class="grid2">
-      <label class="field"><span>${s.code_label || 'Code'}</span><input class="codein" data-sf="code" value="${s.code || ''}" placeholder="1234" autocomplete="off" autocapitalize="characters"></label>
+      <label class="field"><span>${s.code_label || 'Code'}</span><input class="codein" data-sf="code" value="${s.code || ''}" placeholder="Type the code" autocomplete="off" autocapitalize="characters"></label>
       <label class="field"><span>MLS link</span><input data-sf="mls_url" type="url" inputmode="url" value="${s.mls_url || ''}" placeholder="Paste the link" autocomplete="off"></label>
     </div>
     <label class="field"><span>Notes</span><textarea data-sf="notes" rows="2" placeholder="Gate sticks, dog in the yard, buyers loved the deck">${s.notes || ''}</textarea></label>
-    <div class="pages" data-sfthumbs>${(s.files || []).map(fileThumb)}</div>
+    <div class="fitems" data-sfthumbs>${(s.files || []).map(fileItem)}</div>
     <div class="btns">
       <label class="btn">${icon('sheet', 18)}MLS sheet<input type="file" accept="image/*,application/pdf" multiple data-sffile="mls" hidden></label>
       <label class="btn">${icon('photo', 18)}Photo note<input type="file" accept="image/*" capture="environment" data-sffile="photo" hidden></label>
@@ -1099,7 +1118,13 @@ function wireStopFields(root, { get, put, live = false }) {
     const key = box.getAttribute('data-stopf');
     const msg = box.querySelector('[data-sfmsg]');
     const say = (t) => { if (!msg) return; msg.textContent = t; clearTimeout(msg._t); msg._t = setTimeout(() => (msg.textContent = ''), 2500); };
-    const read = () => Object.fromEntries([...box.querySelectorAll('[data-sf]')].map((el) => [el.getAttribute('data-sf'), el.value.trim()]));
+    const read = () => ({ ...Object.fromEntries([...box.querySelectorAll('[data-sf]')].map((el) => [el.getAttribute('data-sf'), el.value.trim()])), files: withFileNotes((get(key) || {}).files, box) });
+    const saveNote = (el) => {
+      const fid = el.closest('[data-fid]').getAttribute('data-fid');
+      put(key, { files: withFileNotes((get(key) || {}).files, box) }, { noteFor: fid });
+      if (!live) say('Note saved ✓');
+    };
+    box.addEventListener(live ? 'input' : 'change', (e) => { if (e.target.matches('[data-fnote]')) saveNote(e.target); });
     const showLink = () => {
       const a = box.querySelector('[data-sfopen]');
       const u = box.querySelector('[data-sf=mls_url]').value.trim();
@@ -1127,8 +1152,9 @@ function wireStopFields(root, { get, put, live = false }) {
       const files = [...((get(key) || {}).files || []), ...added];
       put(key, { files }, { added });
       const thumbs = box.querySelector('[data-sfthumbs]');
-      thumbs.insertAdjacentHTML('beforeend', added.map((f) => str(fileThumb(f))).join(''));
+      thumbs.insertAdjacentHTML('beforeend', added.map((f) => str(fileItem(f))).join(''));
       loadPhotos(thumbs);
+      thumbs.querySelector(`[data-fid="${added[added.length - 1].id}"] [data-fnote]`)?.focus();
       say(kind === 'mls' ? 'MLS sheet saved ✓' : 'Photo saved ✓');
     }));
     box.addEventListener('click', (e) => {
@@ -1395,10 +1421,20 @@ function viewTour(id) {
     mount(root) {
       wireStopFields(root, {
         get: (k) => fresh().find((x) => x.id === k),
-        put: (k, patch, { added } = {}) => {
+        put: (k, patch, { added, noteFor } = {}) => {
           const before = fresh().find((x) => x.id === k) || {};
           quietSave({ stops: fresh().map((x) => (x.id === k ? { ...x, ...patch } : x)) });
           if (!before.property_id) return;
+          // The property's copy of a picture shows the same note.
+          for (const f of patch.files || []) {
+            if (noteFor && f.id !== noteFor) continue;
+            const n = store.all('notes').find((x) => x.property_id === before.property_id && (x.files || []).some((y) => y.id === f.id));
+            if (!n) continue;
+            const files = n.files.map((y) => (y.id === f.id ? { ...y, note: f.note || '' } : y));
+            const head = n.source === 'mls_sheet' ? 'MLS sheet (from a tour)' : 'Photo note from a showing';
+            const said = files.map((y) => y.note).filter(Boolean);
+            store.save('notes', { id: n.id, files, text: said.length ? `${head}: ${said.join(' · ')}` : head }, { quiet: true });
+          }
           // On a saved property the code and pictures go on the property too.
           if (patch.code && patch.code !== before.code && !store.where('access', 'property_id', before.property_id).some((a) => a.code === patch.code)) {
             const label = before.code_label && before.code_label !== 'Code' ? before.code_label : 'Lockbox';

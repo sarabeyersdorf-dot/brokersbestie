@@ -338,3 +338,11 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .stopf-more > summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--teal-ink, #0b7d72); padding: 6px 0; min-height: 32px; }
 .stopf-more[open] > summary { margin-bottom: 4px; }
 .page .ftag { position: absolute; left: 2px; bottom: 2px; background: #202428; color: #fff; font: 700 10px/1 var(--tall); padding: 3px 5px; border-radius: 4px; letter-spacing: .05em; }
+/* each picture with its own note beside it */
+.fitems { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.fitems:empty { display: none; }
+.fitem { display: flex; gap: 10px; align-items: stretch; min-width: 0; }
+.fitem .page { flex: none; }
+.fnote { flex: 1; min-width: 0; display: flex; }
+.fnote textarea { width: 100%; min-height: 92px; border: 1px solid #b9c1be; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 15px; resize: vertical; background: #fff; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

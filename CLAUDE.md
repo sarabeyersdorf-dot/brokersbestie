@@ -228,3 +228,10 @@ into each stop a place to snap and save picture notes."
   (`source` `mls_sheet` or `showing_photo`).
 - Add a property (new only) has "Getting in, notes & MLS sheet": code + kind,
   notes, MLS link, snap or pick the sheet.
+- **Every picture has its own note** (Sara, 2026-10-25: "each photo must
+  have a note field"). `fileItem(f)` = thumbnail + note box; the note is
+  `files[].note`, saved quietly when the box is left (tour card, planner, new
+  property form, and a property's Notes tab via `[data-notefiles]`). A stop's
+  photo note also rewrites the mirrored property note's text. The note box is
+  focused right after a photo is taken. Code boxes never show an example
+  number as placeholder (it reads like a real code at the door).
