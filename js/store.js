@@ -83,7 +83,9 @@ export function crmLinked(r) {
   return !!r && (r.source === 'crm' || String(r.property_id || '').startsWith('crm:'));
 }
 
-export function save(table, row) {
+// { quiet: true }: saved and synced, but the screen is not redrawn (typing in
+// a tour stop's code or note box must not wipe the page).
+export function save(table, row, { quiet = false } = {}) {
   const now = new Date().toISOString();
   const existing = row.id ? get(table, row.id) : null;
   const next = { ...(existing || {}), ...row, id: row.id || uid(), updated_at: now, _dirty: true };
@@ -97,7 +99,7 @@ export function save(table, row) {
   if (!existing && OWNED.includes(table) && !next.owner && settings().myName) next.owner = settings().myName;
   data[table] = existing ? all(table).map((r) => (r.id === next.id ? next : r)) : [next, ...all(table)];
   writeJson(KEY(table), data[table]);
-  emit();
+  if (!quiet) emit();
   queueSync();
   return next;
 }
@@ -362,6 +364,12 @@ export async function syncNow() {
 }
 
 // Photos, and the pages of an MLS sheet (a photo or a PDF).
+// Where a file sits in the team's storage. Same rule as uploadPhoto, so a file
+// added before its tour existed can still be found from another phone.
+export function photoPath(f) {
+  return f.path || (cloud.teamId ? `${cloud.teamId}/${f.id}.${f.type === 'application/pdf' ? 'pdf' : 'jpg'}` : '');
+}
+
 async function uploadPhoto(id, blob) {
   if (!cloud.user || !cloud.teamId) return;
   const pdf = blob.type === 'application/pdf';
@@ -374,6 +382,9 @@ async function uploadPhoto(id, blob) {
   }
   const note = all('notes').find((n) => (n.files || []).some((f) => f.id === id));
   if (note) save('notes', { id: note.id, files: note.files.map((f) => (f.id === id ? { ...f, path } : f)) });
+  // MLS sheets and picture notes kept on a tour stop.
+  const tour = all('tours').find((t) => (t.stops || []).some((st) => (st.files || []).some((f) => f.id === id)));
+  if (tour) save('tours', { id: tour.id, stops: tour.stops.map((st) => ({ ...st, files: (st.files || []).map((f) => (f.id === id ? { ...f, path } : f)) })) }, { quiet: true });
 }
 
 if (typeof window !== 'undefined') {

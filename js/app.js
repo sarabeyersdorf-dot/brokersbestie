@@ -556,12 +556,42 @@ function viewPropEdit(id) {
         <div class="btns"><button class="btn" type="button" id="pinhere">${icon('pin', 18)}I'm here now</button><button class="btn" type="button" id="pinfind">Find the address</button></div>
       </div>
       ${PROP_FIELDS.slice(3).map((f) => fieldHtml(f, p[f.name]))}
+      ${!id ? html`<div class="card pad sec">
+        <div class="label accent">Getting in, notes & MLS sheet</div>
+        <div class="grid2">
+          <label class="field"><span>Code is for</span><select name="x_kind">${['lockbox', 'gate', 'alarm', 'keypad'].filter((k) => KINDS[k]).map((k) => html`<option value="${k}">${KINDS[k].label}</option>`)}</select></label>
+          <label class="field"><span>Code</span><input name="x_code" class="codein" autocomplete="off" autocapitalize="characters" placeholder="1234"></label>
+        </div>
+        <label class="field"><span>Notes</span><textarea name="x_notes" rows="2" placeholder="Supra on the side door, dog in the yard"></textarea></label>
+        <label class="field"><span>MLS link</span><input name="x_mls" type="url" inputmode="url" placeholder="Paste the listing link" autocomplete="off"></label>
+        <div class="pages" id="xthumbs"></div>
+        <div class="btns">
+          <label class="btn">${icon('photo', 18)}Snap MLS sheet<input type="file" accept="image/*" capture="environment" id="xsnap" hidden></label>
+          <label class="btn">${icon('sheet', 18)}Photo or PDF<input type="file" accept="image/*,application/pdf" multiple id="xpick" hidden></label>
+        </div>
+        <div class="hint">Want Bestie to read the sheet and fill the card in? Save, then use “Snap an MLS sheet” on the property.</div>
+      </div>` : ''}
       <button class="btn dark block big" type="submit">Save</button>
       ${id ? html`<button class="btn ghost block" type="button" id="delprop">${icon('trash', 18)}Delete this property and everything filed under it</button>` : ''}
     </form></main>`,
     mount(root) {
       const form = root.querySelector('#pf');
       const pin = { lat: p.lat ?? null, lng: p.lng ?? null };
+      const sheetFiles = [];
+      const addX = async (input) => {
+        for (const file of [...input.files]) {
+          const pdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+          const blob = pdf ? file : await store.shrinkPhoto(file, 2000).catch(() => file);
+          const f = { id: store.uid(), type: pdf ? 'application/pdf' : 'image/jpeg', kind: 'mls' };
+          await store.putPhoto(f.id, blob);
+          sheetFiles.push(f);
+          root.querySelector('#xthumbs').insertAdjacentHTML('beforeend', str(fileThumb(f)));
+        }
+        input.value = '';
+        loadPhotos(root);
+      };
+      root.querySelector('#xsnap')?.addEventListener('change', (e) => addX(e.target));
+      root.querySelector('#xpick')?.addEventListener('change', (e) => addX(e.target));
       const say = (t) => (root.querySelector('#geo').textContent = t);
       wireMics(root);
       root.querySelector('#pinhere').addEventListener('click', async () => {
@@ -581,6 +611,12 @@ function viewPropEdit(id) {
         const v = readForm(form, PROP_FIELDS);
         if (!v.address) return toast('The street address is needed');
         const saved = store.save('properties', { ...(id ? { id } : {}), ...v, ...pin });
+        if (!id) {
+          const x = (n) => (form.querySelector(`[name=${n}]`)?.value || '').trim();
+          if (x('x_code')) store.save('access', { property_id: saved.id, kind: x('x_kind') || 'lockbox', label: KINDS[x('x_kind')]?.label || 'Lockbox', code: x('x_code'), ...(KINDS[x('x_kind')]?.tracked ? { status: 'out' } : {}) });
+          if (x('x_notes')) store.save('notes', { property_id: saved.id, text: x('x_notes') });
+          if (x('x_mls') || sheetFiles.length) store.save('notes', { property_id: saved.id, text: x('x_mls') ? `MLS listing: ${x('x_mls')}` : 'MLS sheet', source: 'mls_sheet', files: sheetFiles });
+        }
         location.hash = `#/p/${saved.id}`;
       });
       root.querySelector('#delprop')?.addEventListener('click', () => {
@@ -1029,6 +1065,80 @@ function wireDrag(root) {
   }));
 }
 
+// ---------- a stop's own field notes: code, notes, MLS sheet, photos ----------
+// The same fields in the planner (before the tour exists) and on every tour
+// card, typed right on the card. Saving never redraws the page (Sara,
+// 2026-10-25: "code and note field that dont open a new screen - user saves
+// and it doesnt need to refresh").
+function fileThumb(f) {
+  const path = store.photoPath(f);
+  return html`<button type="button" class="page" data-openf="${f.id}" data-path="${path}" aria-label="Open ${f.kind === 'mls' ? 'MLS sheet' : 'photo'}">${f.type === 'application/pdf' ? html`<span class="pdf">PDF</span>` : html`<img alt="" data-photo="${f.id}" data-path="${path}">`}${f.kind === 'mls' ? html`<span class="ftag">MLS</span>` : ''}</button>`;
+}
+
+function stopFieldsHtml(s, key, { live = false } = {}) {
+  return html`<div class="stopf" data-stopf="${key}">
+    <div class="grid2">
+      <label class="field"><span>${s.code_label || 'Code'}</span><input class="codein" data-sf="code" value="${s.code || ''}" placeholder="1234" autocomplete="off" autocapitalize="characters"></label>
+      <label class="field"><span>MLS link</span><input data-sf="mls_url" type="url" inputmode="url" value="${s.mls_url || ''}" placeholder="Paste the link" autocomplete="off"></label>
+    </div>
+    <label class="field"><span>Notes</span><textarea data-sf="notes" rows="2" placeholder="Gate sticks, dog in the yard, buyers loved the deck">${s.notes || ''}</textarea></label>
+    <div class="pages" data-sfthumbs>${(s.files || []).map(fileThumb)}</div>
+    <div class="btns">
+      <label class="btn">${icon('sheet', 18)}MLS sheet<input type="file" accept="image/*,application/pdf" multiple data-sffile="mls" hidden></label>
+      <label class="btn">${icon('photo', 18)}Photo note<input type="file" accept="image/*" capture="environment" data-sffile="photo" hidden></label>
+    </div>
+    ${s.mls_url ? html`<a class="small" data-sfopen href="${safeUrl(s.mls_url)}" target="_blank" rel="noopener">Open the MLS listing ↗</a>` : html`<a class="small" data-sfopen href="#" target="_blank" rel="noopener" hidden>Open the MLS listing ↗</a>`}
+    ${live ? '' : html`<div class="sfsave"><button class="btn dark" type="button" data-sfsave>Save</button><span class="small ok" data-sfmsg aria-live="polite"></span></div>`}
+  </div>`;
+}
+
+// get(key) -> the stop now; put(key, patch) stores it. live: every keystroke
+// is kept (planner); otherwise Save, or leaving a box, stores it quietly.
+function wireStopFields(root, { get, put, live = false }) {
+  root.querySelectorAll('[data-stopf]').forEach((box) => {
+    const key = box.getAttribute('data-stopf');
+    const msg = box.querySelector('[data-sfmsg]');
+    const say = (t) => { if (!msg) return; msg.textContent = t; clearTimeout(msg._t); msg._t = setTimeout(() => (msg.textContent = ''), 2500); };
+    const read = () => Object.fromEntries([...box.querySelectorAll('[data-sf]')].map((el) => [el.getAttribute('data-sf'), el.value.trim()]));
+    const showLink = () => {
+      const a = box.querySelector('[data-sfopen]');
+      const u = box.querySelector('[data-sf=mls_url]').value.trim();
+      a.hidden = !/^https?:\/\//i.test(u);
+      a.href = safeUrl(u);
+    };
+    box.querySelectorAll('[data-sf]').forEach((el) => {
+      el.addEventListener('input', () => { if (live) put(key, { [el.getAttribute('data-sf')]: el.value.trim() }); if (el.getAttribute('data-sf') === 'mls_url') showLink(); });
+      if (!live) el.addEventListener('change', () => { put(key, read()); say('Saved ✓'); });
+    });
+    box.querySelector('[data-sfsave]')?.addEventListener('click', () => { put(key, read()); say('Saved ✓'); });
+    box.querySelectorAll('[data-sffile]').forEach((input) => input.addEventListener('change', async () => {
+      const kind = input.getAttribute('data-sffile');
+      const added = [];
+      for (const file of [...input.files]) {
+        const pdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+        if (pdf && file.size > 20 * 1024 * 1024) { toast('That PDF is over 20 MB'); continue; }
+        const blob = pdf ? file : await store.shrinkPhoto(file, kind === 'mls' ? 2000 : 1600).catch(() => file);
+        const f = { id: store.uid(), type: pdf ? 'application/pdf' : 'image/jpeg', kind, at: new Date().toISOString() };
+        await store.putPhoto(f.id, blob);
+        added.push(f);
+      }
+      input.value = '';
+      if (!added.length) return;
+      const files = [...((get(key) || {}).files || []), ...added];
+      put(key, { files }, { added });
+      const thumbs = box.querySelector('[data-sfthumbs]');
+      thumbs.insertAdjacentHTML('beforeend', added.map((f) => str(fileThumb(f))).join(''));
+      loadPhotos(thumbs);
+      say(kind === 'mls' ? 'MLS sheet saved ✓' : 'Photo saved ✓');
+    }));
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-openf]');
+      if (b) openFile(b.getAttribute('data-openf'), b.getAttribute('data-path'));
+    });
+  });
+  loadPhotos(root);
+}
+
 function planStop(address = '', at = null) {
   return { id: store.uid(), address, atText: at != null ? formatClock(at) : '', lat: null, lng: null, property_id: null, tried: false };
 }
@@ -1064,6 +1174,7 @@ function viewPlan() {
             ${s.tried && s.lat == null ? html`<span class="small wait">Couldn't find this on the map. Check the number and add the town.</span>` : ''}
             ${s.tried && s.approximate ? html`<span class="small wait">Street not found, so it's placed at the town center. Fine for the order; check the number if you can.</span>` : ''}
             <input class="stoptime" data-i="${i}" value="${s.atText}" placeholder="Any time (or a set time like 11:30)" aria-label="Stop ${i + 1} time" style="min-height:40px;border:1px solid #d5dad8;border-radius:8px;padding:6px 10px;font-size:15px;width:100%">
+            <details class="stopf-more" ${s.code || s.notes || s.mls_url || (s.files || []).length ? raw('open') : ''}><summary>Code, notes, MLS sheet</summary>${stopFieldsHtml(s, s.id, { live: true })}</details>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px">
             <button class="icon-btn" type="button" data-up="${i}" aria-label="Move up" ${i === 0 ? raw('disabled') : ''}>${icon('back', 16, 'style="transform:rotate(90deg)"')}</button>
@@ -1112,6 +1223,7 @@ function viewPlan() {
         s.address = el.value; s.lat = null; s.lng = null; s.property_id = null; s.tried = false;
       }));
       root.querySelectorAll('.stoptime').forEach((el) => el.addEventListener('input', () => (plan.stops[Number(el.dataset.i)].atText = el.value)));
+      wireStopFields(root, { live: true, get: (k) => plan.stops.find((x) => x.id === k), put: (k, patch) => Object.assign(plan.stops.find((x) => x.id === k) || {}, patch) });
       root.querySelector('#read')?.addEventListener('click', () => {
         const parsed = parseTourText(plan.text);
         if (parsed.startMinutes != null) plan.startText = formatClock(parsed.startMinutes);
@@ -1160,6 +1272,7 @@ function viewPlan() {
 // A stop carries a copy of what the agent needs at the door, so tour mode works
 // offline and for other agents' listings that are not saved properties.
 function tourStop(l) {
+  const typed = plan.stops.find((x) => x.id === l.id) || {};
   const p = l.property_id ? prop(l.property_id) : null;
   const code = p ? codesOf(p.id).find((a) => a.code) : null;
   const box = p ? store.where('access', 'property_id', p.id).find((a) => a.kind === 'lockbox') : null;
@@ -1168,10 +1281,11 @@ function tourStop(l) {
     id: store.uid(), property_id: l.property_id || null, address: l.address, lat: l.lat ?? null, lng: l.lng ?? null,
     at: l.at ?? null, arrive: l.arrive ?? null, approximate: !!l.approximate, leg_miles: Math.round((l.legMiles || 0) * 10) / 10, leg_minutes: l.legMinutes || 0,
     occ: p?.occupancy || '', well: !!p?.well, septic: !!p?.septic,
-    code_label: code ? code.label || KINDS[code.kind]?.label : '', code: code ? code.code : '', code_pending: false,
+    code_label: !typed.code && code ? code.label || KINDS[code.kind]?.label : 'Code', code: typed.code || (code ? code.code : ''), code_pending: false,
+    mls_url: typed.mls_url || '', files: typed.files || [],
     access_note: [box && `${box.label}: ${box.location_note || ''}`, p?.showing_notes].filter(Boolean).join(' · '),
     // On our own listing the contact is the seller or tenant, not a listing agent.
-    agent: person ? [person.name, person.role && `(${person.role})`].filter(Boolean).join(' ') : '', agent_phone: person ? person.phone : '', confirmed: false, shown: false, notes: ''
+    agent: person ? [person.name, person.role && `(${person.role})`].filter(Boolean).join(' ') : '', agent_phone: person ? person.phone : '', confirmed: false, shown: false, notes: typed.notes || ''
   };
 }
 
@@ -1232,8 +1346,12 @@ function viewTour(id) {
   if (!t) return notFound();
   const stops = t.stops || [];
   const phones = [...new Set(stops.map((s) => s.agent_phone).filter(Boolean))];
-  const save = (patch) => store.save('tours', { id, ...patch });
-  const setStop = (sid, patch) => save({ stops: stops.map((s) => (s.id === sid ? { ...s, ...patch } : s)) });
+  const save = (patch, opts) => store.save('tours', { id, ...patch }, opts);
+  // Always from the store: a code typed on a card is saved quietly, so the
+  // stops this screen was drawn with may be older than what is stored.
+  const fresh = () => store.get('tours', id)?.stops || [];
+  const setStop = (sid, patch, opts) => save({ stops: fresh().map((s) => (s.id === sid ? { ...s, ...patch } : s)) }, opts);
+  const quietSave = (patch) => store.save('tours', { id, ...patch }, { quiet: true });
   // Occupancy in words: a bare "?" meant nothing to anyone (Cowork, 2026-10-23).
   const occ = (o) => (o === 'O' ? html`<span class="occ O">O</span><span class="occ-word">Occupied</span>` : o === 'V' ? html`<span class="occ V">V</span><span class="occ-word">Vacant</span>` : '');
   return {
@@ -1255,13 +1373,13 @@ function viewTour(id) {
             ${s.arrive == null ? html`<div class="small wait">Not on the map, so no time yet. Tap Edit stop to set one.</div>` : ''}
           </div>
         </div>
-        ${s.code || s.code_pending ? html`<div class="access-box"><span class="code-pill"><span class="k">${(s.code_label || 'Code').toUpperCase()}</span><span class="v">${s.code || 'Coming'}</span></span>${s.access_note ? html`<span>${s.access_note}</span>` : ''}</div>`
-          : s.access_note ? html`<div class="card pad small" style="background:var(--bg)">${s.access_note}</div>` : ''}
+        ${s.access_note ? html`<div class="card pad small" style="background:var(--bg)">${s.access_note}</div>` : ''}
+        ${s.code_pending && !s.code ? html`<div class="small wait">Code still coming</div>` : ''}
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
           <div style="min-width:0"><div style="font-weight:600">${s.agent || 'Listing agent'}</div><div class="small ${s.confirmed ? 'ok' : 'wait'}">${s.confirmed ? '✓ Confirmed' : '☐ Not confirmed yet'}</div></div>
           <div style="display:flex;gap:6px">${s.agent_phone ? html`<a class="icon-btn" href="tel:${digits(s.agent_phone)}" aria-label="Call">${icon('phone', 18)}</a><a class="icon-btn" href="${smsLink(s.agent_phone)}" aria-label="Text">${icon('text', 18)}</a>` : ''}</div>
         </div>
-        ${s.notes ? html`<div class="small" style="border-top:1px solid var(--line-soft);padding-top:8px"><b>Notes:</b> ${s.notes}</div>` : ''}
+        ${stopFieldsHtml(s, s.id)}
         ${s.reaction ? html`<button class="stop-react" type="button" data-react="${s.id}" aria-label="Their reaction: ${reactionLabel(s.reaction)}. Tap to change">${raw(reactionFace(s.reaction, { size: 34 }))}<span><b>${reactionLabel(s.reaction)}</b>${s.reaction_note ? html`<span class="small"> · ${s.reaction_note}</span>` : ''}</span></button>`
           : s.shown ? html`<button class="btn ghost block" type="button" data-react="${s.id}">How did they like it?</button>` : ''}
         <div class="btns">
@@ -1275,20 +1393,37 @@ function viewTour(id) {
       <button class="btn ghost block" type="button" id="deltour">${icon('trash', 16)}Delete this tour</button>
     </main>`,
     mount(root) {
+      wireStopFields(root, {
+        get: (k) => fresh().find((x) => x.id === k),
+        put: (k, patch, { added } = {}) => {
+          const before = fresh().find((x) => x.id === k) || {};
+          quietSave({ stops: fresh().map((x) => (x.id === k ? { ...x, ...patch } : x)) });
+          if (!before.property_id) return;
+          // On a saved property the code and pictures go on the property too.
+          if (patch.code && patch.code !== before.code && !store.where('access', 'property_id', before.property_id).some((a) => a.code === patch.code)) {
+            const label = before.code_label && before.code_label !== 'Code' ? before.code_label : 'Lockbox';
+            store.save('access', { property_id: before.property_id, kind: 'lockbox', label, code: patch.code }, { quiet: true });
+          }
+          if (added && added.length) {
+            const mls = added[0].kind === 'mls';
+            store.save('notes', { property_id: before.property_id, text: mls ? 'MLS sheet (from a tour)' : 'Photo note from a showing', source: mls ? 'mls_sheet' : 'showing_photo', files: added }, { quiet: true });
+          }
+        }
+      });
       root.querySelectorAll('[data-shown]').forEach((b) => b.addEventListener('click', () => {
-        const s = stops.find((x) => x.id === b.getAttribute('data-shown'));
+        const s = fresh().find((x) => x.id === b.getAttribute('data-shown'));
         setStop(s.id, { shown: !s.shown });
         if (!s.shown) setTimeout(() => reactionPicker(s), 300);
       }));
       root.querySelectorAll('[data-react]').forEach((b) => b.addEventListener('click', () => {
-        reactionPicker(stops.find((x) => x.id === b.getAttribute('data-react')));
+        reactionPicker(fresh().find((x) => x.id === b.getAttribute('data-react')));
       }));
       root.querySelectorAll('[data-confirm]').forEach((b) => b.addEventListener('click', () => {
-        const s = stops.find((x) => x.id === b.getAttribute('data-confirm'));
+        const s = fresh().find((x) => x.id === b.getAttribute('data-confirm'));
         setStop(s.id, { confirmed: !s.confirmed });
       }));
       root.querySelectorAll('[data-editstop]').forEach((b) => b.addEventListener('click', () => {
-        const s = stops.find((x) => x.id === b.getAttribute('data-editstop'));
+        const s = fresh().find((x) => x.id === b.getAttribute('data-editstop'));
         formSheet({
           title: s.address,
           fields: [

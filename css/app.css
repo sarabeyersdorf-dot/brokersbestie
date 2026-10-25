@@ -326,3 +326,15 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .install-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; line-height: 1.35; }
 [hidden] { display: none !important; }
 .update-bar { position: fixed; left: 12px; right: 12px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 60; min-height: 48px; padding: 10px 14px; border: 0; border-radius: 14px; background: var(--teal, #1FBFAE); color: #10201e; font: 700 15px/1.3 var(--sans, inherit); box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+/* a stop's own code, notes, MLS sheet and photo notes, typed on the card */
+.stopf { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line-soft, #e3e7e5); padding-top: 10px; min-width: 0; }
+.stopf .grid2 { gap: 8px; }
+.stopf .field input, .stopf .field textarea { min-width: 0; }
+.stopf .pages:empty { display: none; }
+.stopf .btns .btn { min-height: 44px; }
+.sfsave { display: flex; align-items: center; gap: 10px; }
+.sfsave .btn { min-height: 44px; padding: 0 22px; }
+.stopf-more { width: 100%; }
+.stopf-more > summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--teal-ink, #0b7d72); padding: 6px 0; min-height: 32px; }
+.stopf-more[open] > summary { margin-bottom: 4px; }
+.page .ftag { position: absolute; left: 2px; bottom: 2px; background: #202428; color: #fff; font: 700 10px/1 var(--tall); padding: 3px 5px; border-radius: 4px; letter-spacing: .05em; }

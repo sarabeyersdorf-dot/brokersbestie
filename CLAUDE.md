@@ -205,3 +205,26 @@ files (short-lived links), then they go through `addSheetFiles` like any other
 page. No token is stored. Needs `DROPBOX_APP_KEY` in `js/config.js` (public;
 allowed domains are set in the Dropbox App Console). With no key the button
 explains the Files-app route (Photo or PDF -> Browse -> Dropbox).
+
+## Codes, notes, MLS sheet and photo notes right on each stop (2026-10-25)
+
+Sara: "code and note field that dont open a new screen - user saves and it
+doesnt need to refresh ... upload mls sheet, link to it or snap a picture ...
+into each stop a place to snap and save picture notes."
+- `stopFieldsHtml` / `wireStopFields` (app.js) are the ONE set of stop fields:
+  Code, MLS link, Notes, MLS sheet (photo/PDF), Photo note (camera). Used in
+  the planner's check step (folded under "Code, notes, MLS sheet"; typed values
+  live in `plan.stops` and `tourStop()` carries them into the saved tour, a
+  typed code winning over the property's) and on every tour card.
+- On a tour card, Save (or leaving a box) stores with
+  `store.save(..., { quiet: true })`: no emit, so the page is not redrawn.
+  Because of that the card's handlers read stops FRESH from the store
+  (`fresh()` in viewTour), never the array the screen was drawn with.
+- Stop files are `stop.files = [{ id, type, kind: 'mls'|'photo', at }]` inside
+  `tours.stops` jsonb (no migration). `store.photoPath(f)` derives the storage
+  path, so a file added before its tour existed is still found elsewhere.
+- On a stop with a saved property, a new code is also added to the property's
+  access (if not already there) and files are filed as a property note
+  (`source` `mls_sheet` or `showing_photo`).
+- Add a property (new only) has "Getting in, notes & MLS sheet": code + kind,
+  notes, MLS link, snap or pick the sheet.
