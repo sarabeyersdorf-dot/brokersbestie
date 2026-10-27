@@ -411,3 +411,22 @@ copy does not deploy itself.
   first AND offers Undo. Ticking a to-do or deadline done offers Undo too.
 - **Bright sun mode**: Settings switch, `settings.highContrast` → `html.hc`
   (black on white, 18px, 2px black lines), applied on every screen.
+
+## Visual pass (2026-10-27) — supersedes the colour list above
+
+Sara: "do your recommendations". **One meaning per colour**:
+- **Teal = Bestie itself** (buttons, links, tabs, the header line). Nothing else.
+- **Kinds** (calendar, Today): Showing **purple** (`--k-showing`, was teal),
+  Appointment blue, Deadline orange (red once late), Closing green, To-do grey.
+- **Property status** (`--s-*`): My listing **rose**, Coming soon **gold**, In
+  escrow **brown**, Showing / other agent **slate**, Closed / Cancelled grey.
+  No colour appears in both lists.
+- Plain `.btn` is a quiet filled button with no outline; `.btn.dark` is the one
+  main action on a screen. Darker small text, labels and card edges.
+- Status on a property page is one line ("Status [pill] Change") that opens a
+  2-column picker (`details.status-pick`); read-only on a CRM property.
+- Unknown occupancy shows nothing (the lone "?" read as an error).
+- **The lockbox buddy**: `buddy(text, mood)` in app.js for empty spots
+  (properties, people, where things are, tours, buyers, vendors), a winking
+  buddy beside the morning greeting, and a "Tour done!" sheet with the love
+  face and "Send <buyer> the recap".

@@ -71,10 +71,16 @@ function modeBadge() {
   return html`<a class="mode" href="#/settings">${label}</a>`;
 }
 
+// The lockbox buddy in an empty spot (2026-10-27): friendlier than a bare line.
+function buddy(text, mood = 'wink') {
+  const face = mood === 'wink' ? winkFace({ size: 64, label: '' }) : mood === 'ok' ? okFace({ size: 64, label: '' }) : reactionFace(mood, { size: 64, label: '' });
+  return html`<div class="buddy-empty">${raw(face)}<span>${text}</span></div>`;
+}
+
 function badges(p, onDark) {
   const occ = p.occupancy === 'O' ? html`<span class="occ O" title="Occupied: keep the booked time">O</span>`
     : p.occupancy === 'V' ? html`<span class="occ V" title="Vacant">V</span>`
-    : html`<span class="occ q" title="Occupancy not known">?</span>`;
+    : ''; // unknown occupancy shows nothing: a lone "?" read like an error
   return html`<span class="badges">${occ}${p.well ? html`<span class="dot w" title="Well">W</span>` : ''}${p.septic ? html`<span class="dot s" title="Septic">S</span>` : ''}${onDark ? '' : ''}</span>`;
 }
 
@@ -558,7 +564,7 @@ function viewProps() {
       <div class="tabs">${tab('live', 'Active')}${tab('escrow', 'In escrow')}${tab('tour', 'Showing')}${tab('done', 'Closed')}</div>
       ${whoChips()}
       <label class="sortby">Sort<select id="propsort">${PROP_SORTS.map(([k, l]) => html`<option value="${k}" ${k === sortBy ? raw('selected') : ''}>${l}</option>`)}</select></label>
-      <div class="card list">${list.length ? list.map(propRow) : html`<div class="empty">Nothing here yet.</div>`}</div>
+      <div class="card list">${list.length ? list.map(propRow) : buddy('Nothing here yet. Add a listing or a home you are showing.')}</div>
     </main>`,
     mount(root) {
       root.querySelectorAll('[data-f]').forEach((b) => b.addEventListener('click', () => { propFilter = b.getAttribute('data-f'); render(); }));
@@ -715,11 +721,9 @@ function viewHub(id) {
       ${codes.length ? html`<section class="sec"><div class="label accent">Getting in</div>${codeBoxes(codes)}</section>` : html`<a class="card row" href="#/quick/lockbox/${id}"><span class="tile" style="border:0;padding:0"><span class="ic y">${icon('lockbox', 22)}</span></span><span class="grow"><span class="t">Add the lockbox or a code</span><span class="s">Gate, alarm, door keypad, hidden key</span></span></a>`}
       ${p.showing_notes ? html`<div class="card pad"><div class="label" style="margin-bottom:6px">Showing instructions</div><div style="white-space:pre-line">${p.showing_notes}</div></div>` : ''}
 
-      <section class="sec status-strip">
-        <div class="label">Status${p.source === 'crm' ? ' · set by your CRM' : ''}</div>
-        <div class="chips">${['prep', 'listing', 'escrow', 'tour', 'closed', 'cancelled'].map((k) => html`<button type="button" class="chip st ${p.status === k ? 'on st-' + k : ''}" data-status="${k}" ${p.source === 'crm' ? raw('disabled') : ''}>${STATUS[k]}</button>`)}</div>
-        ${p.source === 'crm' ? html`<div class="hint">Change it in your CRM; the next sync brings it here.</div>` : ''}
-      </section>
+      ${p.source === 'crm' ? html`<section class="sec status-strip"><div class="status-pick"><span class="label">Status</span> <span class="pill ${p.status}">${STATUS[p.status] || p.status}</span> <span class="small">set by your CRM</span></div></section>`
+        : html`<details class="sec status-pick"><summary><span class="label">Status</span><span class="pill ${p.status}">${STATUS[p.status] || 'Not set'}</span><span class="chg">Change</span></summary>
+        <div class="stat-opts">${['prep', 'listing', 'escrow', 'tour', 'closed', 'cancelled'].map((k) => html`<button type="button" class="stat-opt st-${k} ${p.status === k ? 'on' : ''}" data-status="${k}">${STATUS[k]}</button>`)}</div></details>`}
       <div class="tabs">${tab('overview', 'Overview')}${tab('where', `Where things are · ${spots.length}`)}${tab('people', `People · ${people.length}`)}${tab('notes', `Notes · ${notes.length}`)}</div>
 
       ${hubTab === 'overview' ? html`
@@ -749,12 +753,12 @@ function viewHub(id) {
         <div class="card list">${access.length ? access.map((a) => html`<button class="row" type="button" data-access="${a.id}">
           ${a.photo_id ? html`<img class="thumb" data-photo="${a.photo_id}" data-path="${a.photo_path || ''}" alt="">` : html`<span class="tile" style="border:0;padding:0"><span class="ic ${KINDS[a.kind]?.y ? 'y' : ''}" style="width:40px;height:40px">${icon(KINDS[a.kind]?.icon || 'pin', 20)}</span></span>`}
           <span class="grow"><span class="t">${a.label || KINDS[a.kind]?.label}${a.code ? html` · <span class="num">${a.code}</span>` : ''}</span><span class="s">${[a.location_note, KINDS[a.kind]?.tracked ? (a.status === 'office' ? 'Back in the office' : 'Out at the property') : ''].filter(Boolean).join(' · ')}</span></span>
-        </button>`) : html`<div class="empty">Nothing yet. Add the lockbox, sign, septic lids, shut-offs, with a photo.</div>`}</div>
+        </button>`) : buddy('Nothing yet. Add the lockbox, sign, septic lids, shut-offs, with a photo.')}</div>
         <a class="btn dark block" href="#/quick/lockbox/${id}">+ Add something</a>
       </section>` : ''}
 
       ${hubTab === 'people' ? html`<section class="sec">
-        <div class="card list">${people.length ? people.map(personRow) : html`<div class="empty">No one yet. Add the seller, tenant, escrow officer, the other agent.</div>`}</div>
+        <div class="card list">${people.length ? people.map(personRow) : buddy('No one yet. Add the seller, tenant, escrow officer, the other agent.')}</div>
         <div class="btns"><a class="btn dark" href="#/quick/contact/${id}">+ Add a person</a><button class="btn" type="button" id="fromvendors">${icon('person', 18)}From my vendors</button></div>
       </section>` : ''}
 
@@ -863,7 +867,7 @@ function viewVendors() {
       <label class="field"><span>Search</span><input id="vq" type="search" value="${vendorQuery}" placeholder="Name, company or trade" autocomplete="off"></label>
       <button class="btn dark block" type="button" id="addvendor">+ Add a vendor</button>
       ${groups.length ? groups.map(([t, l]) => html`<section class="sec"><div class="label">${t} · ${l.length}</div><div class="card list">${l.map((v) => vendorRow(v))}</div></section>`)
-        : html`<div class="empty card pad">${vendorQuery ? `No vendor matches “${vendorQuery}”.` : 'No vendors yet. Add your inspector, title rep, lender, stager, handyman: anyone you call on more than one deal.'}</div>`}
+        : html`<div class="card">${buddy(vendorQuery ? `No vendor matches “${vendorQuery}”.` : 'No vendors yet. Add your inspector, title rep, lender, stager, handyman: anyone you call on more than one deal.')}</div>`}
     </main>`,
     mount(root) {
       const q = root.querySelector('#vq');
@@ -1505,7 +1509,7 @@ function viewTours() {
     <main class="wrap">
       <a class="card row" href="#/plan">${icon('mic', 22)}<span class="grow"><span class="t">Talk to plan a tour</span><span class="s">Addresses in any order; I'll route them</span></span>${icon('chev', 18)}</a>
       <a class="card row" href="#/buyers">${raw(reactionFace('like', { size: 26, label: '' }))}<span class="grow"><span class="t">Buyers</span><span class="s">Every home each buyer saw, and what they thought</span></span>${icon('chev', 18)}</a>
-      <div class="card list">${list.length ? list.map((t) => html`<a class="row" href="#/tour/${t.id}"><span class="grow"><span class="t">${t.name}</span><span class="s">${niceDate(t.date)} · ${(t.stops || []).length} stops${t.finished ? ' · done' : ''}</span></span>${icon('chev', 18)}</a>`) : html`<div class="empty">No tours yet.</div>`}</div>
+      <div class="card list">${list.length ? list.map((t) => html`<a class="row" href="#/tour/${t.id}"><span class="grow"><span class="t">${t.name}</span><span class="s">${niceDate(t.date)} · ${(t.stops || []).length} stops${t.finished ? ' · done' : ''}</span></span>${icon('chev', 18)}</a>`) : buddy('No tours yet. Tap Plan a tour and read me the addresses.')}</div>
     </main>`
   };
 }
@@ -1660,7 +1664,17 @@ function viewTour(id) {
           onSave(v) {
             const trip = v.miles ? store.save('trips', { date: t.date, purpose: v.purpose || t.name, from_place: t.start_place, to_place: stops.map((s) => s.address).join(' → '), miles: v.miles, tour_id: id }) : null;
             save({ finished: true, trip_id: trip?.id || null });
-            toast(trip ? 'Tour done. Miles logged.' : 'Tour done');
+            const shown = stops.filter((x) => x.shown).length;
+            setTimeout(() => openSheet(html`<div class="sec" style="text-align:center">
+              <div class="buddy-empty">${raw(reactionFace('love', { size: 96, label: '' }))}</div>
+              <div class="title" style="font-family:var(--tall);font-weight:800;font-size:30px;text-transform:uppercase">Tour done!</div>
+              <div>${shown} of ${stops.length} home${stops.length === 1 ? '' : 's'} shown${trip ? ` · ${v.miles} miles logged` : ''}.</div>
+              ${shown ? html`<button class="btn dark big block" type="button" id="donerecap">${icon('text', 18)}Send ${buyerOf(t) ? buyerOf(t).split(' ')[0] : 'your buyer'} the recap</button>` : ''}
+              <button class="btn ghost block" type="button" id="doneclose">Close</button>
+            </div>`, (sh) => {
+              sh.querySelector('#doneclose').addEventListener('click', closeSheet);
+              sh.querySelector('#donerecap')?.addEventListener('click', () => { closeSheet(); setTimeout(() => document.querySelector('#recap')?.click(), 150); });
+            }), 200);
           }
         });
       });
@@ -1693,7 +1707,7 @@ function viewBuyers() {
       <div class="card list">${list.length ? list.map((b) => {
         const faces = b.homes.filter((h) => h.reaction).slice(0, 5);
         return html`<a class="row" href="#/buyer/${encodeURIComponent(b.key)}"><span class="grow"><span class="t">${b.name}</span><span class="s">${b.homes.length} home${b.homes.length === 1 ? '' : 's'} seen · ${b.tours.length} tour${b.tours.length === 1 ? '' : 's'} · last ${niceDate(b.last)}</span></span><span class="face-row">${faces.map((h) => raw(reactionFace(h.reaction, { size: 22, label: '' })))}</span>${icon('chev', 18)}</a>`;
-      }) : html`<div class="empty">No buyers yet. When you plan a tour, put the buyer's name in "Who is it for?".</div>`}</div>
+      }) : buddy('No buyers yet. When you plan a tour, put the buyer\'s name in “Who is it for?”.')}</div>
     </main>`
   };
 }
@@ -2791,8 +2805,8 @@ function briefingCard() {
     b.lateDates.length ? `${b.lateDates.length} deadline${b.lateDates.length === 1 ? '' : 's'} passed, not marked done` : ''
   ].filter(Boolean);
   return html`<section class="card pad sec brief">
-    <div class="sec-head"><div><div class="label accent">${hello}</div><div class="brief-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div></div>
-      <button class="btn" type="button" id="readbrief" style="min-height:40px;white-space:nowrap">${icon('speak', 18)}Read it to me</button></div>
+    <div class="sec-head"><div class="hi-wrap"><span class="buddy-hi">${raw(winkFace({ size: 36, label: '' }))}</span><div><div class="label accent">${hello}</div><div class="brief-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div></div></div>
+      <button class="btn" type="button" id="readbrief" style="min-height:40px;white-space:nowrap" aria-label="Read it to me">${icon('speak', 18)}Listen</button></div>
     <ul class="brief-facts">${facts.map((f) => html`<li>${f}</li>`)}</ul>
     ${shownTimed.length ? html`<div class="card list">${shownTimed.map((i) => dayItemRow(i))}</div>` : ''}
     ${b.deadlines.length ? html`<div class="small">${b.deadlines.slice(0, 4).map((d) => `${d.label} · ${addr(d.property_id)} · ${whenSaid(d.due, b.day)}`).join(' — ')}</div>` : ''}
@@ -2809,7 +2823,7 @@ function readBriefing(button) {
   const say = new SpeechSynthesisUtterance(text);
   say.lang = 'en-US';
   say.rate = 1;
-  if (button) { button.textContent = 'Stop reading'; say.onend = say.onerror = () => { button.innerHTML = str(html`${icon('speak', 18)}Read it to me`); }; }
+  if (button) { button.textContent = 'Stop'; say.onend = say.onerror = () => { button.innerHTML = str(html`${icon('speak', 18)}Listen`); }; }
   speechSynthesis.speak(say);
 }
 

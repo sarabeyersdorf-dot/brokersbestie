@@ -440,3 +440,71 @@ html.hc .nav a { color: #000; }
 .toast[hidden] { display: none; }
 .toast-undo { margin-left: 0; flex-shrink: 0; }
 .toast { min-width: min(340px, calc(100% - 32px)); }
+
+/* ---------- Visual pass (Sara, 2026-10-27: "do your recommendations") ----------
+   1. One meaning per colour. Teal is Bestie itself (buttons, links, tabs,
+      header line) and nothing else. Calendar KINDS and property STATUSES each
+      have their own colours, no colour shared between the two lists:
+        kinds:    Showing purple · Appointment blue · Deadline orange ·
+                  Closing green · To-do grey
+        statuses: My listing rose · Coming soon gold · In escrow brown ·
+                  Showing (other agent) slate · Closed / Cancelled grey
+   2. One loud button per screen: plain .btn is now a quiet filled button with
+      no outline; .btn.dark stays the main action.
+   3. More contrast: darker canvas lines, darker small text and labels. */
+:root {
+  --k-showing: #6d3fc0;
+  --s-listing: #b3305f;
+  --s-prep: #8a6a00;
+  --s-escrow: #7a4a1f;
+  --s-tour: #3f4f63;
+  --s-closed: #c5ccc9;
+  --ink-2: #353b3e;
+  --mute: #4a5154;
+  --line: #c4cbc8;
+  --bg: #e9ecea;
+}
+.pill.listing { background: var(--s-listing); color: #fff; }
+.pill.prep { background: var(--s-prep); color: #fff; }
+.pill.escrow { background: var(--s-escrow); color: #fff; }
+.pill.tour { background: var(--s-tour); color: #fff; }
+.pill.closed, .pill.cancelled { background: var(--s-closed); color: var(--ink); }
+.row.st-listing { box-shadow: inset 5px 0 0 var(--s-listing); }
+.row.st-prep { box-shadow: inset 5px 0 0 var(--s-prep); }
+.row.st-escrow { box-shadow: inset 5px 0 0 var(--s-escrow); }
+.row.st-tour { box-shadow: inset 5px 0 0 var(--s-tour); }
+.row.st-closed, .row.st-cancelled { box-shadow: inset 5px 0 0 var(--s-closed); }
+.chip.st.st-listing.on, .stat-opt.st-listing.on { background: var(--s-listing); border-color: var(--s-listing); color: #fff; }
+.chip.st.st-prep.on, .stat-opt.st-prep.on { background: var(--s-prep); border-color: var(--s-prep); color: #fff; }
+.chip.st.st-escrow.on, .stat-opt.st-escrow.on { background: var(--s-escrow); border-color: var(--s-escrow); color: #fff; }
+.chip.st.st-tour.on, .stat-opt.st-tour.on { background: var(--s-tour); border-color: var(--s-tour); color: #fff; }
+
+.btn { border-color: transparent; background: #dfe3e1; }
+.btn:active { background: #d2d7d5; }
+.card .btn:not(.dark):not(.teal):not(.red):not(.green):not(.ghost):not(.door-btn) { background: #eef0ef; }
+.btn.ghost { background: transparent; }
+.card { border-color: var(--line); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+.label { font-size: 12.5px; }
+.sec-head .label, section > .label { color: var(--ink); }
+.empty { color: var(--ink-2); }
+
+/* 5. Status as one line that opens */
+details.status-pick > summary { list-style: none; display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+details.status-pick > summary::-webkit-details-marker { display: none; }
+details.status-pick > summary .pill { font-size: 13px; padding: 6px 12px; border-radius: 6px; }
+details.status-pick > summary .chg { color: var(--teal-text); font-weight: 700; font-size: 14px; }
+details.status-pick[open] > summary .chg { visibility: hidden; }
+.stat-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+.stat-opt { min-height: 44px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--card); font: 600 15px var(--sans); color: var(--ink); cursor: pointer; }
+.stat-opt:disabled { opacity: .55; }
+
+/* 4. The lockbox buddy in empty states and the greeting */
+.buddy-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 14px; text-align: center; color: var(--ink-2); font-size: 15px; }
+.buddy-empty svg { width: 64px; height: auto; }
+.brief .buddy-hi { float: right; margin: -2px 0 0 8px; }
+.brief .buddy-hi svg { width: 44px; height: auto; }
+.brief .hi-wrap { display: flex; align-items: center; gap: 10px; }
+.brief .buddy-hi { float: none; margin: 0; flex-shrink: 0; }
+.brief .buddy-hi svg { width: 34px; }
+.brief .hi-wrap { min-width: 0; }
+.brief .brief-date { line-height: 1.05; }
