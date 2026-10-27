@@ -101,3 +101,28 @@ test('open house: a visit needs a name and a phone or email; agent name only wit
   assert.equal(v.consent, true);
   assert.equal(cleanVisit({ first_name: 'A', phone: '2095551212', consent: 'true' }).consent, false, 'only a real tick counts');
 });
+
+import { driveMin, originOf } from '../supabase/functions/reminders/due.js';
+
+test('leave by: with a fresh phone location and a pinned property, the reminder comes at the time to leave', () => {
+  const home = { lat: 38.0682, lng: -120.5397 }; // Angels Camp
+  const prop = { id: 'p', address: '433 E Highway 4, Murphys', lat: 38.1377, lng: -120.4599 }; // Murphys
+  const d = driveMin(home, prop);
+  assert.ok(d >= 10 && d <= 25, `drive ${d}`);
+  const start = 600 + d + 5 + 30; // leave time is 30 min after "now" (10:00)
+  const sub = { tz: 'America/Los_Angeles', lead_minutes: 30, from_lat: home.lat, from_lng: home.lng, from_at: '2026-10-28T16:30:00Z' };
+  const ev = { id: 'e', date: '2026-10-28', start_minutes: start, title: 'Inspection', property_id: 'p' };
+  assert.deepEqual(dueReminders(sub, { properties: [prop], events: [ev] }, now), [], 'not yet: 30 min before leaving');
+  const later = new Date(now.getTime() + 30 * 60000);
+  const [r] = dueReminders(sub, { properties: [prop], events: [ev] }, later);
+  assert.match(r.title, /^Leave now: Inspection at/);
+  assert.equal(r.body, `About ${d} min to 433 E Highway 4`);
+});
+
+test('leave by: an old phone location falls back to home base, and with neither the fixed reminder is used', () => {
+  const sub = { from_lat: 1, from_lng: 1, from_at: '2026-10-27T00:00:00Z', base_lat: 2, base_lng: 2 };
+  assert.deepEqual(originOf(sub, now), { lat: 2, lng: 2 });
+  assert.equal(originOf({}, now), null);
+  const r = dueReminders({ tz: 'America/Los_Angeles', lead_minutes: 30 }, { events: [{ id: 'x', date: '2026-10-28', start_minutes: 620, title: 'Walk-through' }] }, now);
+  assert.equal(r[0].title, 'Walk-through at 10:20 AM');
+});

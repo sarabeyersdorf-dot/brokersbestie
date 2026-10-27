@@ -39,7 +39,8 @@ export async function turnOn(lead = 30) {
   const reg = await navigator.serviceWorker.ready;
   const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromB64u(publicKey) }));
   const j = sub.toJSON();
-  const row = { id: await idFor(j.endpoint), team_id: c.teamId, owner: (store.settings().myName || '').toLowerCase() || null, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, lead_minutes: lead, updated_at: new Date().toISOString() };
+  const row = { id: await idFor(j.endpoint), team_id: c.teamId, owner: (store.settings().myName || '').toLowerCase() || null, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, lead_minutes: lead, updated_at: new Date().toISOString(),
+    base_lat: store.settings().homeBase?.lat ?? null, base_lng: store.settings().homeBase?.lng ?? null };
   const { error } = await c.client.from('push_subs').upsert(row);
   if (error) throw new Error(error.message);
   store.saveSettings({ pushLead: lead, pushOn: true });
@@ -92,4 +93,18 @@ export async function openHouseLink(propertyId) {
   const { data, error } = await c.client.from('oh_links').insert({ team_id: c.teamId, property_id: propertyId, owner: (store.settings().myName || '').toLowerCase() || null }).select('token').single();
   if (error) throw new Error(error.message);
   return `${location.origin}/oh.html?t=${data.token}`;
+}
+
+// "Leave by" reminders: tell the reminder service where this phone last was.
+// Only when reminders are on, only a location Bestie already had (no extra
+// GPS), at most every 10 minutes.
+let lastWhere = 0;
+export async function shareWhere(fix) {
+  if (!fix || !store.settings().pushOn || !store.cloud.user || Date.now() - lastWhere < 600000) return;
+  lastWhere = Date.now();
+  try {
+    const sub = await currentSub();
+    if (!sub) return;
+    await store.cloud.client.from('push_subs').update({ from_lat: fix.lat, from_lng: fix.lng, from_at: new Date().toISOString(), base_lat: store.settings().homeBase?.lat ?? null, base_lng: store.settings().homeBase?.lng ?? null }).eq('id', await idFor(sub.endpoint));
+  } catch {}
 }

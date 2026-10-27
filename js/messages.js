@@ -144,3 +144,11 @@ export function sellerUpdateText(p, st, { seller = '', profile = null, me = '' }
   const sig = signOff(profile, me);
   return lines.join('\n') + (sig ? `\n${sig}` : '');
 }
+
+// Asking the agent who showed my listing for feedback (2026-10-27).
+export function feedbackRequestText({ agent = '', address = '', date = '', today = '', profile = null, me = '' } = {}) {
+  const when = !date || date === today ? 'today' : `on ${dayWord(date).split(',')[0]}`;
+  const hi = agent ? `Hi ${first(agent)}, ` : 'Hi, ';
+  const sig = signOff(profile, me);
+  return `${hi}thank you for showing ${street(address)} ${when}. How did your buyers like it? Any feedback on price, condition or anything else helps my sellers, and if they are interested I am happy to answer questions.${sig ? `\n${sig}` : ''}`;
+}

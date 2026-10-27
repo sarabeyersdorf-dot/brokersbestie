@@ -10,11 +10,11 @@ import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
 import { chooseFromDropbox, dropboxReady } from './dropbox.js';
 import { CRM_CHOICES } from './crmlist.js';
-import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText } from './messages.js';
+import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText, feedbackRequestText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
-import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink } from './push.js';
+import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink, shareWhere } from './push.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, doorCodes } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, doorCodes, feedbackDue } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -124,7 +124,7 @@ function locate({ quiet } = {}) {
     if (!navigator.geolocation) return resolve(null);
     if (lastFix && Date.now() - lastFix.t < 60000) return resolve(lastFix);
     navigator.geolocation.getCurrentPosition(
-      (pos) => { lastFix = { lat: pos.coords.latitude, lng: pos.coords.longitude, t: Date.now() }; resolve(lastFix); },
+      (pos) => { lastFix = { lat: pos.coords.latitude, lng: pos.coords.longitude, t: Date.now() }; shareWhere(lastFix); resolve(lastFix); },
       () => { if (!quiet) toast('Could not get your location'); resolve(null); },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
@@ -373,6 +373,48 @@ function todoItems() {
   return items;
 }
 
+// Feedback from the agents who showed my listings (2026-10-27): ask by text,
+// then log their answer as a "Showing feedback" note (it goes into the weekly
+// seller update).
+function feedbackCard() {
+  const now = new Date();
+  const due = feedbackDue(store.snapshot(), todayIso(), now.getHours() * 60 + now.getMinutes(), firstName(store.settings().myName) || null);
+  if (!due.length) return '';
+  return html`<div class="card pad sec"><div class="label accent">Showing feedback · ${due.length}</div>
+    <div class="small">Agents who showed your listings. Ask them, then log what they said: it goes into the seller update.</div>
+    <div class="card list" style="margin-top:8px">${due.slice(0, 6).map(({ event: e, property: p, stage }) => html`<div class="row">
+      <span class="grow"><span class="t">${e.showing_agent || 'Showing'} · ${p.address.split(',')[0]}</span><span class="s">${niceDate(e.date)}${stage === 'log' ? ' · asked, waiting to hear back' : ''}</span></span>
+      ${stage === 'ask' ? html`<button class="btn dark" type="button" data-fbask="${e.id}" style="min-height:40px">Ask</button>` : html`<button class="btn" type="button" data-fblog="${e.id}" style="min-height:40px">Log it</button>`}
+    </div>`)}</div></div>`;
+}
+function askFeedback(id) {
+  const e = store.get('events', id);
+  const p = e && prop(e.property_id);
+  if (!e || !p) return;
+  composeSheet({
+    title: 'Ask for feedback',
+    sub: `To ${e.showing_agent || 'the agent who showed it'}. When they answer, tap “Log it”.`,
+    askContact: true, phone: e.showing_agent_phone || '',
+    body: feedbackRequestText({ agent: e.showing_agent, address: p.address, date: e.date, today: todayIso(), profile: myProfile(), me: store.settings().myName }),
+    onSent: ({ phone } = {}) => store.save('events', { id, feedback_asked_at: new Date().toISOString(), showing_agent_phone: phone || e.showing_agent_phone || '' })
+  });
+}
+function logFeedback(id) {
+  const e = store.get('events', id);
+  if (!e) return;
+  formSheet({
+    title: 'What did they say?',
+    fields: [{ name: 'text', label: `${e.showing_agent || 'Their'} feedback`, type: 'textarea', mic: true, placeholder: 'Loved the views, buyers worried about the road' }],
+    saveLabel: 'Save feedback',
+    onSave(v) {
+      if (!v.text.trim()) { toast('Type or say what they said'); return false; }
+      store.save('notes', { property_id: e.property_id, text: `Showing feedback: ${v.text.trim()}${e.showing_agent ? ` (${e.showing_agent})` : ''}` });
+      store.save('events', { id, feedback_logged_at: new Date().toISOString() });
+      toast('Saved. It goes into the next seller update.');
+    }
+  });
+}
+
 // Weekly seller updates waiting (2026-10-27). "Next week" hides the card for 7 days.
 const sellerDueHidden = () => { try { return (localStorage.getItem('bb:sellerdue') || '') > todayIso(); } catch { return false; } };
 function sellerDueCard() {
@@ -454,6 +496,7 @@ function viewToday() {
           : html`<button class="row ${colorClass(t.ck, t.late)}" type="button" data-done="${t.table}:${t.id}"><span class="check"></span><span class="grow"><span class="t">${t.text}</span><span class="s ${t.late ? 'wait' : ''}">${ktag(t.ck, t.late)}${t.sub}</span></span></button>`) : html`<div class="empty">${todos.length ? 'Nothing of that kind today.' : 'Nothing due. Nice.'}</div>`}</div>
       </section>` : ''}
 
+      ${!searchText ? feedbackCard() : ''}
       ${!searchText ? sellerDueCard() : ''}
       <section class="sec">
         <div class="sec-head"><div class="label">Quick add${hp ? ' · files to ' + hp.address : ''}</div><a href="#/quick" class="small" style="color:var(--teal-text);font-weight:600">All →</a></div>
@@ -484,6 +527,8 @@ function viewToday() {
     mount(root) {
       wireInstall(root, { onHide: () => { try { localStorage.setItem('bb:installhide', '1'); } catch {} } });
       root.querySelector('#profnot')?.addEventListener('click', () => { try { localStorage.setItem('bb:profnudge', '1'); } catch {} root.querySelector('[data-profnudge]')?.remove(); });
+      root.querySelectorAll('[data-fbask]').forEach((b) => b.addEventListener('click', () => askFeedback(b.getAttribute('data-fbask'))));
+      root.querySelectorAll('[data-fblog]').forEach((b) => b.addEventListener('click', () => logFeedback(b.getAttribute('data-fblog'))));
       root.querySelectorAll('[data-sellerupd]').forEach((b) => b.addEventListener('click', () => sellerUpdateSheet(b.getAttribute('data-sellerupd'))));
       root.querySelector('#sellerdueno')?.addEventListener('click', () => { try { localStorage.setItem('bb:sellerdue', addDays(todayIso(), 6)); } catch {} root.querySelector('[data-sellerdue]')?.remove(); });
       const q = root.querySelector('#q');
@@ -2449,7 +2494,7 @@ function viewSettings() {
 
       <section class="card pad sec" id="pushcard">
         <div class="label accent">Reminders on this phone</div>
-        <div class="small">A tap on the shoulder before each showing and appointment, a 7:30 list of what is due today, and an “Are you OK?” when a safety check-in runs out.</div>
+        <div class="small">A tap on the shoulder when it is time to leave for each showing and appointment (from where you last were, else your home base, using the drive time), a 7:30 list of what is due today, and an “Are you OK?” when a safety check-in runs out.</div>
         ${pushCardBody(c, s)}
       </section>
 
@@ -2773,14 +2818,16 @@ function eventSheet(e, prefill = {}) {
       { name: 'minutes', label: 'How long', type: 'select', options: [['15', '15 min'], ['30', '30 min'], ['45', '45 min'], ['60', '1 hour'], ['90', '1½ hours'], ['120', '2 hours'], ['180', '3 hours']] },
       { name: 'property_id', label: 'Property', type: 'select', options: [['', '— none —'], ...props().map((p) => [p.id, p.address])] },
       { name: 'location', label: 'Where (if not the property)', placeholder: 'Title office, 125 Main St' },
-      { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'With the Smiths. Bring the CMA.' }
+      { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'With the Smiths. Bring the CMA.' },
+      { name: 'showing_agent', label: 'Showing agent (on your listing, for feedback)', placeholder: 'Pat Lee' },
+      { name: 'showing_agent_phone', label: 'Their phone', type: 'tel' }
     ],
     values: { ...v, minutes: String(v.minutes || 30), property_id: v.property_id || '' },
     extra: e && store.crmLinked(e) ? html`<div class="note-box">On your CRM's calendar too. A change or delete here goes to the CRM at the next sync.</div>` : '',
     onSave(f) {
       if (!f.title && !f.property_id) { toast('Say what it is'); return false; }
       if (!f.date) { toast('Pick the date'); return false; }
-      store.save('events', { ...(e ? { id: e.id } : {}), title: f.title || `${kindLabel(f.kind)} · ${addr(f.property_id)}`, kind: f.kind, date: f.date, start_minutes: timeToMinutes(f.time), minutes: Number(f.minutes) || null, property_id: f.property_id || null, location: f.location, notes: f.notes, done: e ? !!e.done : false });
+      store.save('events', { ...(e ? { id: e.id } : {}), title: f.title || `${kindLabel(f.kind)} · ${addr(f.property_id)}`, kind: f.kind, date: f.date, start_minutes: timeToMinutes(f.time), minutes: Number(f.minutes) || null, property_id: f.property_id || null, location: f.location, notes: f.notes, showing_agent: f.showing_agent || '', showing_agent_phone: f.showing_agent_phone || '', done: e ? !!e.done : false });
       toast(e ? 'Saved' : `Added to ${dayHeading(f.date).toLowerCase() === 'today' ? 'today' : niceDate(f.date)}`);
     },
     // A CRM appointment is cancelled, not removed: the CRM is told at the next

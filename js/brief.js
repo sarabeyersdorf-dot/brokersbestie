@@ -270,3 +270,22 @@ export function doorCodes(stop, saved = [], kindLabel = (k) => k) {
   for (const a of saved) add(a.label || kindLabel(a.kind), a.code, a.location_note || '');
   return out;
 }
+
+// ---------- feedback from agents who showed MY listing (2026-10-27) ----------
+// A showing on one of my listings that has happened in the last 7 days:
+// 'ask' when the showing agent has not been asked yet, 'log' once asked and
+// their answer is not in yet. Drops off when logged or after 7 days.
+export function feedbackDue(data, today, nowMin, who = null) {
+  const props = new Map((data.properties || []).map((p) => [p.id, p]));
+  const from = addDays(today, -7);
+  const out = [];
+  for (const e of data.events || []) {
+    const p = props.get(e.property_id);
+    if (!p || p.status !== 'listing' || e.kind !== 'showing' || e.cancelled || e.feedback_logged_at) continue;
+    if (!isWhose(p.owner, who) || !e.date || e.date < from || e.date > today) continue;
+    const over = e.date < today || (e.start_minutes != null && nowMin >= e.start_minutes + (e.minutes || 30));
+    if (!over) continue;
+    out.push({ event: e, property: p, stage: e.feedback_asked_at ? 'log' : 'ask' });
+  }
+  return out.sort((a, b) => String(b.event.date).localeCompare(String(a.event.date)));
+}

@@ -144,3 +144,23 @@ test('seller updates are due on my listings not updated in 7 days', () => {
   ];
   assert.deepEqual(sellerUpdatesDue(props, today, 'sara').map((p) => p.id), ['a', 'c']);
 });
+
+import { feedbackRequestText } from '../js/messages.js';
+import { feedbackDue } from '../js/brief.js';
+
+test('feedback from the agents who showed my listing: ask, then log, then gone', () => {
+  const data = {
+    properties: [{ id: 'm', address: '433 E Highway 4', status: 'listing', owner: 'sara' }, { id: 'o', address: '9 Oak', status: 'tour' }],
+    events: [
+      { id: 'a', property_id: 'm', kind: 'showing', date: '2026-10-26', showing_agent: 'Pat Lee' },
+      { id: 'b', property_id: 'm', kind: 'showing', date: '2026-10-27', start_minutes: 540, minutes: 30, feedback_asked_at: 'x' },
+      { id: 'c', property_id: 'm', kind: 'showing', date: '2026-10-27', start_minutes: 700 },
+      { id: 'd', property_id: 'm', kind: 'showing', date: '2026-10-25', feedback_logged_at: 'x' },
+      { id: 'e', property_id: 'o', kind: 'showing', date: '2026-10-26' },
+      { id: 'f', property_id: 'm', kind: 'showing', date: '2026-10-10' }
+    ]
+  };
+  const r = feedbackDue(data, '2026-10-27', 600, 'sara');
+  assert.deepEqual(r.map((x) => [x.event.id, x.stage]), [['b', 'log'], ['a', 'ask']]);
+  assert.match(feedbackRequestText({ agent: 'Pat Lee', address: '433 E Highway 4, Murphys', date: '2026-10-26', today: '2026-10-27', me: 'sara' }), /^Hi Pat, thank you for showing 433 E Highway 4 on Monday\. How did your buyers like it\?/);
+});

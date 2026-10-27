@@ -83,7 +83,7 @@ async function run(cfg: any) {
   let sent = 0;
   for (const [team, list] of byTeam) {
     const [props, events, tours, dates, tasks, checkins] = await Promise.all([
-      db.from('properties').select('id, address, owner').eq('team_id', team),
+      db.from('properties').select('id, address, owner, lat, lng').eq('team_id', team),
       db.from('events').select('*').eq('team_id', team).gte('date', lo).lte('date', hi),
       db.from('tours').select('id, name, date, start_minutes, finished, owner, stops').eq('team_id', team).gte('date', lo).lte('date', hi),
       db.from('dates').select('id, label, due, done, property_id').eq('team_id', team).gte('due', lo).lte('due', hi),

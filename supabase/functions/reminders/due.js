@@ -1,7 +1,11 @@
 // What one phone should be reminded of right now. Pure, so it is tested in
 // Node (test/reminders.test.mjs) and run by the Edge Function every 5 minutes.
 //
-//  - an appointment or a tour with a start time: `lead` minutes before it
+//  - an appointment or a tour with a start time: `lead` minutes before it, or,
+//    when Bestie knows where the agent is (last location from the phone, else
+//    their home base) and where the appointment is, at the time to LEAVE:
+//    drive time (straight line x 1.35 road factor at 40 mph, as route.js) + 5
+//    minutes to park (2026-10-27, "Leave now: 22 min to 433 E Hwy 4")
 //  - the morning list (7:30 their time): today's deadlines, to-dos and the
 //    count of appointments, once a day, only when there is something
 //  - a safety check-in whose time is up: "Are you OK?", to that agent only
@@ -19,6 +23,23 @@ const street = (a) => String(a || '').split(',')[0].trim();
 export const forOwner = (itemOwner, subOwner) => !itemOwner || itemOwner === 'both' || !subOwner || itemOwner === subOwner;
 
 export const MORNING_MIN = 7 * 60 + 30;
+export const PARK_MIN = 5;
+const FRESH_MS = 3 * 3600e3; // a phone location older than this is not used
+
+function miles(a, b) {
+  const rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * 3958.8 * Math.asin(Math.sqrt(h));
+}
+export const driveMin = (a, b) => Math.round(((miles(a, b) * 1.35) / 40) * 60);
+// Where the agent is starting from: the phone's last location when fresh,
+// else their home base, else unknown.
+export function originOf(sub, now = new Date()) {
+  if (sub.from_lat != null && sub.from_lng != null && sub.from_at && now - new Date(sub.from_at) < FRESH_MS) return { lat: sub.from_lat, lng: sub.from_lng };
+  if (sub.base_lat != null && sub.base_lng != null) return { lat: sub.base_lat, lng: sub.base_lng };
+  return null;
+}
 
 export function dueReminders(sub, data, now = new Date()) {
   const { day, min } = localNow(now, sub.tz);
@@ -28,11 +49,21 @@ export function dueReminders(sub, data, now = new Date()) {
   const out = [];
   const soon = (start) => start != null && start > min && start - min <= lead;
 
+  const origin = originOf(sub, now);
   for (const e of data.events || []) {
-    if (e.date !== day || e.cancelled || e.done || !soon(e.start_minutes)) continue;
+    if (e.date !== day || e.cancelled || e.done || e.start_minutes == null || e.start_minutes <= min) continue;
     if (!forOwner(ownerOf(e.owner, e.property_id), sub.owner)) continue;
-    const where = e.location || street((props.get(e.property_id) || {}).address);
-    out.push({ key: `ev:${e.id}:${e.date}:${e.start_minutes}`, title: `${e.title || 'Appointment'} at ${clock(e.start_minutes)}`, body: [where, `in ${e.start_minutes - min} min`].filter(Boolean).join(' · '), url: e.property_id ? `#/p/${e.property_id}` : '#/calendar' });
+    const p = props.get(e.property_id) || {};
+    const where = e.location || street(p.address);
+    const url = e.property_id ? `#/p/${e.property_id}` : '#/calendar';
+    const key = `ev:${e.id}:${e.date}:${e.start_minutes}`;
+    const drive = origin && p.lat != null && p.lng != null ? driveMin(origin, p) : null;
+    if (drive != null && drive >= 3) {
+      const leave = e.start_minutes - drive - PARK_MIN;
+      if (min >= leave) out.push({ key, title: `Leave now: ${e.title || 'Appointment'} at ${clock(e.start_minutes)}`, body: `About ${drive} min to ${street(p.address) || where}`, url });
+    } else if (soon(e.start_minutes)) {
+      out.push({ key, title: `${e.title || 'Appointment'} at ${clock(e.start_minutes)}`, body: [where, `in ${e.start_minutes - min} min`].filter(Boolean).join(' · '), url });
+    }
   }
   for (const t of data.tours || []) {
     if (t.date !== day || t.finished || !soon(t.start_minutes)) continue;
