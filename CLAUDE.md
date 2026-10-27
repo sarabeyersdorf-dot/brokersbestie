@@ -202,7 +202,8 @@ Sara: "in the upload MLS option add a dropbox option". `js/dropbox.js` opens
 Dropbox's own Chooser (`dropins.js`, `linkType: 'direct'`): the agent signs in
 to their own Dropbox in Dropbox's window and Bestie downloads only the picked
 files (short-lived links), then they go through `addSheetFiles` like any other
-page. No token is stored. Needs `DROPBOX_APP_KEY` in `js/config.js` (public;
+page. No token is stored. `DROPBOX_APP_KEY` in `js/config.js` (public; set
+2026-10-27, app "Brokers Bestie" in Sara's Dropbox App Console;
 allowed domains are set in the Dropbox App Console). With no key the button
 explains the Files-app route (Photo or PDF -> Browse -> Dropbox).
 
