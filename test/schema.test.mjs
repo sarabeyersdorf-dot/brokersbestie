@@ -107,3 +107,7 @@ test('an MLS sheet note has its columns', () => {
 test('a tour knows its buyer', () => {
   assert.ok(columns('tours').has('buyer'), 'tours.buyer');
 });
+
+test('a tour can keep where its recap went', () => {
+  for (const c of ['buyer_phone', 'buyer_email', 'recap_sent_at']) assert.ok(columns('tours').has(c), `tours.${c}`);
+});

@@ -280,3 +280,25 @@ fails if one is missing. Key-connected CRMs store `feed_url = 'crm:<id>'`.
 - **CINC** is listed as "coming soon" and cannot be saved: CINC only allows
   approved integrator apps (OAuth with client id + secret from CINC, token at
   authv2.cincapi.com). Sara has to apply to CINC as a partner first.
+
+## Texts Bestie writes, the agent sends (2026-10-27)
+
+Sara chose review items 1, 2 and 4: feedback to the listing agent, request
+and confirm showings, the buyer's tour recap. `js/messages.js` is the one
+place the words are written (pure, tested): `feedbackText` (one professional
+line per face, `FEEDBACK_LINES`; NEVER the private reaction note),
+`requestGroups`/`requestText` (one text per listing agent covering all their
+homes on the tour, asks for showing instructions when a stop has no code),
+`recapText` (each home, the face in words, the MLS link). Everything goes
+through `composeSheet` in app.js: the agent sees and can edit the text, then
+it opens THEIR text or email app (`sms:` / `mailto:`); Bestie sends nothing.
+- After a face is saved on a stop with an agent phone, the feedback sheet
+  opens; the stop card keeps "Text feedback to <agent>" / "✓ Feedback sent".
+  Stamps `feedback_sent_at` on the stop.
+- Tour page: "Showings · N of M confirmed · K waiting" card with "Text the
+  listing agents to request times"; stamps `requested_at` on those stops;
+  "Mark confirmed" stays manual.
+- "Send <buyer> the tour recap" (tour page, once a home is shown) and "Send
+  <buyer> every home they've seen" (buyer page). Buyer phone/email typed once
+  in the sheet, kept on the tour (`tours.buyer_phone`, `buyer_email`,
+  `recap_sent_at`, db/011).

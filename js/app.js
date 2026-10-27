@@ -10,6 +10,7 @@ import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
 import { chooseFromDropbox, dropboxReady } from './dropbox.js';
 import { CRM_CHOICES } from './crmlist.js';
+import { feedbackText, requestGroups, requestText, recapText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
 import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey } from './brief.js';
@@ -1389,6 +1390,17 @@ function viewTour(id) {
       extra: html`<div class="btns"><button class="btn" type="button" id="late" style="background:transparent;color:#fff;border-color:var(--teal-on-dark)">Running late</button><a class="btn teal" href="${mapsUrl(t.start_lat != null ? { address: t.start_place, lat: t.start_lat, lng: t.start_lng } : null, stops)}" target="_blank" rel="noopener">Route in Maps</a></div>`
     })}
     <main class="wrap">
+      ${(() => {
+        const withPhone = stops.filter((s) => String(s.agent_phone || '').replace(/\D/g, ''));
+        if (!stops.length || t.finished) return '';
+        const ok = stops.filter((s) => s.confirmed).length;
+        const asked = stops.filter((s) => s.requested_at && !s.confirmed).length;
+        return html`<div class="card pad sec">
+          <div class="label accent">Showings · ${ok} of ${stops.length} confirmed${asked ? ` · ${asked} waiting` : ''}</div>
+          <button class="btn ${ok === stops.length ? '' : 'dark'} block" type="button" id="reqall" ${withPhone.length ? '' : raw('disabled')}>${icon('text', 18)}${asked || ok ? 'Request or remind the listing agents' : 'Text the listing agents to request times'}</button>
+          ${withPhone.length ? '' : html`<div class="small">Add the listing agents' phones (Edit stop) to request by text.</div>`}
+        </div>`;
+      })()}
       ${stops.map((s, i) => html`<div class="card stop ${s.shown ? 'shown' : ''}">
         <div class="stop-head">
           <div class="stop-time">${s.arrive != null ? html`<span class="num">${formatClock(s.arrive)}</span>` : html`<span class="occ-word">Time unknown</span>`}${occ(s.occ)}</div>
@@ -1409,6 +1421,8 @@ function viewTour(id) {
         ${stopFieldsHtml(s, s.id)}
         ${s.reaction ? html`<button class="stop-react" type="button" data-react="${s.id}" aria-label="Their reaction: ${reactionLabel(s.reaction)}. Tap to change">${raw(reactionFace(s.reaction, { size: 34 }))}<span><b>${reactionLabel(s.reaction)}</b>${s.reaction_note ? html`<span class="small"> · ${s.reaction_note}</span>` : ''}</span></button>`
           : s.shown ? html`<button class="btn ghost block" type="button" data-react="${s.id}">How did they like it?</button>` : ''}
+        ${s.reaction && s.agent_phone ? html`<button class="btn ghost block" type="button" data-fb="${s.id}">${s.feedback_sent_at ? html`✓ Feedback sent to ${(s.agent || 'agent').split(' ')[0]} · send again` : html`${icon('text', 16)}Text feedback to ${(s.agent || 'the listing agent').split('(')[0].trim()}`}</button>` : ''}
+        ${s.requested_at && !s.confirmed ? html`<div class="small wait">Showing requested ${niceDate(s.requested_at.slice(0, 10))} · waiting to hear back</div>` : ''}
         <div class="btns">
           <a class="btn" href="${mapLink(s)}" target="_blank" rel="noopener">Navigate</a>
           <button class="btn ${s.shown ? 'green' : 'dark'}" type="button" data-shown="${s.id}">${s.shown ? '✓ Shown' : 'Mark shown'}</button>
@@ -1416,6 +1430,7 @@ function viewTour(id) {
         <div class="btns"><button class="btn ghost" type="button" data-editstop="${s.id}">${icon('edit', 16)}Edit stop</button><button class="btn ghost" type="button" data-confirm="${s.id}">${s.confirmed ? 'Undo confirmed' : 'Mark confirmed'}</button></div>
       </div>
       ${i < stops.length - 1 && stops[i + 1].leg_miles ? html`<div class="leg">↓ about ${stops[i + 1].leg_minutes} min · ${stops[i + 1].leg_miles} mi</div>` : ''}`)}
+      ${stops.some((s) => s.shown) ? html`<button class="btn big block" type="button" id="recap">${icon('text', 18)}${t.recap_sent_at ? 'Send the recap again' : `Send ${buyerOf(t) ? buyerOf(t).split(' ')[0] : 'your buyer'} the tour recap`}</button>` : ''}
       ${t.finished ? html`<div class="note-box">Tour finished. ${t.trip_id ? 'The miles are in your mileage log.' : ''}</div>` : html`<button class="btn dark big block" type="button" id="finish">Finish tour and log the miles</button>`}
       <button class="btn ghost block" type="button" id="deltour">${icon('trash', 16)}Delete this tour</button>
     </main>`,
@@ -1513,6 +1528,12 @@ function viewTour(id) {
         values: { buyer: buyerOf(t) },
         onSave(v) { if (v.buyer.trim()) save({ buyer: v.buyer.trim() }); }
       }));
+      root.querySelector('#reqall')?.addEventListener('click', () => requestSheet(store.get('tours', id)));
+      root.querySelector('#recap')?.addEventListener('click', () => {
+        const cur = store.get('tours', id);
+        recapSheet(cur, (cur.stops || []).filter((x) => x.shown || x.reaction).map((x) => ({ address: x.address, reaction: x.reaction, mls_url: x.mls_url, date: cur.date })));
+      });
+      root.querySelectorAll('[data-fb]').forEach((b) => b.addEventListener('click', () => feedbackSheet(fresh().find((x) => x.id === b.getAttribute('data-fb')))));
       root.querySelector('#deltour').addEventListener('click', () => { if (confirm('Delete this tour?')) { store.remove('tours', id); location.hash = '#/tours'; } });
     }
   };
@@ -1549,10 +1570,13 @@ function viewBuyer(key) {
         <span class="grow">${h.property_id ? html`<a class="t" href="#/p/${h.property_id}">${h.address}</a>` : html`<span class="t">${h.address}</span>`}
           <span class="s">${h.reaction ? html`<b>${reactionLabel(h.reaction)}</b> · ` : 'No reaction yet · '}${niceDate(h.date)}</span>
           ${h.note ? html`<span class="s">“${h.note}”</span>` : ''}</span></div>`) : html`<div class="empty">No homes marked shown yet.</div>`}</div></section>
+      ${b.homes.length ? html`<button class="btn dark big block" type="button" id="brecap">${icon('text', 18)}Send ${b.name.split(' ')[0]} every home they've seen</button>` : ''}
       <section class="sec"><div class="label">Tours</div>
       <div class="card list">${b.tours.map((t) => html`<a class="row" href="#/tour/${t.id}"><span class="grow"><span class="t">${t.name}</span><span class="s">${niceDate(t.date)} · ${(t.stops || []).length} stops</span></span>${icon('chev', 18)}</a>`)}</div></section>
     </main>`,
     mount(root) {
+      // The recap goes to the newest tour's buyer contact, and is stamped there.
+      root.querySelector('#brecap')?.addEventListener('click', () => recapSheet(b.tours[0], b.homes));
       root.querySelectorAll('[data-react]').forEach((el) => el.addEventListener('click', () => {
         const [tid, sid] = el.getAttribute('data-react').split('|');
         const stop = (store.get('tours', tid)?.stops || []).find((x) => x.id === sid);
@@ -1560,6 +1584,91 @@ function viewBuyer(key) {
       }));
     }
   };
+}
+
+// ---------- texts Bestie writes, the agent sends ----------
+// Shows the words, lets the agent change them, then opens THEIR text or email
+// app. Nothing is sent by Bestie. onSent runs when they tap a send button.
+function composeSheet({ title, sub = '', phone = '', email = '', body, askContact = false, onSent }) {
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">${title}</div>
+    ${sub ? html`<div class="small">${sub}</div>` : ''}
+    ${askContact ? html`<div class="grid2"><label class="field"><span>Their phone</span><input id="cphone" type="tel" inputmode="tel" value="${phone}" autocomplete="off"></label><label class="field"><span>Or email</span><input id="cemail" type="email" value="${email}" autocomplete="off"></label></div>` : ''}
+    <label class="field"><span>The message (change anything)</span><textarea id="cbody" rows="8">${body}</textarea></label>
+    <div class="btns">
+      <button class="btn dark" type="button" id="ctext">${icon('text', 18)}Text it</button>
+      ${askContact || email ? html`<button class="btn" type="button" id="cmail">Email it</button>` : html`<button class="btn" type="button" id="ccopy">Copy</button>`}
+    </div>
+    <div class="hint">Opens your own ${askContact || email ? 'text or email app' : 'text app'}. You press send.</div>
+  </div>`, (sh) => {
+    const val = (id) => (sh.querySelector(id)?.value || '').trim();
+    const done = (how, to) => { onSent && onSent({ how, phone: val('#cphone') || phone, email: val('#cemail') || email }); closeSheet(); };
+    sh.querySelector('#ctext').addEventListener('click', () => {
+      const to = askContact ? val('#cphone') : phone;
+      location.href = smsLink(to ? [to] : [], val('#cbody'));
+      done('text');
+    });
+    sh.querySelector('#cmail')?.addEventListener('click', () => {
+      const to = askContact ? val('#cemail') : email;
+      if (!to) return toast('Add their email first');
+      location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(val('#cbody'))}`;
+      done('email');
+    });
+    sh.querySelector('#ccopy')?.addEventListener('click', async () => { await copy(val('#cbody')); toast('Copied'); });
+  });
+}
+
+// Feedback to the listing agent for one stop (from the face picked).
+function feedbackSheet(stop) {
+  const tour = store.all('tours').find((t) => (t.stops || []).some((x) => x.id === stop.id));
+  composeSheet({
+    title: 'Feedback for the listing agent',
+    sub: `${stop.agent || 'Listing agent'} · ${stop.address}. Your private notes are not included.`,
+    phone: stop.agent_phone,
+    body: feedbackText(stop, { me: store.settings().myName, date: tour && tour.date, today: todayIso() }),
+    onSent: () => { if (tour) store.save('tours', { id: tour.id, stops: tour.stops.map((x) => (x.id === stop.id ? { ...x, feedback_sent_at: new Date().toISOString() } : x)) }); }
+  });
+}
+
+// The buyer's recap of a tour (or of every home they have seen).
+function recapSheet(tour, homes) {
+  composeSheet({
+    title: 'Tour recap',
+    sub: `For ${buyerOf(tour) || 'your buyer'}. Only the homes and how they felt about them; your notes stay in Bestie.`,
+    askContact: true, phone: tour.buyer_phone || '', email: tour.buyer_email || '',
+    body: recapText(homes, { buyer: buyerOf(tour), date: homes.length && homes.every((h) => !h.date || h.date === tour.date) ? tour.date : '', me: store.settings().myName }),
+    onSent: ({ phone, email }) => store.save('tours', { id: tour.id, buyer_phone: phone || tour.buyer_phone || '', buyer_email: email || tour.buyer_email || '', recap_sent_at: new Date().toISOString() })
+  });
+}
+
+// One request per listing agent for the whole tour.
+function requestSheet(tour) {
+  const groups = requestGroups(tour.stops || []);
+  const missing = (tour.stops || []).filter((s) => !String(s.agent_phone || '').replace(/\D/g, ''));
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Request showings</div>
+    <div class="small">One text per listing agent, with every home of theirs on this tour. Tap to review and send.</div>
+    <div class="card list">${groups.map((g, i) => {
+      const asked = g.stops.every((s) => s.requested_at);
+      const ok = g.stops.every((s) => s.confirmed);
+      return html`<button class="row" type="button" data-req="${i}" style="width:100%;text-align:left;background:none;border:0">
+        <span class="grow"><span class="t">${g.agent || 'Listing agent'}</span><span class="s">${g.stops.map((s) => s.address.split(',')[0]).join(' · ')}</span>
+        <span class="s ${ok ? 'ok' : asked ? 'wait' : ''}">${ok ? '✓ Confirmed' : asked ? 'Asked, waiting to hear back' : 'Not asked yet'}</span></span>${icon('text', 18)}</button>`;
+    })}</div>
+    ${missing.length ? html`<div class="warn-box">No listing agent phone for ${missing.map((s) => s.address.split(',')[0]).join(', ')}. Add it with Edit stop.</div>` : ''}
+    <div class="hint">When an agent confirms, tap “Mark confirmed” on that stop.</div>
+  </div>`, (sh) => sh.querySelectorAll('[data-req]').forEach((b) => b.addEventListener('click', () => {
+    const g = groups[Number(b.getAttribute('data-req'))];
+    composeSheet({
+      title: 'Showing request', sub: `${g.agent || 'Listing agent'} · ${g.stops.length} home${g.stops.length === 1 ? '' : 's'}`,
+      phone: g.phone, body: requestText(g, { date: tour.date, me: store.settings().myName }),
+      onSent: () => {
+        const ids = new Set(g.stops.map((s) => s.id));
+        const cur = store.get('tours', tour.id);
+        store.save('tours', { id: tour.id, stops: cur.stops.map((x) => (ids.has(x.id) ? { ...x, requested_at: new Date().toISOString() } : x)) });
+      }
+    });
+  })));
 }
 
 // After a showing: one tap on a face (Cowork's spec, 2026-10-23), an optional
@@ -1592,6 +1701,9 @@ function reactionPicker(s) {
       closeSheet();
       toast(`Saved: ${reactionLabel(pick)}`);
       render();
+      // Listing agents always ask: offer the text straight away.
+      const saved = tour && store.get('tours', tour.id).stops.find((x) => x.id === s.id);
+      if (saved && saved.agent_phone && !saved.feedback_sent_at) setTimeout(() => feedbackSheet(saved), 350);
     });
   });
 }

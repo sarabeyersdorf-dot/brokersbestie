@@ -198,7 +198,7 @@ export function buyers(tours) {
     for (const s of t.stops || []) {
       if (!s.shown && !s.reaction) continue;
       const hk = s.property_id || buyerKey(s.address);
-      const seen = { address: s.address, property_id: s.property_id || null, date: t.date, tour_id: t.id, stop_id: s.id, reaction: s.reaction || null, note: s.reaction_note || '', at: s.reaction_at || '' };
+      const seen = { address: s.address, property_id: s.property_id || null, date: t.date, tour_id: t.id, stop_id: s.id, reaction: s.reaction || null, note: s.reaction_note || '', at: s.reaction_at || '', mls_url: s.mls_url || '' };
       const prev = b.homes.get(hk);
       if (!prev || `${seen.date}${seen.at}` >= `${prev.date}${prev.at}`) b.homes.set(hk, seen);
     }
