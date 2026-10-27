@@ -12,6 +12,7 @@ import { chooseFromDropbox, dropboxReady } from './dropbox.js';
 import { CRM_CHOICES } from './crmlist.js';
 import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
+import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS } from './push.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
 import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, doorCodes } from './brief.js';
 
@@ -2230,6 +2231,40 @@ function watchCheckin() {
 // SETTINGS
 // ======================================================================
 
+// Settings → Reminders on this phone (2026-10-27).
+function pushCardBody(c, s) {
+  const st = pushState();
+  if (st === 'install') return html`<div class="note-box">On an iPhone, reminders work from the home-screen app only (Apple's rule). Add Bestie to your home screen, open it from there, and come back here.</div>`;
+  if (st === 'unsupported') return html`<div class="note-box">This browser can't show reminders. Open Bestie in Safari (iPhone) or Chrome (Android).</div>`;
+  if (st === 'blocked') return html`<div class="note-box">Notifications are blocked for Bestie. Turn them on in your phone's Settings → Notifications, then come back.</div>`;
+  if (!c.user) return html`<div class="note-box">Sign in first (Team mode, above): reminders are sent from your team's data.</div>`;
+  return html`<label class="field"><span>Remind me before an appointment</span><select id="pushlead">${LEADS.map(([v, l]) => html`<option value="${v}" ${Number(s.pushLead || 30) === v ? raw('selected') : ''}>${l}</option>`)}</select></label>
+    <div id="pushbtns" class="btns"><button class="btn dark" type="button" id="pushon">Turn on reminders</button></div>
+    <div class="hint" id="pushmsg"></div>`;
+}
+function wirePushCard(root) {
+  const box = root.querySelector('#pushbtns');
+  if (!box) return;
+  const msg = (t) => { root.querySelector('#pushmsg').textContent = t; };
+  const paint = async () => {
+    const on = !!(await currentSub()) && store.settings().pushOn;
+    box.innerHTML = str(on ? html`<button class="btn green" type="button" id="pushtest">✓ On · send a test</button><button class="btn ghost" type="button" id="pushoff">Turn off</button>` : html`<button class="btn dark" type="button" id="pushon">Turn on reminders</button>`);
+    box.querySelector('#pushon')?.addEventListener('click', async () => {
+      msg('Turning on…');
+      try { await turnOn(Number(root.querySelector('#pushlead').value)); msg('On. Sending a test so you can see one…'); const r = await sendTest(); msg(r.phones ? 'Test sent. It should pop up in a few seconds.' : 'On.'); }
+      catch (e) { msg(e.message || 'Could not turn reminders on.'); }
+      paint();
+    });
+    box.querySelector('#pushtest')?.addEventListener('click', async () => { msg('Sending…'); try { const r = await sendTest(); msg(r.phones ? 'Test sent.' : (r.error || 'No phone is signed up yet.')); } catch { msg('Could not reach the reminder service.'); } });
+    box.querySelector('#pushoff')?.addEventListener('click', async () => { await turnOff(); msg('Reminders are off on this phone.'); paint(); });
+  };
+  root.querySelector('#pushlead')?.addEventListener('change', async (e) => {
+    if (store.settings().pushOn && (await currentSub())) { try { await turnOn(Number(e.target.value)); msg('Saved.'); } catch (err) { msg(err.message); } }
+    else store.saveSettings({ pushLead: Number(e.target.value) });
+  });
+  paint();
+}
+
 function viewSettings() {
   const s = store.settings();
   const c = store.cloud;
@@ -2260,6 +2295,12 @@ function viewSettings() {
             <label class="field"><span>Join a team with a code</span><input id="joincode" autocomplete="off" placeholder="ABC123"></label>
             <button class="btn block" type="button" id="join">Join team</button>
             <button class="btn ghost block" type="button" id="signout">Sign out</button>`}
+      </section>
+
+      <section class="card pad sec" id="pushcard">
+        <div class="label accent">Reminders on this phone</div>
+        <div class="small">A tap on the shoulder before each showing and appointment, a 7:30 list of what is due today, and an “Are you OK?” when a safety check-in runs out.</div>
+        ${pushCardBody(c, s)}
       </section>
 
       ${c.user ? html`<section class="card pad sec">
@@ -2369,6 +2410,7 @@ function viewSettings() {
         if (!code) return;
         try { await store.joinTeam(code); toast('You joined the team'); location.reload(); } catch (e) { toast(e.message); }
       });
+      wirePushCard(root);
       root.querySelector('#callink')?.addEventListener('click', async () => {
         try {
           const token = await store.calToken();

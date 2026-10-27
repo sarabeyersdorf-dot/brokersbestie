@@ -374,3 +374,22 @@ Occupied / confirmed / time, Call and Text the listing agent, Mark shown
 (opens the reaction faces), and the next stop with a Drive link. The screen is
 kept awake while it is open (`navigator.wakeLock`, where the phone allows it;
 released on leaving).
+
+## Pop-up reminders (2026-10-27)
+
+Settings → **Reminders on this phone** (`js/push.js`): before each appointment
+or tour (15/30/60 min, `lead_minutes`), a 7:30 "Today in Bestie" list when
+something is due, and "Are you OK?" when a safety check-in runs out (to that
+agent only). **Supabase sends them, not Vercel**: `pg_cron` job
+`bestie-reminders` posts to the Edge Function `reminders`
+(`supabase/functions/reminders/`, deployed with the MCP, `verify_jwt` off,
+its own `x-cron-token` from `push_config`) every 5 minutes. `due.js` decides
+what is due (pure, `test/reminders.test.mjs`); `webpush.js` is Web Push on
+WebCrypto alone (aes128gcm + VAPID, checked against the `http_ece` reference
+in testing). The VAPID keys were made by the function on first run and live
+in `push_config` (RLS on, no policies): nobody pastes a secret. `push_subs`
+(one row per phone, own rows only), `push_sent` (each reminder once per
+phone, pruned after 4 days), db/014. A 404/410 from Apple/Google drops the
+phone. On an iPhone it only works from the home-screen app; the card says so.
+**Redeploy the function after editing any file in that folder** — the repo
+copy does not deploy itself.
