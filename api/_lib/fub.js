@@ -149,3 +149,21 @@ export async function fubFeed(key, { tz, today, fetchImpl = fetch } = {}) {
   feed.shape = `deals: ${keys(deals)}${appointments.length ? ` | appointments: ${keys(appointments)}` : ''}`;
   return feed;
 }
+
+// The whole address book (only when the agent chose "All my contacts").
+// Stage is FUB's own word for where someone is (Lead, Past Client, Sphere...).
+export async function fubContacts(key, { fetchImpl = fetch, max = 3000 } = {}) {
+  const rows = await list(key, '/people?sort=-updated', 'people', max, fetchImpl);
+  return rows.map((p) => {
+    const phones = p.phones || [], emails = p.emails || [];
+    return {
+      ext_id: String(p.id),
+      name: str(p.name) || [str(p.firstName), str(p.lastName)].filter(Boolean).join(' '),
+      phone: (phones.find((x) => x.isPrimary) || phones[0] || {}).value || '',
+      email: (emails.find((x) => x.isPrimary) || emails[0] || {}).value || '',
+      company: '',
+      kind: [nameOf(p.stage), ...(p.tags || [])].join(' '),
+      agent: nameOf(p.assignedTo) || null
+    };
+  }).filter((c) => c.ext_id && c.name);
+}

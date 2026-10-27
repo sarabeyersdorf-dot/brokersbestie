@@ -91,3 +91,19 @@ test('the CRM agent becomes the owner, and an appointment inherits its property\
   assert.equal(ownerKey('both'), 'both');
   assert.equal(ownerKey(''), null);
 });
+
+test('contacts: the address book from a feed, kind read from the CRM words, notes never sent', async () => {
+  const { mapFeed } = await import('../api/_lib/feed.js');
+  const rows = mapFeed({ format: 'bestie-feed/1', contacts: [
+    { ext_id: '7', name: 'Jo Ray', email: 'JO@X.COM', phone: '2095550001', kind: 'past_client', agent: 'James Beyersdorf', notes: 'private' },
+    { ext_id: '8', name: '', email: 'nobody@x.com' }
+  ] }, 'team1');
+  assert.equal(rows.contacts.length, 1);
+  const [c] = rows.contacts;
+  assert.equal(c.id, 'crm:team1:c:7');
+  assert.equal(c.email, 'jo@x.com');
+  assert.equal(c.kind, 'client');
+  assert.equal(c.owner, 'james');
+  assert.equal(c.notes, undefined);
+  assert.deepEqual(mapFeed({ format: 'bestie-feed/1' }, 't').contacts, []);
+});

@@ -7,8 +7,8 @@
 // pull leaves that row alone so it is never overwritten before it is sent.
 
 import { db } from './server.js';
-import { mapFeed, crmId, pushChanges } from './feed.js';
-import { CONNECTORS } from './crms.js';
+import { mapFeed, crmId, pushChanges, MAX_CONTACTS } from './feed.js';
+import { CONNECTORS, CONTACT_LISTS } from './crms.js';
 import { CRM_CHOICES } from '../../js/crmlist.js';
 
 const MAX_FEED_BYTES = 5 * 1024 * 1024;
@@ -84,6 +84,19 @@ async function push(teamId, link) {
   return { sent, failed };
 }
 
+// CRM contacts no longer in the CRM. Read in pages (the API returns 1,000 at
+// most), delete in groups of 100 so the address stays short.
+async function pruneContacts(teamId, keep) {
+  const have = [];
+  for (let from = 0; ; from += 1000) {
+    const page = await db(`contacts?team_id=eq.${teamId}&source=eq.crm&select=id&order=id&offset=${from}&limit=1000`);
+    have.push(...page.map((r) => r.id));
+    if (page.length < 1000) break;
+  }
+  const gone = have.filter((id) => !keep.has(id));
+  for (let i = 0; i < gone.length; i += 100) await db(`contacts?team_id=eq.${teamId}&id=in.(${encodeURIComponent(quoteList(gone.slice(i, i + 100)))})`, { method: 'DELETE' });
+}
+
 export async function runSync(teamId, today = new Date().toISOString().slice(0, 10)) {
   const link = await linkOf(teamId);
   if (!link || !link.feed_url) return { ok: false, error: 'No CRM connected' };
@@ -92,6 +105,10 @@ export async function runSync(teamId, today = new Date().toISOString().slice(0, 
   const connector = CONNECTORS[link.provider];
   const label = (CRM_CHOICES.find((c) => c.id === link.provider) || {}).label || 'The CRM';
   let shape = null;
+  // "All my contacts" (chosen when connecting) brings the whole address book
+  // into Contacts; "Just the people on my deals" brings none of it.
+  const allContacts = link.contacts_mode === 'all';
+  let contactsNote = '';
   try {
     let feed;
     if (connector) {
@@ -101,9 +118,11 @@ export async function runSync(teamId, today = new Date().toISOString().slice(0, 
       await db(`events?team_id=eq.${teamId}&crm_dirty=is.true`, { method: 'PATCH', body: { crm_dirty: false } });
       feed = await connector(link.feed_key, { tz: link.tz || 'America/Los_Angeles', today });
       shape = feed.shape || null;
+      if (allContacts) feed.contacts = await CONTACT_LISTS[link.provider](link.feed_key).catch((e) => { if (/refused/.test(e.message)) throw e; contactsNote = `contacts not brought in (${e.message})`; return null; });
     } else {
       pushed = await push(teamId, link);
-      const r = await fetch(link.feed_url, { headers: { Authorization: `Bearer ${link.feed_key || ''}`, Accept: 'application/json' }, signal: AbortSignal.timeout(25000) });
+      const url = allContacts ? `${link.feed_url}${link.feed_url.includes('?') ? '&' : '?'}contacts=all` : link.feed_url;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${link.feed_key || ''}`, Accept: 'application/json' }, signal: AbortSignal.timeout(25000) });
       if (r.status === 401 || r.status === 403) throw new Error('The CRM refused the key');
       if (!r.ok) throw new Error(`The CRM answered ${r.status}`);
       const text = await r.text();
@@ -134,11 +153,19 @@ export async function runSync(teamId, today = new Date().toISOString().slice(0, 
     // An appointment cancelled in the CRM leaves the calendar too (past ones stay).
     const keep = rows.events.map((e) => e.id);
     await db(`events?team_id=eq.${teamId}&source=eq.crm&crm_dirty=is.false&date=gte.${today}${keep.length ? `&id=not.in.(${encodeURIComponent(quoteList(keep))})` : ''}`, { method: 'DELETE' });
-    const counts = Object.fromEntries(['properties', 'people', 'dates', 'events'].map((k) => [k, rows[k].length]));
+    if (allContacts && feed.contacts) {
+      await upsert('contacts', rows.contacts);
+      // Gone from the CRM -> gone here, unless the list was cut short.
+      if (rows.contacts.length < MAX_CONTACTS) await pruneContacts(teamId, new Set(rows.contacts.map((c) => c.id)));
+    } else if (!allContacts) {
+      await db(`contacts?team_id=eq.${teamId}&source=eq.crm`, { method: 'DELETE' });
+    }
+    const counts = Object.fromEntries(['properties', 'people', 'dates', 'events', 'contacts'].map((k) => [k, rows[k].length]));
+    if (!(allContacts && feed.contacts)) counts.contacts = null;
     result = { ok: true, counts, pushed };
   } catch (e) {
     result = { ok: false, error: e.name === 'TimeoutError' ? `${label} did not answer in time` : e.message };
   }
-  await db(`crm_links?team_id=eq.${teamId}`, { method: 'PATCH', body: { ...(shape ? { last_shape: shape.slice(0, 2000) } : {}), last_synced_at: new Date().toISOString(), last_result: result.ok ? `Synced ${result.counts.properties} properties, ${result.counts.events} appointments, ${result.counts.dates} dates, ${result.counts.people} people.${pushed.sent ? ` Sent ${pushed.sent} change${pushed.sent === 1 ? '' : 's'} to the CRM.` : ''}${pushed.failed ? ` ${pushed.failed} change${pushed.failed === 1 ? '' : 's'} not taken yet${pushed.note ? ' (' + pushed.note + ')' : ''}; will retry.` : ''}` : `Failed: ${result.error}` } });
+  await db(`crm_links?team_id=eq.${teamId}`, { method: 'PATCH', body: { ...(shape ? { last_shape: shape.slice(0, 2000) } : {}), last_synced_at: new Date().toISOString(), last_result: result.ok ? `Synced ${result.counts.properties} properties, ${result.counts.events} appointments, ${result.counts.dates} dates, ${result.counts.people} people on deals${result.counts.contacts != null ? `, ${result.counts.contacts} contacts` : ''}.${contactsNote ? ' Note: ' + contactsNote + '.' : ''}${pushed.sent ? ` Sent ${pushed.sent} change${pushed.sent === 1 ? '' : 's'} to the CRM.` : ''}${pushed.failed ? ` ${pushed.failed} change${pushed.failed === 1 ? '' : 's'} not taken yet${pushed.note ? ' (' + pushed.note + ')' : ''}; will retry.` : ''}` : `Failed: ${result.error}` } });
   return result;
 }

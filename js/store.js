@@ -7,13 +7,13 @@
 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
-export const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'events', 'tours', 'trips', 'expenses', 'checkins', 'profiles', 'visitors', 'vendors'];
+export const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'events', 'tours', 'trips', 'expenses', 'checkins', 'profiles', 'visitors', 'vendors', 'contacts'];
 const KEY = (t) => `bb:${t}`;
 const DELETED = 'bb:_deleted';
 const SETTINGS = 'bb:settings';
 
 const listeners = new Set();
-const OWNED = ['properties', 'events', 'tasks', 'tours', 'visitors', 'profiles'];
+const OWNED = ['properties', 'events', 'tasks', 'tours', 'visitors', 'profiles', 'contacts'];
 const data = {};
 
 function readJson(key, fallback) {
@@ -102,6 +102,19 @@ export function save(table, row, { quiet = false } = {}) {
   if (!quiet) emit();
   queueSync();
   return next;
+}
+
+// Many new rows at once (a contacts import): one write and one redraw, not
+// one per row. Returns the saved rows.
+export function saveMany(table, rows) {
+  const now = new Date().toISOString();
+  const me = OWNED.includes(table) ? settings().myName : null;
+  const made = rows.map((r) => ({ ...r, id: r.id || uid(), created_at: now, updated_at: now, _dirty: true, ...(me && !r.owner ? { owner: me } : {}) }));
+  data[table] = [...made, ...all(table)];
+  writeJson(KEY(table), data[table]);
+  emit();
+  queueSync();
+  return made;
 }
 
 export function remove(table, id) {
@@ -356,12 +369,20 @@ export async function syncNow() {
     const sampleProps = new Set(all('properties').filter((p) => p.sample).map((p) => p.id));
     for (const t of TABLES) {
       const dirty = all(t).filter((r) => r._dirty && !r.sample && !sampleProps.has(r.property_id));
-      if (dirty.length) {
-        const { error } = await c.from(t).upsert(dirty.map(strip));
+      // In groups, and read back in pages: an imported address book can be
+      // thousands of rows, and the server hands back 1,000 at most per ask
+      // (a short read would drop the rest from this phone).
+      for (let i = 0; i < dirty.length; i += 500) {
+        const { error } = await c.from(t).upsert(dirty.slice(i, i + 500).map(strip));
         if (error) throw error;
       }
-      const { data: remote, error } = await c.from(t).select('*').eq('team_id', cloud.teamId);
-      if (error) throw error;
+      const remote = [];
+      for (let from = 0; ; from += 1000) {
+        const { data: page, error } = await c.from(t).select('*').eq('team_id', cloud.teamId).order('id').range(from, from + 999);
+        if (error) throw error;
+        remote.push(...page);
+        if (page.length < 1000) break;
+      }
       const local = new Map(all(t).map((r) => [r.id, r]));
       const merged = new Map();
       for (const r of remote) {

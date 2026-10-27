@@ -496,3 +496,30 @@ The visitor list syncs when opened, so web sign-ins show up there.
   **Logo from Dropbox** / **Headshot from Dropbox** (saved straight to the
   profile), and the profile page has the same two buttons beside the photo
   pickers. `chooseFromDropbox({ images: true, multi: false })`.
+
+## Contacts: CRM sync choice and import (2026-10-27)
+
+Sara: "add a sync contacts option, should ask when clients link their crm but
+also need an import option". `contacts` (db/020, synced, team RLS) is the
+agent's address book, apart from `people` (who is on a property).
+- **Connecting a CRM asks** (Settings → Connect your CRM, required before
+  Save): "Just the people on my deals" or "All my contacts" →
+  `crm_links.contacts_mode` ('deals' | 'all'); changing it later calls
+  `op: 'contacts'` and syncs. On 'all', `runSync` fetches the list
+  (`CONTACT_LISTS` in crms.js: FUB `/people`, Lofty `/v1.0/leads`, kvCORE
+  `/contacts`; a feed link gets `?contacts=all`, which Legacy serves),
+  `mapFeed` maps `feed.contacts` to `crm:<team>:c:<ext>` rows (kind via
+  `kindFrom`, notes never), upserts, and prunes CRM contacts gone from the CRM
+  (only when under `MAX_CONTACTS` = 3000). On 'deals' the CRM contacts are
+  removed. Typed and imported contacts are never touched.
+- **Import** (Contacts → Import contacts): a .csv (columns found by header
+  words, any order) or .vcf from a phone. `js/contacts.js` (pure, tested):
+  `parseContacts`, `planImport` skips anyone already there by phone digits or
+  email; untyped rows are filed as the kind picked (default Sphere).
+  `store.saveMany` writes them in one go.
+- `#/contacts` (from Today's bottom buttons, and search): kind chips, first
+  100 matches, call/text, edit sheet. A property's People tab has **From my
+  contacts**.
+- **The store reads every table in pages of 1,000 and upserts in groups of
+  500**: Supabase returns at most 1,000 rows per ask, and a short read used to
+  drop the rest from the phone.

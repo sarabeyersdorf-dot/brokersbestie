@@ -10,6 +10,7 @@ import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
 import { chooseFromDropbox, dropboxReady } from './dropbox.js';
 import { planShowings, ACTION_WORDS } from './showings.js';
+import { CONTACT_KINDS, parseContacts, planImport } from './contacts.js';
 import { CRM_CHOICES } from './crmlist.js';
 import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText, feedbackRequestText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
@@ -519,7 +520,7 @@ function viewToday() {
       </section>` : ''}
 
       <section class="sec">
-        <div class="btns"><a class="btn" href="#/vendors">${icon('person', 18)}Vendors</a><a class="btn" href="#/miles">${icon('miles', 18)}Mileage</a><a class="btn" href="#/signs">${icon('sign', 18)}Signs</a><a class="btn" href="#/safety">${icon('shield', 18)}Safety check-in</a></div>
+        <div class="btns"><a class="btn" href="#/contacts">${icon('person', 18)}Contacts</a><a class="btn" href="#/vendors">${icon('person', 18)}Vendors</a><a class="btn" href="#/miles">${icon('miles', 18)}Mileage</a><a class="btn" href="#/signs">${icon('sign', 18)}Signs</a><a class="btn" href="#/safety">${icon('shield', 18)}Safety check-in</a></div>
       </section>
       ${!searchText && !isInstalled() && !installHidden() ? installCard({ dismissable: true, slim: true }) : ''}
       ${!searchText && !myProfile() && !profileNudgeHidden() ? html`<div class="card pad sec" data-profnudge><div class="label accent">Make it yours</div><div class="small">Add your name, brokerage, license numbers and logo. They go on your open house sign-in sheet and the texts Bestie writes.</div><div class="btns"><a class="btn dark" href="#/profile">Set up my profile</a><button class="btn ghost" type="button" id="profnot">Later</button></div></div>` : ''}
@@ -805,7 +806,7 @@ function viewHub(id) {
 
       ${hubTab === 'people' ? html`<section class="sec">
         <div class="card list">${people.length ? people.map(personRow) : buddy('No one yet. Add the seller, tenant, escrow officer, the other agent.')}</div>
-        <div class="btns"><a class="btn dark" href="#/quick/contact/${id}">+ Add a person</a><button class="btn" type="button" id="fromvendors">${icon('person', 18)}From my vendors</button></div>
+        <div class="btns"><a class="btn dark" href="#/quick/contact/${id}">+ Add a person</a><button class="btn" type="button" id="fromcontacts">${icon('person', 18)}From my contacts</button><button class="btn" type="button" id="fromvendors">${icon('person', 18)}From my vendors</button></div>
       </section>` : ''}
 
       ${hubTab === 'notes' ? html`<section class="sec">
@@ -830,6 +831,7 @@ function viewHub(id) {
       root.querySelectorAll('[data-edit-person]').forEach((b) => b.addEventListener('click', () => personSheet(id, store.get('people', b.getAttribute('data-edit-person')))));
       root.querySelector('#sellerupd')?.addEventListener('click', () => sellerUpdateSheet(id));
       root.querySelector('#fromvendors')?.addEventListener('click', () => vendorPicker(id));
+      root.querySelector('#fromcontacts')?.addEventListener('click', () => contactPicker(id));
       root.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', () => {
         const next = b.getAttribute('data-status');
         if (next === p.status) return;
@@ -957,6 +959,129 @@ function vendorPicker(pid) {
       closeSheet(); toast(`${v.name || v.company} added`);
     }));
     sh.querySelector('#vpq').addEventListener('input', (e) => { sh.querySelector('#vplist').innerHTML = str(html`${all.filter((v) => vendorMatches(v, e.target.value)).map((v) => vendorRow(v, { pick: true }))}`); wire(); });
+    wire();
+  });
+}
+
+// ---------- contacts (2026-10-27) ----------
+// The agent's address book: from the CRM (if they chose "All my contacts" when
+// connecting it) and/or imported from a phone's contacts or a CSV file. People
+// on a property stay in `people`; "From my contacts" copies one there.
+
+const KIND_LABEL = Object.fromEntries(CONTACT_KINDS.map((k) => [k.id, k.label]));
+const SHOW_MAX = 100;
+let contactQuery = '';
+let contactKind = null;
+function contactMatches(c, q) {
+  q = q.trim().toLowerCase();
+  if (!q) return true;
+  const d = q.replace(/\D/g, '');
+  return [c.name, c.company, c.email, c.notes].some((x) => String(x || '').toLowerCase().includes(q)) || (d.length >= 3 && String(c.phone || '').replace(/\D/g, '').includes(d));
+}
+const contactSort = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
+function contactRow(c, { pick = false } = {}) {
+  const sub = [KIND_LABEL[c.kind], c.company, c.phone || c.email].filter(Boolean).join(' · ');
+  return html`<div class="row">
+    <button type="button" class="grow" ${raw(pick ? `data-pickcontact="${esc(c.id)}"` : `data-contact="${esc(c.id)}"`)} style="background:none;border:0;text-align:left;padding:0;color:inherit">
+      <span class="t">${c.name || c.email || 'Contact'}</span><span class="s">${sub}</span></button>
+    ${!pick && c.phone ? html`<a class="icon-btn" href="tel:${digits(c.phone)}" aria-label="Call ${c.name}">${icon('phone', 18)}</a><a class="icon-btn" href="${smsLink(c.phone)}" aria-label="Text ${c.name}">${icon('text', 18)}</a>` : ''}
+  </div>`;
+}
+function viewContacts(openId) {
+  const everyone = store.all('contacts');
+  const list = everyone.filter((c) => (!contactKind || (c.kind || 'other') === contactKind) && contactMatches(c, contactQuery)).sort(contactSort);
+  const chip = (k, label) => html`<button type="button" class="chip ${contactKind === k ? 'on' : ''}" data-ckind="${k || ''}">${label}</button>`;
+  const fromCrm = everyone.filter((c) => c.source === 'crm').length;
+  return {
+    html: html`${header({ back: '#/', kicker: 'Your people', title: 'Contacts' })}
+    <main class="wrap">
+      <label class="field"><span>Search ${everyone.length ? `${everyone.length} contacts` : ''}</span><input id="cq" type="search" value="${contactQuery}" placeholder="Name, phone, email or company" autocomplete="off"></label>
+      ${everyone.length ? html`<div class="chips">${chip(null, 'All')}${CONTACT_KINDS.map((k) => chip(k.id, k.many))}</div>` : ''}
+      <div class="btns"><button class="btn dark" type="button" id="addcontact">+ Add a contact</button><button class="btn" type="button" id="importcontacts">${icon('plus', 18)}Import contacts</button></div>
+      ${list.length ? html`<section class="sec"><div class="card list">${list.slice(0, SHOW_MAX).map((c) => contactRow(c))}</div>
+        ${list.length > SHOW_MAX ? html`<p class="small muted">Showing ${SHOW_MAX} of ${list.length}. Search to find the rest.</p>` : ''}</section>`
+        : html`<div class="card">${buddy(contactQuery || contactKind ? 'No contact matches that.' : 'No contacts yet. Import them from your phone or a spreadsheet, or connect your CRM in Settings and choose “All my contacts”.')}</div>`}
+      ${fromCrm ? html`<p class="small muted">${fromCrm} came from your CRM and update with it. To stop bringing them in: Settings → Connect your CRM.</p>` : ''}
+    </main>`,
+    mount(root) {
+      const q = root.querySelector('#cq');
+      q.addEventListener('input', () => { contactQuery = q.value; const pos = q.selectionStart; render(); const again = document.getElementById('cq'); again?.focus(); again?.setSelectionRange(pos, pos); });
+      root.querySelectorAll('[data-ckind]').forEach((b) => b.addEventListener('click', () => { contactKind = b.dataset.ckind || null; render(); }));
+      root.querySelector('#addcontact').addEventListener('click', () => contactSheet(null));
+      root.querySelector('#importcontacts').addEventListener('click', importContacts);
+      root.querySelectorAll('[data-contact]').forEach((b) => b.addEventListener('click', () => contactSheet(store.get('contacts', b.getAttribute('data-contact')))));
+      if (openId) { const c = store.get('contacts', openId); if (c) contactSheet(c); history.replaceState(null, '', '#/contacts'); }
+    }
+  };
+}
+function contactSheet(c) {
+  formSheet({
+    title: c ? c.name || 'Contact' : 'Add a contact',
+    fields: [
+      { name: 'name', label: 'Name', placeholder: 'Jordan Smith' },
+      { name: 'phone', label: 'Phone', type: 'tel' },
+      { name: 'email', label: 'Email', type: 'email' },
+      { name: 'company', label: 'Company' },
+      { name: 'kind', label: 'Who they are', type: 'select', options: CONTACT_KINDS.map((k) => [k.id, k.label]) },
+      { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Wants single story near Murphys.' }
+    ],
+    values: c || { kind: 'lead' },
+    onSave(val) {
+      if (!val.name && !val.phone && !val.email) { toast('Add a name, phone or email'); return false; }
+      store.save('contacts', { ...(c ? { id: c.id } : {}), ...val });
+    },
+    onDelete: c ? () => del('contacts', c.id, 'Contact deleted') : null
+  });
+}
+
+// Pick a CSV or vCard file, show what is in it, import on a tap.
+function importContacts() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv,.vcf,.txt,text/csv,text/vcard,text/x-vcard,text/plain';
+  input.addEventListener('change', async () => {
+    const f = input.files && input.files[0];
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { toast('That file is over 10 MB. Export fewer contacts at a time.'); return; }
+    const found = parseContacts(await f.text(), f.name);
+    if (!found.length) { toast('No contacts found in that file. Use a .csv with a Name column, or a .vcf from your phone.'); return; }
+    const { add, same } = planImport(found, store.all('contacts'));
+    const untyped = add.filter((x) => !x.kind).length;
+    openSheet(html`<div class="sec">
+      <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Import contacts</div>
+      <p><b>${found.length}</b> in ${f.name}. <b>${add.length}</b> new${same.length ? html`, ${same.length} already in your contacts (skipped)` : ''}.</p>
+      ${add.length ? html`<div class="card list">${add.slice(0, 5).map((x) => html`<div class="row"><span class="grow"><span class="t">${x.name}</span><span class="s">${[x.company, x.phone || x.email].filter(Boolean).join(' · ')}</span></span></div>`)}</div>
+        ${add.length > 5 ? html`<p class="small muted">…and ${add.length - 5} more.</p>` : ''}
+        ${untyped ? html`<label class="field"><span>File ${untyped === add.length ? 'them' : `the ${untyped} with no type`} as</span><select id="impkind">${CONTACT_KINDS.map((k) => html`<option value="${k.id}" ${k.id === 'sphere' ? 'selected' : ''}>${k.label}</option>`)}</select></label>` : ''}
+        <button class="btn dark block" type="button" id="impgo">Import ${add.length} contact${add.length === 1 ? '' : 's'}</button>` : html`<p>Everyone in this file is already in your contacts.</p>`}
+      <p class="small muted">On an iPhone: Contacts → pick a list → Export → Save to Files, then choose that file here. From a CRM: export contacts as CSV.</p>
+    </div>`, (sh) => {
+      sh.querySelector('#impgo')?.addEventListener('click', () => {
+        const kind = sh.querySelector('#impkind')?.value || 'sphere';
+        store.saveMany('contacts', add.map((x) => ({ ...x, kind: x.kind || kind, source: 'import' })));
+        closeSheet();
+        toast(`${add.length} contact${add.length === 1 ? '' : 's'} imported`);
+      });
+    });
+  });
+  input.click();
+}
+
+function contactPicker(pid) {
+  const everyone = store.all('contacts').sort(contactSort);
+  if (!everyone.length) { toast('No contacts yet. Import them under Contacts on Today.'); location.hash = '#/contacts'; return; }
+  const draw = (q) => html`${everyone.filter((c) => contactMatches(c, q)).slice(0, 50).map((c) => contactRow(c, { pick: true }))}`;
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Add from my contacts</div>
+    <label class="field"><span>Search</span><input id="cpq" type="search" placeholder="Name, phone or email" autocomplete="off"></label>
+    <div class="card list" id="cplist">${draw('')}</div>
+  </div>`, (sh) => {
+    const wire = () => sh.querySelectorAll('[data-pickcontact]').forEach((b) => b.addEventListener('click', () => {
+      const c = store.get('contacts', b.getAttribute('data-pickcontact'));
+      store.save('people', { property_id: pid, name: c.name, role: KIND_LABEL[c.kind] === 'Client' ? 'Client' : '', phone: c.phone || '', email: c.email || '' });
+      closeSheet(); toast(`${c.name} added`);
+    }));
+    sh.querySelector('#cpq').addEventListener('input', (e) => { sh.querySelector('#cplist').innerHTML = str(draw(e.target.value)); wire(); });
     wire();
   });
 }
@@ -2653,6 +2778,10 @@ function viewSettings() {
           <label class="field"><span>Feed key</span><input id="crmkey" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"></label>
           <button class="btn block" type="button" id="crmmake">Make a new key (copies it)</button>
         </div>
+        <fieldset class="field" id="crmcontacts" style="border:0;padding:0;margin:0"><span>Which contacts should come in?</span>
+          <label class="switch"><input type="radio" name="crmc" value="deals">Just the people on my deals</label>
+          <label class="switch"><input type="radio" name="crmc" value="all">All my contacts (your whole address book, under Contacts)</label>
+        </fieldset>
         <div class="hint">Your listings, deal dates, contacts and appointments come in from the CRM and update each time you open Bestie. Codes, photos and notes stay Bestie's: the CRM never changes them.</div>
         <div class="btns"><button class="btn dark" type="button" id="crmsave">Save and sync</button><button class="btn" type="button" id="crmrun">Sync now</button></div>
         <button class="btn ghost block" type="button" id="crmoff" hidden>Disconnect</button>
@@ -2786,6 +2915,8 @@ function viewSettings() {
           const who = known ? known.label : r.feed_url && /^https?:/.test(r.feed_url) ? new URL(r.feed_url).host : 'your CRM';
           st.textContent = r.connected ? `Connected to ${who}. ${r.last_result || ''}${r.last_synced_at ? ` (${new Date(r.last_synced_at).toLocaleString()})` : ''}` : 'Not connected.';
           if (r.connected) { kind.value = known ? known.id : 'feed'; pickKind(); }
+          if (r.connected && r.contacts_mode) root.querySelectorAll('[name=crmc]').forEach((x) => { x.checked = x.value === r.contacts_mode; });
+          connected = r.connected;
           if (r.connected && !known && !root.querySelector('#crmurl').value) root.querySelector('#crmurl').value = r.feed_url;
           root.querySelector('#crmoff').hidden = !r.connected;
         };
@@ -2808,9 +2939,20 @@ function viewSettings() {
           await copy(key);
           toast('New key copied. Paste it into your CRM too, then Save and sync.');
         });
-        root.querySelector('#crmsave').addEventListener('click', (e) => call(kind.value !== 'feed'
-          ? { op: 'save', provider: kind.value, key: root.querySelector('#apikey').value.trim(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone }
-          : { op: 'save', url: root.querySelector('#crmurl').value.trim(), key: root.querySelector('#crmkey').value.trim() }, e.currentTarget));
+        // Asked on connecting (Sara, 2026-10-27): the whole address book, or
+        // only the people on deals. Changing it later syncs straight away.
+        let connected = false;
+        const contactsMode = () => (root.querySelector('[name=crmc]:checked') || {}).value || '';
+        root.querySelectorAll('[name=crmc]').forEach((x) => x.addEventListener('change', () => {
+          if (connected) call({ op: 'contacts', contacts: x.value }, root.querySelector('#crmrun'));
+        }));
+        root.querySelector('#crmsave').addEventListener('click', (e) => {
+          const contacts = contactsMode();
+          if (!contacts) { toast('Pick which contacts to bring in'); root.querySelector('#crmcontacts').scrollIntoView({ block: 'center' }); return; }
+          call(kind.value !== 'feed'
+            ? { op: 'save', provider: kind.value, key: root.querySelector('#apikey').value.trim(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone, contacts }
+            : { op: 'save', url: root.querySelector('#crmurl').value.trim(), key: root.querySelector('#crmkey').value.trim(), contacts }, e.currentTarget);
+        });
         root.querySelector('#crmrun').addEventListener('click', (e) => call({ op: 'run' }, e.currentTarget));
         root.querySelector('#crmoff').addEventListener('click', (e) => { if (confirm('Stop syncing from this CRM? What already came in stays.')) call({ op: 'disconnect' }, e.currentTarget); });
       }
@@ -3429,6 +3571,7 @@ const ROUTES = [
   [/^#\/tours$/, () => viewTours(), 'tours'],
   [/^#\/tour\/([^/]+)$/, (m) => viewTour(m[1]), 'tours'],
   [/^#\/vendors$/, () => viewVendors(), 'today'],
+  [/^#\/contacts(?:\/(.+))?$/, (m) => viewContacts(m[1] ? decodeURIComponent(m[1]) : null), 'today'],
   [/^#\/showings$/, () => viewShowingsImport(), 'calendar'],
   [/^#\/taxes\/(\d{4})$/, (m) => viewTaxes(m[1]), 'today'],
   [/^#\/door\/([^/]+)\/(\d+)$/, (m) => viewDoor(m[1], Number(m[2])), 'kiosk'],

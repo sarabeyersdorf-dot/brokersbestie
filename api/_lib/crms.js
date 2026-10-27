@@ -9,7 +9,7 @@
 // mismatch can be fixed after a real sync. CINC needs Brokers Bestie approved
 // as a CINC integrator (OAuth, client id + secret), so it is listed, not built.
 
-import { fubFeed, fubStatus, localParts } from './fub.js';
+import { fubFeed, fubContacts, fubStatus, localParts } from './fub.js';
 
 const DAY = 86400e3;
 const str = (v) => (v == null ? '' : String(v)).trim();
@@ -22,7 +22,7 @@ export function toDay(v) {
   return m ? m[1] : null;
 }
 const toIso = (v) => { if (v == null || v === '') return null; if (typeof v === 'number' || /^\d{9,13}$/.test(String(v))) { const n = Number(v); return new Date(n < 1e12 ? n * 1000 : n).toISOString(); } const d = new Date(v); return Number.isNaN(d.getTime()) ? null : d.toISOString(); };
-const ROW_KEYS = ['data', 'transactions', 'results', 'list', 'items', 'records', 'appointments', 'tasks', 'data.list', 'data.items', 'data.data', 'data.transactions', 'result.list'];
+const ROW_KEYS = ['data', 'transactions', 'leads', 'contacts', 'results', 'list', 'items', 'records', 'appointments', 'tasks', 'data.list', 'data.items', 'data.data', 'data.transactions', 'result.list'];
 // The first ARRAY in the usual places ({ data: [...] }, { data: { list: [...] } }...).
 const rowsOf = (b) => {
   if (Array.isArray(b)) return b;
@@ -169,6 +169,29 @@ export async function kvcoreFeed(key, { today = new Date().toISOString().slice(0
   return out;
 }
 
+// ---------- the whole address book ----------
+// Only when the agent chose "All my contacts" on connecting.
+
+// One CRM contact record -> a Bestie Feed contact.
+export function contactFrom(p) {
+  const m = personFrom(p, 'x', '');
+  if (!m) return null;
+  const id = pick(p, 'id', 'leadId', 'contact_id', 'contactId');
+  if (id == null) return null;
+  const kind = [pick(p, 'stage', 'leadType', 'lead_type', 'type', 'status', 'contact_type', 'stageName'), ...[].concat(pick(p, 'tags', 'tagList') || [])].map((x) => (x && typeof x === 'object' ? str(x.name) : str(x))).join(' ');
+  return { ext_id: String(id), name: m.name, phone: m.phone, email: m.email, company: str(pick(p, 'company', 'companyName', 'company_name')), kind, agent: str(pick(p, 'agentName', 'assignedAgent.name', 'assigned_agent', 'agent.name')) || null };
+}
+
+async function loftyContacts(key, { fetchImpl = fetch, max = 3000 } = {}) {
+  const r = await listFrom(LOFTY, ['/v1.0/leads', '/v2.0/leads'], { Authorization: `token ${key}` }, fetchImpl, 'Lofty', max);
+  return r.rows.map(contactFrom).filter(Boolean);
+}
+async function kvcoreContacts(key, { fetchImpl = fetch, max = 3000 } = {}) {
+  const r = await listFrom(KV, ['/contacts'], { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, fetchImpl, 'kvCORE', max);
+  return r.rows.map(contactFrom).filter(Boolean);
+}
+
 // ---------- which connector a provider uses ----------
 // Labels and help live in js/crmlist.js (shared with Settings).
 export const CONNECTORS = { fub: fubFeed, kvcore: kvcoreFeed, lofty: loftyFeed };
+export const CONTACT_LISTS = { fub: fubContacts, kvcore: kvcoreContacts, lofty: loftyContacts };

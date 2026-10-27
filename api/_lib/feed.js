@@ -8,9 +8,14 @@
 //     as_of }, homes: { views, favorites, as_of } } }], people: [{ ext_id, property_ext, name, role,
 //     phone, email }], dates: [{ ext_id, property_ext, label, due, done }],
 //     events: [{ ext_id, property_ext, title, kind, date, start, minutes,
-//     location, with }] }
+//     location, with }],
+//   contacts: [{ ext_id, name, phone, email, company, kind, agent }] }
+// `contacts` (the whole address book) is asked for with ?contacts=all, only
+// when the agent chose "All my contacts"; kind is free words (a stage, type).
 // Times are the agent's wall clock: date 'YYYY-MM-DD', start minutes after
 // midnight (null = all day).
+
+import { kindFrom } from '../../js/contacts.js';
 
 const STATUSES = ['listing', 'prep', 'escrow', 'tour', 'closed', 'cancelled'];
 const s = (v, n = 300) => (v == null ? '' : String(v).slice(0, n));
@@ -42,6 +47,8 @@ function marketingOf(m) {
 
 // The CRM owns what it sends (address, status, price, dates); codes, notes,
 // photos, directions and map pins are the agent's and are never in these rows.
+export const MAX_CONTACTS = 3000;
+
 export function mapFeed(feed, teamId) {
   if (!feed || feed.format !== 'bestie-feed/1') throw new Error('That link is not a Bestie feed');
   const props = (feed.properties || []).filter((p) => p && p.ext_id && p.address);
@@ -84,6 +91,13 @@ export function mapFeed(feed, teamId) {
       start_minutes: int(e.start), minutes: int(e.minutes), location: s(e.location, 200),
       notes: e.with ? `With ${s(e.with, 120)}` : '',
       owner: ownerKey(e.agent) || ownerOf(e.property_ext)
+    })),
+    // The whole address book, only when the agent chose "All my contacts".
+    // Notes are left out: what the agent types about someone stays theirs.
+    contacts: (feed.contacts || []).filter((c) => c && c.ext_id && s(c.name, 120)).slice(0, MAX_CONTACTS).map((c) => ({
+      id: crmId(teamId, 'c', c.ext_id), team_id: teamId, source: 'crm',
+      name: s(c.name, 120), phone: s(c.phone, 40), email: s(c.email, 120).toLowerCase(),
+      company: s(c.company, 120), kind: kindFrom(c.kind), owner: ownerKey(c.agent)
     }))
   };
 }

@@ -66,3 +66,15 @@ test('a refused key is said in words, and a missing transactions list says what 
   await assert.rejects(loftyFeed('X', { fetchImpl: fakeFetch([[/./, {}, 401]]) }), /Lofty refused the API key/);
   await assert.rejects(kvcoreFeed('X', { fetchImpl: fakeFetch([]) }), /User/);
 });
+
+test('contactFrom: a Lofty/kvCORE record -> a feed contact', async () => {
+  const { contactFrom } = await import('../api/_lib/crms.js');
+  const c = contactFrom({ leadId: 42, firstName: 'Ann', lastName: 'Lee', emails: ['ann@x.com'], phones: [{ value: '209-555-0101', isPrimary: true }], stage: 'Past Client', tags: [{ name: 'Murphys' }] });
+  assert.deepEqual({ ...c }, { ext_id: '42', name: 'Ann Lee', phone: '209-555-0101', email: 'ann@x.com', company: '', kind: 'Past Client Murphys', agent: null });
+  assert.equal(contactFrom({ name: 'No id' }), null);
+});
+
+test('every key-connected CRM can also bring its whole contact list', async () => {
+  const { CONTACT_LISTS } = await import('../api/_lib/crms.js');
+  for (const id of KEY_CRMS) assert.equal(typeof CONTACT_LISTS[id], 'function', id);
+});
