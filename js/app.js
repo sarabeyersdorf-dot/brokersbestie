@@ -10,10 +10,10 @@ import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
 import { chooseFromDropbox, dropboxReady } from './dropbox.js';
 import { CRM_CHOICES } from './crmlist.js';
-import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText } from './messages.js';
+import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -359,6 +359,33 @@ function todoItems() {
   return items;
 }
 
+// Weekly seller updates waiting (2026-10-27). "Next week" hides the card for 7 days.
+const sellerDueHidden = () => { try { return (localStorage.getItem('bb:sellerdue') || '') > todayIso(); } catch { return false; } };
+function sellerDueCard() {
+  if (sellerDueHidden()) return '';
+  const due = sellerUpdatesDue(props(), todayIso(), firstName(store.settings().myName) || null);
+  if (!due.length) return '';
+  return html`<div class="card pad sec" data-sellerdue><div class="label accent">Seller updates · ${due.length}</div>
+    <div class="small">No update in the last week. Bestie writes it from your showings, feedback and open houses; you read it and send.</div>
+    <div class="card list" style="margin-top:8px">${due.slice(0, 6).map((p) => html`<button class="row" type="button" data-sellerupd="${p.id}" style="width:100%;text-align:left;background:none;border:0"><span class="grow"><span class="t">${p.address}</span><span class="s">${p.seller_update_at ? 'Last sent ' + niceDate(p.seller_update_at) : 'Not sent yet'}</span></span>${icon('text', 18)}</button>`)}</div>
+    <div class="btns"><button class="btn ghost" type="button" id="sellerdueno">Next week</button></div></div>`;
+}
+
+// The weekly update for one listing, to its seller.
+function sellerUpdateSheet(pid) {
+  const p = prop(pid);
+  if (!p) return;
+  const seller = store.where('people', 'property_id', pid).find((m) => /seller|owner/i.test(m.role || '')) || null;
+  composeSheet({
+    title: 'Seller update',
+    subject: `Weekly update: ${p.address.split(',')[0]}`,
+    sub: `For ${seller ? seller.name : 'the seller'}. Counts only: no visitor names, and no notes from your own buyers.${p.portal_url ? '' : ' Add the seller portal link in Edit details to point them to more numbers.'}`,
+    askContact: true, phone: seller?.phone || '', email: seller?.email || '',
+    body: sellerUpdateText(p, sellerStats(store.snapshot(), pid, todayIso()), { seller: seller?.name || '', profile: myProfile(), me: store.settings().myName }),
+    onSent: () => store.save('properties', { id: pid, seller_update_at: new Date().toISOString() })
+  });
+}
+
 const profileNudgeHidden = () => { try { return localStorage.getItem('bb:profnudge') === '1'; } catch { return false; } };
 const installHidden = () => { try { return localStorage.getItem('bb:installhide') === '1'; } catch { return false; } };
 function viewToday() {
@@ -378,6 +405,7 @@ function viewToday() {
     })}
     <main class="wrap">
       ${!searchText && !isInstalled() && !installHidden() ? installCard({ dismissable: true }) : ''}
+      ${!searchText ? sellerDueCard() : ''}
       ${!searchText && !myProfile() && !profileNudgeHidden() ? html`<div class="card pad sec" data-profnudge><div class="label accent">Make it yours</div><div class="small">Add your name, brokerage, license numbers and logo. They go on your open house sign-in sheet and the texts Bestie writes.</div><div class="btns"><a class="btn dark" href="#/profile">Set up my profile</a><button class="btn ghost" type="button" id="profnot">Later</button></div></div>` : ''}
       ${searchText ? html`<section class="sec">
         <div class="sec-head"><div class="label accent">${results.length} found</div><button class="btn ghost" type="button" id="clearq" style="min-height:36px">Clear</button></div>
@@ -442,6 +470,8 @@ function viewToday() {
     mount(root) {
       wireInstall(root, { onHide: () => { try { localStorage.setItem('bb:installhide', '1'); } catch {} } });
       root.querySelector('#profnot')?.addEventListener('click', () => { try { localStorage.setItem('bb:profnudge', '1'); } catch {} root.querySelector('[data-profnudge]')?.remove(); });
+      root.querySelectorAll('[data-sellerupd]').forEach((b) => b.addEventListener('click', () => sellerUpdateSheet(b.getAttribute('data-sellerupd'))));
+      root.querySelector('#sellerdueno')?.addEventListener('click', () => { try { localStorage.setItem('bb:sellerdue', addDays(todayIso(), 6)); } catch {} root.querySelector('[data-sellerdue]')?.remove(); });
       const q = root.querySelector('#q');
       q.addEventListener('input', () => {
         searchText = q.value;
@@ -541,10 +571,12 @@ const PROP_FIELDS = [
   { name: 'hoa', label: 'HOA', placeholder: 'None, or name + $/mo' },
   { name: 'solar', label: 'Solar', placeholder: 'Owned / Leased $210/mo' },
   { name: 'coe_date', label: 'Close of escrow', type: 'date' },
+  { name: 'list_date', label: 'Date listed (for days on market)', type: 'date' },
   { name: 'showing_notes', label: 'Showing instructions', type: 'textarea', placeholder: 'Text the owner 2 hours ahead. Dog in the yard.', mic: true },
   { name: 'directions', label: 'Directions', type: 'textarea', placeholder: 'GPS is wrong: second drive past the mailboxes' },
   { name: 'disclosure_url', label: 'Disclosure package link', type: 'url', placeholder: 'https://' },
-  { name: 'mls_url', label: 'MLS listing link', type: 'url', placeholder: 'https://' }
+  { name: 'mls_url', label: 'MLS listing link', type: 'url', placeholder: 'https://' },
+  { name: 'portal_url', label: 'Seller portal link (goes in the weekly update)', type: 'url', placeholder: 'https://' }
 ];
 
 function viewPropEdit(id) {
@@ -693,6 +725,7 @@ function viewHub(id) {
           <a class="btn" href="#/p/${id}/edit">${icon('edit', 18)}Edit details</a>
           ${sheetNote ? html`<button class="btn" type="button" data-tab="notes">${icon('sheet', 18)}MLS sheet</button>` : html`<a class="btn" href="#/sheet/${id}">${icon('sheet', 18)}Snap MLS sheet</a>`}
           <a class="btn" href="#/quick">${icon('plus', 18)}Quick add</a>
+          ${p.status === 'listing' || p.status === 'escrow' ? html`<button class="btn" type="button" id="sellerupd">${icon('text', 18)}${p.seller_update_at ? 'Seller update' : 'Send seller update'}</button>` : ''}
           <a class="btn" href="#/openhouse/${id}">${icon('person', 18)}Open house sign-in</a>
           ${store.all('visitors').some((v) => v.property_id === id) ? html`<a class="btn" href="#/visitors/${id}">Visitors · ${store.all('visitors').filter((v) => v.property_id === id).length}</a>` : ''}
         </div>` : ''}
@@ -726,6 +759,7 @@ function viewHub(id) {
       root.querySelectorAll('[data-done]').forEach((b) => b.addEventListener('click', () => store.save('tasks', { id: b.getAttribute('data-done'), done: true, done_at: new Date().toISOString() })));
       root.querySelectorAll('[data-access]').forEach((b) => b.addEventListener('click', () => accessSheet(store.get('access', b.getAttribute('data-access')))));
       root.querySelectorAll('[data-edit-person]').forEach((b) => b.addEventListener('click', () => personSheet(id, store.get('people', b.getAttribute('data-edit-person')))));
+      root.querySelector('#sellerupd')?.addEventListener('click', () => sellerUpdateSheet(id));
       root.querySelector('#savenote')?.addEventListener('click', () => {
         const t = root.querySelector('#newnote').value.trim();
         if (!t) return;
@@ -1788,7 +1822,7 @@ function viewVisitors(pid) {
 // ---------- texts Bestie writes, the agent sends ----------
 // Shows the words, lets the agent change them, then opens THEIR text or email
 // app. Nothing is sent by Bestie. onSent runs when they tap a send button.
-function composeSheet({ title, sub = '', phone = '', email = '', body, askContact = false, onSent }) {
+function composeSheet({ title, subject = '', sub = '', phone = '', email = '', body, askContact = false, onSent }) {
   openSheet(html`<div class="sec">
     <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">${title}</div>
     ${sub ? html`<div class="small">${sub}</div>` : ''}
@@ -1810,7 +1844,7 @@ function composeSheet({ title, sub = '', phone = '', email = '', body, askContac
     sh.querySelector('#cmail')?.addEventListener('click', () => {
       const to = askContact ? val('#cemail') : email;
       if (!to) return toast('Add their email first');
-      location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(val('#cbody'))}`;
+      location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject || title)}&body=${encodeURIComponent(val('#cbody'))}`;
       done('email');
     });
     sh.querySelector('#ccopy')?.addEventListener('click', async () => { await copy(val('#cbody')); toast('Copied'); });

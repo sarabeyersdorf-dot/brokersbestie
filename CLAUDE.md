@@ -330,3 +330,24 @@ branding, brokerage, license #'s when they set up".
   agent is only thanked and pointed back to their agent, never solicited),
   stamped `followed_up_at`; "Download visitors" CSV (`visitorsCsv`) for any
   CRM import. Entry: the property page's "Open house sign-in" / "Visitors · N".
+
+## The weekly seller update (2026-10-27)
+
+Sara: "build it as described ... reconcile succinctly with [the seller portal]
+or provide a link to the portal for more metrics". "Send seller update" on a
+listing's page, and a **Seller updates · N** card on Today for my listings with
+none in 7 days ("Next week" hides it 7 days, `bb:sellerdue`). `sellerStats` in
+`js/brief.js` is the one count: showings this week / since `list_date` (shown
+tour stops + `showing` appointments, never cancelled ones), "Showing feedback"
+notes from the week, open house sign-ins as COUNTS only (visitors, without an
+agent, also selling), the next 14 days. `sellerUpdateText` in `js/messages.js`
+writes it; a face from our OWN tour goes as the face only, never our buyer's
+note. Through `composeSheet`: the agent edits and sends; `seller_update_at` is
+stamped. db/013: `properties.list_date`, `portal_url`, `marketing`,
+`seller_update_at`.
+- **From the CRM** (Legacy's feed sends them): `list_date`, `portal_url` (the
+  seller's own portal) and `marketing` `{ listtrac, homes }`. The text gives ONE
+  online line, ListTrac first else Homes.com, named and dated, never added
+  together, then "More numbers on your portal: <link>". `mapFeed` only sends
+  these keys when present, and `upsert` in `api/_lib/crm.js` groups rows by
+  their keys, so a date the agent typed is not blanked by a CRM without one.

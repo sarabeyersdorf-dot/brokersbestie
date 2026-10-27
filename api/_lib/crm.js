@@ -23,9 +23,16 @@ export async function linkOf(teamId) {
   return rows[0] || null;
 }
 
+// Rows are sent in groups that share the same keys: one bulk insert takes one
+// set of columns, and a column a row leaves out (a listing's date when the CRM
+// has none) must stay as the agent typed it, not be blanked.
 async function upsert(table, rows) {
-  for (let i = 0; i < rows.length; i += 200) {
-    await db(`${table}?on_conflict=id`, { method: 'POST', body: rows.slice(i, i + 200).map((r) => ({ ...r, updated_at: new Date().toISOString() })), prefer: 'resolution=merge-duplicates,return=minimal' });
+  const groups = new Map();
+  for (const r of rows) { const k = Object.keys(r).sort().join(','); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+  for (const list of groups.values()) {
+    for (let i = 0; i < list.length; i += 200) {
+      await db(`${table}?on_conflict=id`, { method: 'POST', body: list.slice(i, i + 200).map((r) => ({ ...r, updated_at: new Date().toISOString() })), prefer: 'resolution=merge-duplicates,return=minimal' });
+    }
   }
 }
 

@@ -3,7 +3,9 @@
 // Bestie Feed v1 is the one shape a CRM hands us (the Legacy CRM serves it at
 // /api/crm/bestie-feed; any other CRM can too):
 //   { format: 'bestie-feed/1', properties: [{ ext_id, address, city, status,
-//     price, mls, coe_date }], people: [{ ext_id, property_ext, name, role,
+//     price, mls, coe_date, agent, and optionally list_date, portal_url,
+//     marketing: { listtrac: { views, last30, shares, favorites, inquiries,
+//     as_of }, homes: { views, favorites, as_of } } }], people: [{ ext_id, property_ext, name, role,
 //     phone, email }], dates: [{ ext_id, property_ext, label, due, done }],
 //     events: [{ ext_id, property_ext, title, kind, date, start, minutes,
 //     location, with }] }
@@ -24,6 +26,20 @@ export const ownerKey = (v) => (String(v || '').trim().split(/\s+/)[0] || '').to
 
 export const crmId = (teamId, kind, ext) => `crm:${teamId}:${kind}:${s(ext, 200).replace(/[^A-Za-z0-9._:@-]/g, '_')}`;
 
+// A listing's online numbers, by source (ListTrac, Homes.com). Numbers only.
+function marketingOf(m) {
+  if (!m || typeof m !== 'object') return null;
+  const out = {};
+  for (const [src, keys] of [['listtrac', ['views', 'last30', 'shares', 'favorites', 'inquiries']], ['homes', ['views', 'favorites']]]) {
+    const x = m[src];
+    if (!x || typeof x !== 'object') continue;
+    const row = Object.fromEntries(keys.map((k) => [k, int(x[k])]));
+    if (keys.every((k) => row[k] == null)) continue;
+    out[src] = { ...row, as_of: day(x.as_of) };
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 // The CRM owns what it sends (address, status, price, dates); codes, notes,
 // photos, directions and map pins are the agent's and are never in these rows.
 export function mapFeed(feed, teamId) {
@@ -39,7 +55,11 @@ export function mapFeed(feed, teamId) {
       address: s(p.address, 200), city: s(p.city, 120),
       status: STATUSES.includes(p.status) ? p.status : 'listing',
       price: Number.isFinite(Number(p.price)) && p.price !== null ? Number(p.price) : null,
-      mls: s(p.mls, 40), coe_date: day(p.coe_date), owner: ownerKey(p.agent)
+      mls: s(p.mls, 40), coe_date: day(p.coe_date), owner: ownerKey(p.agent),
+      // Only when the CRM sends them, so a date the agent typed is kept.
+      ...(day(p.list_date) ? { list_date: day(p.list_date) } : {}),
+      ...(/^https:\/\//.test(String(p.portal_url || '')) ? { portal_url: s(p.portal_url, 300) } : {}),
+      ...(marketingOf(p.marketing) ? { marketing: marketingOf(p.marketing) } : {})
     })),
     people: (feed.people || []).filter((m) => m && m.ext_id && m.name && at(m.property_ext)).map((m) => ({
       id: crmId(teamId, 'm', m.ext_id), team_id: teamId, source: 'crm', property_id: at(m.property_ext),

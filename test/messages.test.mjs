@@ -68,3 +68,79 @@ test('visitors export as a spreadsheet, commas and quotes kept safe', () => {
   assert.match(head, /^Date,First name,Last name,Phone,Email,Has an agent/);
   assert.equal(row, '2026-11-01,Ann,"Lee, Jr",209,a@b.c,No,,,,Yes,"433 ""E"" Hwy 4",');
 });
+
+import { sellerUpdateText, onlineLine } from '../js/messages.js';
+import { sellerStats, sellerUpdatesDue } from '../js/brief.js';
+
+const today = '2026-10-27';
+const sp = { id: 'p1', address: '433 E Highway 4, Murphys', status: 'listing', price: 799000, list_date: '2026-09-12', owner: 'sara',
+  marketing: { listtrac: { views: 4102, last30: 1790, shares: 33, favorites: null, inquiries: 4, as_of: '2026-10-19' }, homes: { views: 96341, favorites: 12, as_of: '2026-10-19' } },
+  portal_url: 'https://legacycalifornia.com/seller/tok' };
+const sdata = {
+  properties: [sp],
+  events: [
+    { property_id: 'p1', kind: 'showing', date: '2026-10-25' },
+    { property_id: 'p1', kind: 'showing', date: '2026-10-01' },
+    { property_id: 'p1', kind: 'showing', date: '2026-10-26', cancelled: true },
+    { property_id: 'p1', kind: 'open', date: '2026-10-26' },
+    { property_id: 'p1', kind: 'open', date: '2026-11-01', title: 'OH' }
+  ],
+  tours: [{ date: '2026-10-24', stops: [{ property_id: 'p1', shown: true }, { property_id: 'p2', shown: true }] }],
+  notes: [
+    { property_id: 'p1', text: 'Showing feedback: Loved the views, worried about the road', created_at: '2026-10-25T18:00:00Z' },
+    { property_id: 'p1', text: 'Showing feedback: Too pricey · my buyer can go to 760', created_at: '2026-10-24T18:00:00Z' },
+    { property_id: 'p1', text: 'Showing feedback: old', created_at: '2026-10-01T18:00:00Z' },
+    { property_id: 'p1', text: 'Gate code changed', created_at: '2026-10-25T18:00:00Z' }
+  ],
+  visitors: [
+    { property_id: 'p1', oh_date: '2026-10-26', first_name: 'Ann', has_agent: false, also_selling: true },
+    { property_id: 'p1', oh_date: '2026-10-26', first_name: 'Bob', has_agent: true },
+    { property_id: 'p1', oh_date: '2026-10-26', first_name: 'Cy', has_agent: false }
+  ],
+  dates: [{ property_id: 'p1', label: 'Price review', due: '2026-11-03', done: false }]
+};
+
+test('seller stats: this week, since listing, feedback, open house counts and what is next', () => {
+  const st = sellerStats(sdata, 'p1', today);
+  assert.equal(st.showingsWeek, 2, 'a showing appointment and our own shown stop; not the cancelled one');
+  assert.equal(st.showingsTotal, 3);
+  assert.equal(st.feedback.length, 2);
+  assert.deepEqual(st.openHouse, { visitors: 3, unrepresented: 2, selling: 1, held: true });
+  assert.deepEqual(st.next.map((x) => x.label), ['Open house', 'Price review']);
+  assert.equal(st.dom, 45);
+});
+
+test('the seller update says it in a few lines, links the portal and never names a visitor or our buyer\'s note', () => {
+  const t = sellerUpdateText(sp, sellerStats(sdata, 'p1', today), { seller: 'Jim Smith', profile: { full_name: 'Sara Cooper', brokerage: 'Legacy Properties', license: 'DRE 02141987' } });
+  assert.match(t, /^Hi Jim, here is your weekly update on 433 E Highway 4\./);
+  assert.match(t, /Showings: 2 this week, 3 since we listed\./);
+  assert.match(t, /• Loved the views, worried about the road/);
+  assert.match(t, /• Too pricey\n/);
+  assert.doesNotMatch(t, /760|Ann|Bob|Cy\b/);
+  assert.match(t, /Open house: 3 visitors, 2 without an agent, 1 also selling a home\./);
+  assert.match(t, /Online \(ListTrac, Oct 19\): 1,790 views in the last 30 days, 33 shares, 4 inquiries\./);
+  assert.doesNotMatch(t, /96,341/, 'one source, never both added or mixed');
+  assert.match(t, /Listed at \$799,000 · 45 days on market\./);
+  assert.match(t, /Coming up: Open house Sun, Nov 1 · Price review Tue, Nov 3\./);
+  assert.match(t, /More numbers on your portal: https:\/\/legacycalifornia\.com\/seller\/tok/);
+  assert.match(t, /Sara Cooper\nLegacy Properties · DRE 02141987$/);
+});
+
+test('a quiet week with nothing from a CRM still reads well', () => {
+  const p = { id: 'q', address: '1 Quiet Ln', status: 'listing' };
+  const t = sellerUpdateText(p, sellerStats({ properties: [p] }, 'q', today), { me: 'sara' });
+  assert.match(t, /No showings this week\./);
+  assert.doesNotMatch(t, /Online|portal|Open house|Coming up|undefined|null/);
+  assert.equal(onlineLine({ homes: { views: 10, favorites: 1, as_of: '2026-10-19' } }), 'Online (Homes.com, Oct 19): 10 views, 1 favorite.');
+});
+
+test('seller updates are due on my listings not updated in 7 days', () => {
+  const props = [
+    { id: 'a', status: 'listing', owner: 'sara' },
+    { id: 'b', status: 'listing', owner: 'sara', seller_update_at: '2026-10-24T10:00:00Z' },
+    { id: 'c', status: 'listing', owner: 'sara', seller_update_at: '2026-10-19T10:00:00Z' },
+    { id: 'd', status: 'listing', owner: 'james' },
+    { id: 'e', status: 'escrow', owner: 'sara' }
+  ];
+  assert.deepEqual(sellerUpdatesDue(props, today, 'sara').map((p) => p.id), ['a', 'c']);
+});

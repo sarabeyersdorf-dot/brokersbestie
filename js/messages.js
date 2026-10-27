@@ -89,3 +89,58 @@ export function visitorsCsv(rows, addressOf = () => '') {
   const lines = rows.map((v) => [v.oh_date, v.first_name, v.last_name, v.phone, v.email, v.has_agent ? 'Yes' : v.has_agent === false ? 'No' : '', v.agent_name, v.timeframe, v.also_selling ? 'Yes' : v.also_selling === false ? 'No' : '', v.consent ? 'Yes' : 'No', addressOf(v.property_id), v.followed_up_at ? v.followed_up_at.slice(0, 10) : ''].map(csvCell).join(','));
   return [head.join(','), ...lines].join('\n');
 }
+
+// ---------- the weekly seller update (2026-10-27) ----------
+// One text a week to the seller: showings, feedback, open house counts, the
+// online numbers when the CRM sends them, price and days on market, what is
+// next, and the portal link for the rest. The agent reads it and sends it.
+const n = (v) => Number(v).toLocaleString('en-US');
+const plural = (k, one, many = one + 's') => `${n(k)} ${k === 1 ? one : many}`;
+const shortDay = (iso) => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+const monthDay = (iso) => new Date(String(iso).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+// A face picked on our own tour ("Too pricey · <private note>") goes to the
+// seller as the face only: the note is our buyer's business.
+const FACE_LABELS = Object.values(FACE_WORD);
+const feedbackLine = (t) => { const face = FACE_LABELS.find((w) => t.startsWith(w + ' · ')); return face || t; };
+
+// "ListTrac, Oct 19: 1,790 views in the last 30 days, 33 shares, 4 inquiries."
+// ListTrac and Homes.com count differently; one source, named, never added.
+export function onlineLine(m) {
+  if (!m) return '';
+  const lt = m.listtrac, hc = m.homes;
+  if (lt && (lt.last30 != null || lt.views != null)) {
+    const bits = [lt.last30 != null ? `${n(lt.last30)} views in the last 30 days` : `${n(lt.views)} views`];
+    if (lt.shares) bits.push(plural(lt.shares, 'share'));
+    if (lt.favorites) bits.push(plural(lt.favorites, 'favorite'));
+    if (lt.inquiries) bits.push(plural(lt.inquiries, 'inquiry', 'inquiries'));
+    return `Online (ListTrac${lt.as_of ? ', ' + monthDay(lt.as_of) : ''}): ${bits.join(', ')}.`;
+  }
+  if (hc && hc.views != null) {
+    const bits = [`${n(hc.views)} views`];
+    if (hc.favorites) bits.push(plural(hc.favorites, 'favorite'));
+    return `Online (Homes.com${hc.as_of ? ', ' + monthDay(hc.as_of) : ''}): ${bits.join(', ')}.`;
+  }
+  return '';
+}
+
+export function sellerUpdateText(p, st, { seller = '', profile = null, me = '' } = {}) {
+  const lines = [`Hi${seller ? ' ' + first(seller) : ''}, here is your weekly update on ${street(p.address)}.`, ''];
+  lines.push(st.showingsWeek
+    ? `Showings: ${st.showingsWeek} this week${st.showingsTotal > st.showingsWeek ? `, ${st.showingsTotal} since we listed` : ''}.`
+    : `No showings this week${st.showingsTotal ? ` (${st.showingsTotal} since we listed)` : ''}.`);
+  if (st.feedback.length) lines.push('Feedback:', ...st.feedback.slice(0, 5).map((f) => `• ${feedbackLine(f)}`));
+  const oh = st.openHouse;
+  if (oh.held) lines.push(oh.visitors
+    ? `Open house: ${plural(oh.visitors, 'visitor')}${oh.unrepresented ? `, ${oh.unrepresented} without an agent` : ''}${oh.selling ? `, ${oh.selling} also selling a home` : ''}.`
+    : 'Open house: held this week; no one signed in.');
+  const online = onlineLine(p.marketing);
+  if (online) lines.push(online);
+  const price = p.price ? `$${n(p.price)}` : '';
+  const facts = [p.status === 'escrow' ? `In escrow${p.coe_date ? `, closing ${monthDay(p.coe_date)}` : ''}` : price ? `Listed at ${price}` : '', st.dom != null && p.status !== 'escrow' ? `${plural(st.dom, 'day')} on market` : ''].filter(Boolean);
+  if (facts.length) lines.push(facts.join(' · ') + '.');
+  if (st.next.length) lines.push(`Coming up: ${st.next.map((x) => `${x.label} ${shortDay(x.date)}`).join(' · ')}.`);
+  if (p.portal_url) lines.push(`More numbers on your portal: ${p.portal_url}`);
+  lines.push('', 'Any questions, just reply here.');
+  const sig = signOff(profile, me);
+  return lines.join('\n') + (sig ? `\n${sig}` : '');
+}

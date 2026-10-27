@@ -207,3 +207,49 @@ export function buyers(tours) {
     .map((b) => ({ ...b, tours: b.tours.sort((x, y) => String(y.date).localeCompare(String(x.date))), homes: [...b.homes.values()].sort((x, y) => `${y.date}${y.at}`.localeCompare(`${x.date}${x.at}`)) }))
     .sort((a, b) => b.last.localeCompare(a.last) || a.name.localeCompare(b.name));
 }
+
+// ---------- the weekly seller update (2026-10-27) ----------
+// Sara: "build it as described". What happened at a listing in the last 7
+// days, and what is next, from what is already in Bestie: showings (our own
+// tour stops marked shown, and showing appointments), "Showing feedback"
+// notes, open house sign-ins (counts only, never names), the next 14 days.
+const dayOf = (v) => String(v || '').slice(0, 10);
+export function sellerStats(data, pid, today) {
+  const p = (data.properties || []).find((x) => x.id === pid) || {};
+  const from = addDays(today, -6);
+  const inWeek = (d) => d && d >= from && d <= today;
+  const showings = [];
+  for (const e of data.events || []) if (e.property_id === pid && !e.cancelled && e.kind === 'showing' && e.date && e.date <= today) showings.push(e.date);
+  for (const t of data.tours || []) for (const s of t.stops || []) if (s.property_id === pid && s.shown && t.date && t.date <= today) showings.push(t.date);
+  const since = p.list_date || null;
+  const visitors = (data.visitors || []).filter((v) => v.property_id === pid && inWeek(v.oh_date));
+  const feedback = (data.notes || [])
+    .filter((n) => n.property_id === pid && /^showing feedback:/i.test(n.text || '') && inWeek(dayOf(n.created_at)))
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+    .map((n) => n.text.replace(/^showing feedback:\s*/i, '').trim()).filter(Boolean);
+  const end = addDays(today, 14);
+  const next = [];
+  for (const e of data.events || []) if (e.property_id === pid && !e.cancelled && e.date > today && e.date <= end) next.push({ date: e.date, label: e.kind === 'open' ? 'Open house' : e.title || 'Appointment', kind: e.kind || '' });
+  for (const d of data.dates || []) if (d.property_id === pid && !d.done && d.due > today && d.due <= end) next.push({ date: d.due, label: d.label, kind: 'date' });
+  next.sort((a, b) => a.date.localeCompare(b.date));
+  const dom = since && since <= today ? Math.round((new Date(today + 'T12:00:00Z') - new Date(since + 'T12:00:00Z')) / 864e5) : null;
+  return {
+    showingsWeek: showings.filter(inWeek).length,
+    showingsTotal: showings.filter((d) => !since || d >= since).length,
+    feedback,
+    openHouse: {
+      visitors: visitors.length,
+      unrepresented: visitors.filter((v) => v.has_agent === false).length,
+      selling: visitors.filter((v) => v.also_selling === true).length,
+      held: (data.events || []).some((e) => e.property_id === pid && !e.cancelled && e.kind === 'open' && inWeek(e.date)) || visitors.length > 0
+    },
+    next: next.slice(0, 4),
+    dom
+  };
+}
+
+// My listings whose seller has not had an update in 7 days.
+export function sellerUpdatesDue(props, today, who = null) {
+  const cut = addDays(today, -6);
+  return (props || []).filter((p) => p.status === 'listing' && isWhose(p.owner, who) && (!p.seller_update_at || dayOf(p.seller_update_at) < cut));
+}
