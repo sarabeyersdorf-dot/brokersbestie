@@ -43,13 +43,16 @@ plain words, and let her choose.
   new copy takes over (a button instead if a sheet or form is in use), so a
   home-screen copy never sits on an old version (James, 2026-10-24, could not
   see Send feedback). Settings shows the version at the bottom.
-- Safety: the phone keeps its own timer; in team mode `api/cron/checkins.js` texts
-  the contact after the time is up (cron is DAILY until Vercel Pro; then set
-  `*/5 * * * *` in vercel.json — Hobby refuses to deploy anything more often), claiming the row first so it can
-  never text twice. Never describe phone-only mode as automatic.
-  `AUTO_SAFETY` in `js/config.js` is false until Twilio is set AND the job runs
-  every 5 minutes: while false every agent sees phone-only wording and nothing
-  is registered with the server (2026-10-24, before outside testers).
+- Safety: the phone keeps its own timer. **Since 2026-10-27 the SERVER side
+  lives in the Supabase `reminders` function** (every 5 minutes via pg_cron):
+  overdue check-ins text the contact (`safetyRun`, claim `alerted_at` first so
+  nothing texts twice), and `op: 'safety'` takes start/extend/ok/help from the
+  phone (`safetyCall` in `js/push.js`; help texts at once). The Vercel
+  `api/cron/checkins` cron was removed from vercel.json (one sender only).
+  Texting needs three Edge Function secrets: `TWILIO_ACCOUNT_SID`,
+  `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`. `AUTO_SAFETY` is gone: the phone asks the
+  function (`?op=key` → `safetySms`, cached in settings) and shows "Automatic
+  alert is on" only when it is true. Never describe phone-only mode as automatic.
 - Everything typed is escaped by `html``…``  in `js/ui.js`. Don't build markup by
   string concatenation outside it.
 
@@ -430,3 +433,17 @@ Sara: "do your recommendations". **One meaning per colour**:
   (properties, people, where things are, tours, buyers, vendors), a winking
   buddy beside the morning greeting, and a "Tour done!" sheet with the love
   face and "Send <buyer> the recap".
+
+## Open house sign-in by QR code (2026-10-27)
+
+The open house kiosk has a **QR code** button: `qrSheet()` makes one
+`oh_links` row per property per day (db/016, team RLS, 3-day expiry, cached in
+`bb:ohlink:<pid>:<day>`) and draws the QR with `qrcode-generator@1.4.4` from
+jsdelivr. Visitors land on **`oh.html?t=<token>`**, a standalone page (no app,
+no sign-in) branded from the agent's profile (name, brokerage, license, brand
+colour). It talks only to the `reminders` function: `GET ?op=oh` (address +
+branding; 404 once ended) and `POST {op:'visit'}`, which checks the link,
+cleans the fields (`cleanVisit` in `safety.js`, tested), drops anything with
+the hidden `website` field filled (robots), caps 300 a day per property, and
+writes a `visitors` row (`id` `web-…`, notes "Signed in on their own phone").
+The visitor list syncs when opened, so web sign-ins show up there.

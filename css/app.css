@@ -508,3 +508,5 @@ details.status-pick[open] > summary .chg { visibility: hidden; }
 .brief .buddy-hi svg { width: 34px; }
 .brief .hi-wrap { min-width: 0; }
 .brief .brief-date { line-height: 1.05; }
+.qr-box { background: #fff; border-radius: 14px; padding: 12px; margin: 0 auto; width: min(320px, 80vw); }
+.qr-box svg { width: 100%; height: auto; display: block; }

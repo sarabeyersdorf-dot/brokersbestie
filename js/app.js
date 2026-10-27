@@ -2,7 +2,7 @@
 // back button, bookmarks and a home-screen launch all land where expected.
 
 import * as store from './store.js';
-import { AUTO_SAFETY, APP_VERSION } from './config.js';
+import { APP_VERSION } from './config.js';
 import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLink, mapLink, todayIso, daysFrom, niceDate, whenText, toast, undoToast, copy } from './ui.js';
 import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMiles, roadMiles, driveMinutes } from './route.js';
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
@@ -12,7 +12,7 @@ import { chooseFromDropbox, dropboxReady } from './dropbox.js';
 import { CRM_CHOICES } from './crmlist.js';
 import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
-import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS } from './push.js';
+import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink } from './push.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
 import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, doorCodes } from './brief.js';
 
@@ -1840,6 +1840,35 @@ function viewProfile() {
 }
 
 // ---------- open house ----------
+// QR sign-in (2026-10-27): visitors scan and sign in on their own phones
+// (oh.html). The link lasts 3 days and is made once per property per day.
+async function qrSheet(pid) {
+  const key = `bb:ohlink:${pid}:${todayIso()}`;
+  let link = '';
+  try { link = localStorage.getItem(key) || ''; } catch {}
+  if (!link) {
+    try { link = await openHouseLink(pid); try { localStorage.setItem(key, link); } catch {} }
+    catch (e) { toast(e.message); return; }
+  }
+  let svg = '';
+  try {
+    const { default: qrcode } = await import('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/+esm');
+    const q = qrcode(0, 'M'); q.addData(link); q.make();
+    svg = q.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+  } catch { svg = ''; }
+  openSheet(html`<div class="sec" style="text-align:center">
+    <div class="title" style="font-family:var(--tall);font-weight:800;font-size:28px;text-transform:uppercase">Scan to sign in</div>
+    <div class="small">Visitors point their camera here and sign in on their own phone. It lands in your visitor list.</div>
+    ${svg ? html`<div class="qr-box">${raw(svg)}</div>` : html`<div class="warn-box">Could not draw the QR code (no signal?). Share the link instead.</div>`}
+    <div class="btns"><button class="btn" type="button" id="qrcopy">Copy link</button><button class="btn" type="button" id="qrshare">Share link</button></div>
+    <button class="btn dark block" type="button" id="qrclose">Done</button>
+  </div>`, (sh) => {
+    sh.querySelector('#qrclose').addEventListener('click', closeSheet);
+    sh.querySelector('#qrcopy').addEventListener('click', async () => toast((await copy(link)) ? 'Link copied' : link));
+    sh.querySelector('#qrshare').addEventListener('click', () => { if (navigator.share) navigator.share({ title: 'Open house sign-in', url: link }).catch(() => {}); else copy(link).then(() => toast('Link copied')); });
+  });
+}
+
 const TIMEFRAMES = [['', 'Pick one (optional)'], ['0-3 months', 'In the next 3 months'], ['3-6 months', '3 to 6 months'], ['6-12 months', '6 to 12 months'], ['Just looking', 'Just looking']];
 let ohThanks = null;
 
@@ -1872,7 +1901,7 @@ function viewOpenHouse(pid) {
       ${fieldHtml({ name: 'timeframe', label: 'When are you hoping to move?', type: 'select', options: TIMEFRAMES })}
       <label class="switch"><input type="checkbox" name="consent">Yes, ${prof && prof.full_name ? prof.full_name : 'the listing agent'} may contact me about this home and others like it.</label>
       <button class="btn dark big block" type="submit">Sign in</button>
-      <div class="kiosk-foot"><span class="small">${count} signed in today</span><button class="btn ghost" type="button" id="ohend" style="min-height:36px">Agent: end open house</button></div>
+      <div class="kiosk-foot"><span class="small">${count} signed in today</span><span style="display:flex;gap:6px"><button class="btn ghost" type="button" id="ohqr" style="min-height:36px">QR code</button><button class="btn ghost" type="button" id="ohend" style="min-height:36px">Agent: end open house</button></span></div>
     </form></main></div>`,
     mount(root) {
       loadPhotos(root);
@@ -1894,6 +1923,7 @@ function viewOpenHouse(pid) {
         render();
       });
       root.querySelector('#ohend').addEventListener('click', () => { if (confirm('End the open house and see who signed in?')) location.hash = `#/visitors/${pid}`; });
+      root.querySelector('#ohqr').addEventListener('click', () => qrSheet(pid));
     }
   };
 }
@@ -1914,9 +1944,11 @@ function viewVisitors(pid) {
             <span class="s ${v.followed_up_at ? 'ok' : v.consent ? '' : 'wait'}">${v.followed_up_at ? `✓ Followed up ${niceDate(v.followed_up_at.slice(0, 10))}` : v.consent ? 'OK to contact' : 'Did not tick “OK to contact”'}</span></span>
           <div style="display:flex;gap:6px;flex-shrink:0">${v.phone ? html`<a class="icon-btn" href="tel:${digits(v.phone)}" aria-label="Call">${icon('phone', 18)}</a>` : ''}<button class="icon-btn" type="button" data-fu="${v.id}" aria-label="Thank-you text">${icon('text', 18)}</button></div>
         </div>`)}</div></section>`)}
-      ${!list.length ? html`<div class="card empty">No one has signed in yet. Open the sign-in sheet and hand your phone or tablet to visitors.</div>` : html`<button class="btn block" type="button" id="vcsv">Download visitors (spreadsheet for your CRM)</button>`}
+      ${!list.length ? html`<div class="card empty">No one has signed in yet. Open the sign-in sheet and hand your phone or tablet to visitors, or show them the QR code.</div>` : html`<button class="btn block" type="button" id="vcsv">Download visitors (spreadsheet for your CRM)</button>`}
     </main>`,
     mount(root) {
+      // Visitors who signed in on their own phones arrive through the team sync.
+      if (store.cloud.user && !viewVisitors.synced) { viewVisitors.synced = true; store.syncNow().finally(() => setTimeout(() => { viewVisitors.synced = false; }, 30000)); }
       root.querySelectorAll('[data-fu]').forEach((b) => b.addEventListener('click', () => {
         const v = store.get('visitors', b.getAttribute('data-fu'));
         composeSheet({
@@ -2217,7 +2249,7 @@ function viewSafety() {
   const c = activeCheckin();
   const s = store.settings();
   const contact = s.checkinContact || {};
-  const serverOn = AUTO_SAFETY && store.cloud.enabled && store.cloud.user;
+  const serverOn = safetyAuto();
   if (c) {
     const left = Math.max(0, Math.round((new Date(c.due_at) - Date.now()) / 1000));
     const mm = Math.floor(left / 60), ss = String(left % 60).padStart(2, '0');
@@ -2294,10 +2326,13 @@ function viewSafety() {
   };
 }
 
+// Automatic texts are on when signed in to a team AND the server says texting
+// is set up (Twilio in the Supabase function). Otherwise: phone-only, said plainly.
+function safetyAuto() { return !!(store.cloud.enabled && store.cloud.user && store.settings().safetySms === true); }
 async function serverCheckin(op, row) {
-  if (!(AUTO_SAFETY && store.cloud.enabled && store.cloud.user)) return;
-  try { await store.syncNow(); await api('/api/checkin', { method: 'POST', body: JSON.stringify({ op, id: row.id, due_at: row.due_at }) }); }
-  catch (e) { toast('Could not reach the server; the phone timer is still on'); }
+  if (!(store.cloud.enabled && store.cloud.user)) return;
+  try { await store.syncNow(); await safetyCall(op, row); }
+  catch (e) { if (safetyAuto()) toast('Could not reach the server; the phone timer is still on'); }
 }
 
 function endCheckin(c, how) {
@@ -3206,6 +3241,9 @@ const ROUTES = [
 
 let current = null;
 // Bright sun mode lives on <html> so every screen, sheet and toast gets it.
+// Ask once per start whether the server texts safety alerts yet.
+setTimeout(() => serverStatus().then((changed) => { if (changed && /^#\/safety/.test(location.hash)) render(); }), 1500);
+
 function applyContrast() { document.documentElement.classList.toggle('hc', !!store.settings().highContrast); }
 applyContrast();
 

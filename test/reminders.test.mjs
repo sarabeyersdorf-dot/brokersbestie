@@ -74,3 +74,30 @@ test('the push body decrypts with the phone\'s key (aes128gcm)', async () => {
   assert.equal(plain.at(-1), 2);
   assert.equal((await makeVapidKeys()).publicKey.length, 87);
 });
+
+import { overdue, alertText, e164, cleanVisit } from '../supabase/functions/reminders/safety.js';
+
+test('safety: only active, un-alerted check-ins past the 2-minute grace are overdue', () => {
+  const now = new Date('2026-10-28T17:00:00Z');
+  const list = overdue([
+    { id: 'a', status: 'active', due_at: '2026-10-28T16:55:00Z' },
+    { id: 'b', status: 'active', due_at: '2026-10-28T16:59:00Z' },
+    { id: 'c', status: 'active', due_at: '2026-10-28T16:50:00Z', alerted_at: 'x' },
+    { id: 'd', status: 'ok', due_at: '2026-10-28T16:50:00Z' }
+  ], now);
+  assert.deepEqual(list.map((c) => c.id), ['a']);
+  assert.match(alertText({ place: '9 Oak St', meeting_name: 'Ann', lat: 38, lng: -120 }, { overdue: true }), /9 Oak St meeting Ann and has not checked back in.*maps\.google\.com\/\?q=38,-120/);
+  assert.equal(e164('(209) 555-1212'), '+12095551212');
+});
+
+test('open house: a visit needs a name and a phone or email; agent name only with an agent', () => {
+  assert.equal(cleanVisit({ first_name: 'Ann' }), null);
+  assert.equal(cleanVisit({ phone: '2095551212' }), null);
+  const v = cleanVisit({ first_name: ' Ann ', email: 'ANN@X.COM', has_agent: 'no', agent_name: 'Bob', consent: true });
+  assert.equal(v.first_name, 'Ann');
+  assert.equal(v.email, 'ann@x.com');
+  assert.equal(v.has_agent, false);
+  assert.equal(v.agent_name, '');
+  assert.equal(v.consent, true);
+  assert.equal(cleanVisit({ first_name: 'A', phone: '2095551212', consent: 'true' }).consent, false, 'only a real tick counts');
+});

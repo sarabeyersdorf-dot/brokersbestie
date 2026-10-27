@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Open house sign-in</title>
+<link rel="icon" href="icons/favicon-32.png">
+<style>
+  /* Open house sign-in on the visitor's own phone (2026-10-27). Reached from
+     the QR code on the agent's open house screen: oh.html?t=<link token>.
+     Talks only to the Supabase `reminders` function (op=oh / op=visit), which
+     checks the link and saves the visitor to the agent's team. */
+  :root { --ink: #1f2326; --ink-2: #353b3e; --line: #c4cbc8; --bg: #e9ecea; --brand: #202428; --teal: #19c3b1; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  .band { background: var(--brand); color: #fff; padding: 22px 18px 18px; border-bottom: 4px solid var(--teal); }
+  .band .kicker { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; opacity: .85; }
+  .band h1 { margin: 6px 0 2px; font-size: 28px; line-height: 1.1; text-transform: uppercase; }
+  .band .agent { font-size: 14px; opacity: .9; }
+  main { max-width: 520px; margin: 0 auto; padding: 16px; }
+  label { display: block; margin: 12px 0; font-weight: 600; font-size: 15px; }
+  input, select { display: block; width: 100%; margin-top: 6px; min-height: 50px; padding: 0 12px; font-size: 18px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+  .seg button { min-height: 50px; border: 2px solid var(--line); border-radius: 10px; background: #fff; font: 600 17px system-ui, sans-serif; color: var(--ink); }
+  .seg button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .tick { display: flex; gap: 10px; align-items: flex-start; font-weight: 500; }
+  .tick input { width: 24px; min-height: 24px; height: 24px; margin: 2px 0 0; flex-shrink: 0; }
+  .go { width: 100%; min-height: 58px; margin-top: 14px; border: 0; border-radius: 12px; background: var(--brand); color: #fff; font: 800 19px system-ui, sans-serif; }
+  .msg { color: #b00020; font-weight: 600; min-height: 1.4em; }
+  .done { text-align: center; padding: 40px 10px; }
+  .done h2 { font-size: 30px; margin: 10px 0; }
+  .trap { position: absolute; left: -9999px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="band"><div class="kicker">Welcome · Open house</div><h1 id="addr">Loading…</h1><div class="agent" id="agent"></div></div>
+<main>
+  <form id="f" novalidate hidden>
+    <div class="row2">
+      <label>First name<input name="first_name" autocomplete="given-name" required></label>
+      <label>Last name<input name="last_name" autocomplete="family-name"></label>
+    </div>
+    <label>Phone<input name="phone" type="tel" inputmode="tel" autocomplete="tel"></label>
+    <label>Email<input name="email" type="email" autocomplete="email"></label>
+    <div class="trap" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
+    <label>Are you working with a real estate agent?<span class="seg" data-seg="has_agent"><button type="button" data-v="no">No</button><button type="button" data-v="yes">Yes</button></span></label>
+    <label id="agentname" hidden>Your agent's name<input name="agent_name" autocomplete="off"></label>
+    <label>Do you have a home to sell?<span class="seg" data-seg="also_selling"><button type="button" data-v="no">No</button><button type="button" data-v="yes">Yes</button></span></label>
+    <label>When are you hoping to move?<select name="timeframe"><option value="">Pick one (optional)</option><option value="0-3 months">In the next 3 months</option><option value="3-6 months">3 to 6 months</option><option value="6-12 months">6 to 12 months</option><option value="Just looking">Just looking</option></select></label>
+    <label class="tick"><input type="checkbox" name="consent"><span id="consentText">You may contact me about this home and others like it.</span></label>
+    <div class="msg" id="msg"></div>
+    <button class="go" type="submit">Sign in</button>
+  </form>
+  <div class="done" id="done" hidden><h2>Thank you!</h2><p>Enjoy the home.</p><button class="go" type="button" id="again">Sign in another person</button></div>
+  <div class="done" id="gone" hidden><h2>Sign-in has ended</h2><p id="gonewhy">Please ask the agent at the door.</p></div>
+</main>
+<script type="module">
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './js/config.js';
+  const FN = `${SUPABASE_URL}/functions/v1/reminders`;
+  const t = new URLSearchParams(location.search).get('t') || '';
+  const $ = (s) => document.querySelector(s);
+  const pick = {};
+  const show = (id) => { for (const x of ['#f', '#done', '#gone']) $(x).hidden = x !== id; };
+
+  try {
+    const r = await fetch(`${FN}?op=oh&t=${encodeURIComponent(t)}`, { headers: { apikey: SUPABASE_ANON_KEY } });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'This sign-in link has ended.');
+    $('#addr').textContent = j.address || 'Open house';
+    document.title = `Sign in · ${j.address || 'Open house'}`;
+    const a = j.agent;
+    if (a) {
+      if (a.brand_color && /^#[0-9a-f]{6}$/i.test(a.brand_color)) document.documentElement.style.setProperty('--brand', a.brand_color);
+      $('#agent').textContent = [a.full_name, a.brokerage, a.license].filter(Boolean).join(' · ');
+      if (a.full_name) $('#consentText').textContent = `${a.full_name.split(' ')[0]} may contact me about this home and others like it.`;
+    }
+    show('#f');
+  } catch (e) {
+    $('#addr').textContent = 'Open house';
+    $('#gonewhy').textContent = e.message;
+    show('#gone');
+  }
+
+  document.querySelectorAll('[data-seg]').forEach((g) => g.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    pick[g.dataset.seg] = b.dataset.v;
+    g.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    if (g.dataset.seg === 'has_agent') $('#agentname').hidden = b.dataset.v !== 'yes';
+  }));
+
+  $('#f').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const v = (n) => (f.elements[n].value || '').trim();
+    if (!v('first_name') || !(v('phone') || v('email'))) { $('#msg').textContent = 'Please add your first name and a phone number or email.'; return; }
+    $('#msg').textContent = '';
+    const btn = f.querySelector('.go'); btn.disabled = true; btn.textContent = 'Saving…';
+    const d = new Date();
+    const ohDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    try {
+      const r = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY }, body: JSON.stringify({
+        op: 'visit', t, oh_date: ohDate, website: v('website'),
+        first_name: v('first_name'), last_name: v('last_name'), phone: v('phone'), email: v('email'),
+        has_agent: pick.has_agent || null, agent_name: v('agent_name'), also_selling: pick.also_selling || null,
+        timeframe: v('timeframe'), consent: f.elements.consent.checked
+      }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not save. Please try again.');
+      f.reset(); for (const k in pick) delete pick[k];
+      document.querySelectorAll('.seg button').forEach((x) => x.classList.remove('on'));
+      $('#agentname').hidden = true;
+      show('#done');
+    } catch (err) { $('#msg').textContent = err.message; }
+    btn.disabled = false; btn.textContent = 'Sign in';
+  });
+  $('#again').addEventListener('click', () => { show('#f'); window.scrollTo(0, 0); });
+</script>
+</body>
+</html>

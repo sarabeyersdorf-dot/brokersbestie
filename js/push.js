@@ -61,3 +61,35 @@ export async function sendTest() {
   const res = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }, body: JSON.stringify({ op: 'test' }) });
   return res.json();
 }
+
+// Is the server texting safety alerts yet? (true once Twilio is set up in the
+// Supabase function.) Asked on start-up and kept in settings, so the safety
+// screen tells the truth offline too.
+export async function serverStatus() {
+  try {
+    const r = await fetch(`${FN}?op=key`, { headers: { apikey: SUPABASE_ANON_KEY } });
+    const j = await r.json();
+    if (typeof j.safetySms === 'boolean' && j.safetySms !== store.settings().safetySms) { store.saveSettings({ safetySms: j.safetySms }); return true; }
+  } catch {}
+  return false;
+}
+
+// A safety check-in action on the server: start | extend | ok | help.
+export async function safetyCall(action, row) {
+  const token = await store.accessToken();
+  const res = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }, body: JSON.stringify({ op: 'safety', action, id: row.id, due_at: row.due_at }) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(j.error || 'Could not reach the server');
+  return j;
+}
+
+// A link (and QR code) for visitors to sign in at an open house on their own
+// phones. Lasts 3 days. Needs team mode: the visitor is saved to the team.
+export async function openHouseLink(propertyId) {
+  const c = store.cloud;
+  if (!c.user || !c.teamId) throw new Error('Sign in first (Settings → Team mode) to use the QR sign-in.');
+  await store.syncNow();
+  const { data, error } = await c.client.from('oh_links').insert({ team_id: c.teamId, property_id: propertyId, owner: (store.settings().myName || '').toLowerCase() || null }).select('token').single();
+  if (error) throw new Error(error.message);
+  return `${location.origin}/oh.html?t=${data.token}`;
+}
