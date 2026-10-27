@@ -13,7 +13,7 @@ export const AUTO_SAFETY = false;
 
 // Shown at the bottom of Settings and in feedback emails. Must equal VERSION
 // in sw.js (test/install.test.mjs checks), so it says which copy a phone runs.
-export const APP_VERSION = 'bb-v32';
+export const APP_VERSION = 'bb-v33';
 
 // Dropbox Chooser app key (public by design; the domains it may be used on are
 // set in the Dropbox App Console). Empty: "From Dropbox" explains the Files app

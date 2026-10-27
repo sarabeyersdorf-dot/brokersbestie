@@ -1870,9 +1870,16 @@ function viewSettings() {
       <section class="card pad sec">
         <div class="label accent">Connect your CRM</div>
         <div class="small" id="crmstate">Checking…</div>
-        <label class="field"><span>Feed link (from your CRM)</span><input id="crmurl" type="url" autocomplete="off" placeholder="https://yourcrm.com/api/crm/bestie-feed"></label>
-        <label class="field"><span>Feed key</span><input id="crmkey" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"></label>
-        <button class="btn block" type="button" id="crmmake">Make a new key (copies it)</button>
+        <label class="field"><span>Your CRM</span><select id="crmkind"><option value="fub">Follow Up Boss</option><option value="feed">Another CRM (Bestie feed link)</option></select></label>
+        <div id="crmfub" class="sec">
+          <label class="field"><span>Follow Up Boss API key</span><input id="fubkey" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"></label>
+          <div class="hint">In Follow Up Boss: <b>Admin → API → Create API Key</b>, then paste it here. Bestie only reads: your deals become properties (address, price, close date), the people on them become contacts, and appointments you made in Follow Up Boss go on the calendar. Nothing is ever changed in Follow Up Boss.</div>
+        </div>
+        <div id="crmfeed" class="sec" hidden>
+          <label class="field"><span>Feed link (from your CRM)</span><input id="crmurl" type="url" autocomplete="off" placeholder="https://yourcrm.com/api/crm/bestie-feed"></label>
+          <label class="field"><span>Feed key</span><input id="crmkey" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"></label>
+          <button class="btn block" type="button" id="crmmake">Make a new key (copies it)</button>
+        </div>
         <div class="hint">Your listings, deal dates, contacts and appointments come in from the CRM and update each time you open Bestie. Codes, photos and notes stay Bestie's: the CRM never changes them.</div>
         <div class="btns"><button class="btn dark" type="button" id="crmsave">Save and sync</button><button class="btn" type="button" id="crmrun">Sync now</button></div>
         <button class="btn ghost block" type="button" id="crmoff" hidden>Disconnect</button>
@@ -1973,9 +1980,14 @@ function viewSettings() {
       });
       if (store.cloud.user) {
         const st = root.querySelector('#crmstate');
+        const kind = root.querySelector('#crmkind');
+        const pickKind = () => { root.querySelector('#crmfub').hidden = kind.value !== 'fub'; root.querySelector('#crmfeed').hidden = kind.value !== 'feed'; };
+        kind.addEventListener('change', pickKind);
         const show = (r) => {
-          st.textContent = r.connected ? `Connected to ${new URL(r.feed_url).host}. ${r.last_result || ''}${r.last_synced_at ? ` (${new Date(r.last_synced_at).toLocaleString()})` : ''}` : 'Not connected.';
-          if (r.connected && !root.querySelector('#crmurl').value) root.querySelector('#crmurl').value = r.feed_url;
+          const who = r.provider === 'fub' ? 'Follow Up Boss' : r.feed_url ? new URL(r.feed_url).host : '';
+          st.textContent = r.connected ? `Connected to ${who}. ${r.last_result || ''}${r.last_synced_at ? ` (${new Date(r.last_synced_at).toLocaleString()})` : ''}` : 'Not connected.';
+          if (r.connected) { kind.value = r.provider === 'fub' ? 'fub' : 'feed'; pickKind(); }
+          if (r.connected && r.provider !== 'fub' && !root.querySelector('#crmurl').value) root.querySelector('#crmurl').value = r.feed_url;
           root.querySelector('#crmoff').hidden = !r.connected;
         };
         api('/api/crm-sync').then(show).catch((e) => { st.textContent = e.message; });
@@ -1997,7 +2009,9 @@ function viewSettings() {
           await copy(key);
           toast('New key copied. Paste it into your CRM too, then Save and sync.');
         });
-        root.querySelector('#crmsave').addEventListener('click', (e) => call({ op: 'save', url: root.querySelector('#crmurl').value.trim(), key: root.querySelector('#crmkey').value.trim() }, e.currentTarget));
+        root.querySelector('#crmsave').addEventListener('click', (e) => call(kind.value === 'fub'
+          ? { op: 'save', provider: 'fub', key: root.querySelector('#fubkey').value.trim(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone }
+          : { op: 'save', url: root.querySelector('#crmurl').value.trim(), key: root.querySelector('#crmkey').value.trim() }, e.currentTarget));
         root.querySelector('#crmrun').addEventListener('click', (e) => call({ op: 'run' }, e.currentTarget));
         root.querySelector('#crmoff').addEventListener('click', (e) => { if (confirm('Stop syncing from this CRM? What already came in stays.')) call({ op: 'disconnect' }, e.currentTarget); });
       }

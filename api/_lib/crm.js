@@ -8,6 +8,7 @@
 
 import { db } from './server.js';
 import { mapFeed, crmId, pushChanges } from './feed.js';
+import { fubFeed } from './fub.js';
 
 const MAX_FEED_BYTES = 5 * 1024 * 1024;
 
@@ -80,14 +81,25 @@ export async function runSync(teamId, today = new Date().toISOString().slice(0, 
   if (!link || !link.feed_url) return { ok: false, error: 'No CRM connected' };
   let result;
   let pushed = { sent: 0, failed: 0 };
+  const fub = link.provider === 'fub';
   try {
-    pushed = await push(teamId, link);
-    const r = await fetch(link.feed_url, { headers: { Authorization: `Bearer ${link.feed_key || ''}`, Accept: 'application/json' }, signal: AbortSignal.timeout(25000) });
-    if (r.status === 401 || r.status === 403) throw new Error('The CRM refused the key');
-    if (!r.ok) throw new Error(`The CRM answered ${r.status}`);
-    const text = await r.text();
-    if (text.length > MAX_FEED_BYTES) throw new Error('The CRM feed is too large');
-    const rows = mapFeed(JSON.parse(text), teamId);
+    let feed;
+    if (fub) {
+      // Follow Up Boss is read only: a change made on the phone to one of its
+      // appointments stays in Bestie (cleared so the pull can carry on).
+      await db(`dates?team_id=eq.${teamId}&crm_dirty=is.true`, { method: 'PATCH', body: { crm_dirty: false } });
+      await db(`events?team_id=eq.${teamId}&crm_dirty=is.true`, { method: 'PATCH', body: { crm_dirty: false } });
+      feed = await fubFeed(link.feed_key, { tz: link.tz || 'America/Los_Angeles', today });
+    } else {
+      pushed = await push(teamId, link);
+      const r = await fetch(link.feed_url, { headers: { Authorization: `Bearer ${link.feed_key || ''}`, Accept: 'application/json' }, signal: AbortSignal.timeout(25000) });
+      if (r.status === 401 || r.status === 403) throw new Error('The CRM refused the key');
+      if (!r.ok) throw new Error(`The CRM answered ${r.status}`);
+      const text = await r.text();
+      if (text.length > MAX_FEED_BYTES) throw new Error('The CRM feed is too large');
+      feed = JSON.parse(text);
+    }
+    const rows = mapFeed(feed, teamId);
     // Never pull over a change still waiting to go to the CRM.
     const [dirtyD, dirtyE] = await Promise.all([
       db(`dates?team_id=eq.${teamId}&crm_dirty=is.true&select=id`),
@@ -114,7 +126,7 @@ export async function runSync(teamId, today = new Date().toISOString().slice(0, 
     const counts = Object.fromEntries(['properties', 'people', 'dates', 'events'].map((k) => [k, rows[k].length]));
     result = { ok: true, counts, pushed };
   } catch (e) {
-    result = { ok: false, error: e.name === 'TimeoutError' ? 'The CRM did not answer in time' : e.message };
+    result = { ok: false, error: e.name === 'TimeoutError' ? `${fub ? 'Follow Up Boss' : 'The CRM'} did not answer in time` : e.message };
   }
   await db(`crm_links?team_id=eq.${teamId}`, { method: 'PATCH', body: { last_synced_at: new Date().toISOString(), last_result: result.ok ? `Synced ${result.counts.properties} properties, ${result.counts.events} appointments, ${result.counts.dates} dates, ${result.counts.people} people.${pushed.sent ? ` Sent ${pushed.sent} change${pushed.sent === 1 ? '' : 's'} to the CRM.` : ''}${pushed.failed ? ` ${pushed.failed} change${pushed.failed === 1 ? '' : 's'} not taken yet${pushed.note ? ' (' + pushed.note + ')' : ''}; will retry.` : ''}` : `Failed: ${result.error}` } });
   return result;

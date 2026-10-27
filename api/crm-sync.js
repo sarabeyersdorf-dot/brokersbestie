@@ -1,6 +1,7 @@
 // /api/crm-sync — connect a CRM feed, and pull it.
 //   GET                          -> { connected, feed_url, last_synced_at, last_result }
 //   POST { op: 'save', url, key } -> saves the link, then syncs
+//   POST { op: 'save', provider: 'fub', key, tz } -> Follow Up Boss by API key
 //   POST { op: 'run' }            -> syncs now
 //   POST { op: 'auto' }           -> syncs only if the last sync is over an hour old
 //   POST { op: 'disconnect' }
@@ -12,7 +13,7 @@ import { teamOf, linkOf, runSync } from './_lib/crm.js';
 const HOUR = 3600e3;
 
 function status(link) {
-  return { connected: !!(link && link.feed_url), feed_url: link ? link.feed_url : null, last_synced_at: link ? link.last_synced_at : null, last_result: link ? link.last_result : null };
+  return { connected: !!(link && link.feed_url), provider: link ? link.provider || 'feed' : null, feed_url: link ? link.feed_url : null, last_synced_at: link ? link.last_synced_at : null, last_result: link ? link.last_result : null };
 }
 
 export default async function handler(req, res) {
@@ -24,12 +25,22 @@ export default async function handler(req, res) {
   if (req.method === 'GET') return send(res, 200, status(await linkOf(teamId)));
   if (req.method !== 'POST') return send(res, 405, { error: 'GET or POST' });
   const body = await readBody(req).catch(() => ({}));
+  if (body.op === 'save' && body.provider === 'fub') {
+    const key = String(body.key || '').trim();
+    const existing = await linkOf(teamId);
+    if (!key && !(existing && existing.provider === 'fub' && existing.feed_key)) return send(res, 400, { error: 'Paste your Follow Up Boss API key' });
+    const tz = /^[A-Za-z_]+\/[A-Za-z_\/-]+$/.test(String(body.tz || '')) ? String(body.tz) : 'America/Los_Angeles';
+    const row = { team_id: teamId, provider: 'fub', feed_url: 'https://api.followupboss.com/v1', tz, updated_at: new Date().toISOString(), ...(key ? { feed_key: key } : {}) };
+    await db('crm_links?on_conflict=team_id', { method: 'POST', body: row, prefer: 'resolution=merge-duplicates,return=minimal' });
+    const result = await runSync(teamId);
+    return send(res, 200, { ...status(await linkOf(teamId)), result });
+  }
   if (body.op === 'save') {
     const url = String(body.url || '').trim();
     if (!/^https:\/\/[^\s]+$/i.test(url)) return send(res, 400, { error: 'The feed link must start with https://' });
     const key = String(body.key || '').trim();
     const existing = await linkOf(teamId);
-    const row = { team_id: teamId, feed_url: url, updated_at: new Date().toISOString(), ...(key || !existing ? { feed_key: key } : {}) };
+    const row = { team_id: teamId, provider: 'feed', feed_url: url, updated_at: new Date().toISOString(), ...(key || !existing || existing.provider === 'fub' ? { feed_key: key } : {}) }; // never send a Follow Up Boss key to a feed link
     await db('crm_links?on_conflict=team_id', { method: 'POST', body: row, prefer: 'resolution=merge-duplicates,return=minimal' });
     const result = await runSync(teamId);
     return send(res, 200, { ...status(await linkOf(teamId)), result });

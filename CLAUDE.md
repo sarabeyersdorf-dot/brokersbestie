@@ -236,3 +236,23 @@ into each stop a place to snap and save picture notes."
   photo note also rewrites the mirrored property note's text. The note box is
   focused right after a photo is taken. Code boxes never show an example
   number as placeholder (it reads like a real code at the door).
+
+## Follow Up Boss (2026-10-27)
+
+Sara: "can we add follow up boss or add your crm api key?" Settings → Connect
+your CRM → **Your CRM: Follow Up Boss** takes the agent's FUB API key (FUB:
+Admin → API). `crm_links.provider = 'fub'` (db/009, with `tz` from the phone),
+key in `feed_key`, server-only, never returned. `api/_lib/fub.js` turns the
+FUB account into a Bestie Feed v1 object (`fubToFeed`), so everything after
+that is the same `mapFeed` path as Legacy: deals → properties (deal name =
+address, `fubStatus` reads the stage/pipeline words, closed/lost deals older
+than 120 days dropped), deal people → contacts (phones/emails via
+/people/{id}), escrow close date → a "Close of escrow" date, appointments
+(-7..+60 days, UTC → the agent's tz) → calendar, tied to a deal through an
+invitee. **Pull only**: nothing is written to FUB; phone edits to a FUB
+appointment stay in Bestie (crm_dirty cleared). FUB field names are read
+tolerantly (stageName or stage.name...) because the official docs could not be
+fetched; FUB only returns appointments created IN FUB by the key's owner.
+"Another CRM (Bestie feed link)" is the old path (Legacy). A generic "any CRM
+API key" is not possible: each CRM has its own API, so each needs a connector
+like fub.js.
