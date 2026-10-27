@@ -27,10 +27,11 @@ function loadChooser() {
 }
 
 // Resolves with File objects (empty if they cancel).
-export async function chooseFromDropbox() {
+// { images: true } limits it to pictures, { multi: false } to one (a logo).
+export async function chooseFromDropbox({ images = false, multi = true } = {}) {
   const Dbx = await loadChooser();
   const picked = await new Promise((ok) => Dbx.choose({
-    linkType: 'direct', multiselect: true, extensions: ['.pdf', 'images'],
+    linkType: 'direct', multiselect: multi, extensions: images ? ['images'] : ['.pdf', 'images'],
     success: (files) => ok(files || []), cancel: () => ok([])
   }));
   const out = [];

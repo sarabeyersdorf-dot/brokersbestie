@@ -1866,6 +1866,8 @@ function viewProfile() {
         <div class="btns">
           <label class="btn">${icon('photo', 18)}${p.logo_id ? 'Change logo' : 'Add your logo'}<input type="file" accept="image/*" data-img="logo_id" hidden></label>
           <label class="btn">${icon('person', 18)}${p.headshot_id ? 'Change headshot' : 'Add a headshot'}<input type="file" accept="image/*" data-img="headshot_id" hidden></label>
+          <button class="btn" type="button" data-dbx="logo_id">Logo from Dropbox</button>
+          <button class="btn" type="button" data-dbx="headshot_id">Headshot from Dropbox</button>
         </div>
         <div class="hint">A logo with a see-through or white background looks best.</div>
       </div>
@@ -1876,6 +1878,18 @@ function viewProfile() {
       const read = () => ({ ...readForm(form, PROFILE_FIELDS), color: root.querySelector('#pcolor').value, ...imgs });
       const preview = () => { root.querySelector('#bandprev').innerHTML = str(brandBand({ ...p, ...read() }, { big: true })); loadPhotos(root); };
       form.addEventListener('input', preview);
+      root.querySelectorAll('[data-dbx]').forEach((b) => b.addEventListener('click', async () => {
+        if (!dropboxReady()) return toast('Dropbox is not connected yet');
+        try {
+          const [f] = await chooseFromDropbox({ images: true, multi: false });
+          if (!f) return;
+          const id = store.uid();
+          await store.putPhoto(id, await store.shrinkPhoto(f, 800).catch(() => f));
+          imgs[b.getAttribute('data-dbx')] = id;
+          preview();
+          toast('Added. Tap Save to keep it.');
+        } catch (e) { toast(e.message || 'Could not get that from Dropbox'); }
+      }));
       root.querySelectorAll('[data-img]').forEach((inp) => inp.addEventListener('change', async () => {
         const f = inp.files[0];
         if (!f) return;
@@ -2653,7 +2667,9 @@ function viewSettings() {
 
       <section class="card pad sec">
         <div class="label accent">Your profile & branding</div>
-        ${myProfile() ? html`${brandBand(myProfile())}<a class="btn block" href="#/profile">${icon('edit', 18)}Edit profile, logo & license #s</a>`
+        ${myProfile() ? html`${brandBand(myProfile())}<a class="btn block" href="#/profile">${icon('edit', 18)}Edit profile, logo & license #s</a>
+          <div class="btns"><button class="btn" type="button" data-setdbx="logo_id">${icon('photo', 18)}Logo from Dropbox</button><button class="btn" type="button" data-setdbx="headshot_id">${icon('person', 18)}Headshot from Dropbox</button></div>
+          <div class="hint">Opens your own Dropbox: pick the file and it goes on your sign-in sheet and branding.</div>`
           : html`<div class="small">Add your name, brokerage, license numbers, logo and colour. They go on your open house sign-in and the texts Bestie writes for you.</div><a class="btn dark block" href="#/profile">Set up my profile</a>`}
         <label class="field"><span>First name for “Mine” and your morning greeting</span><input id="myname" autocomplete="given-name" placeholder="Sara" value="${s.myName ? s.myName[0].toUpperCase() + s.myName.slice(1) : ''}"></label>
       </section>
@@ -2799,6 +2815,20 @@ function viewSettings() {
         root.querySelector('#crmoff').addEventListener('click', (e) => { if (confirm('Stop syncing from this CRM? What already came in stays.')) call({ op: 'disconnect' }, e.currentTarget); });
       }
       root.querySelector('#rewelcome')?.addEventListener('click', () => showWelcome());
+      root.querySelectorAll('[data-setdbx]').forEach((b) => b.addEventListener('click', async () => {
+        const prof = myProfile();
+        if (!prof) { location.hash = '#/profile'; return; }
+        if (!dropboxReady()) return toast('Dropbox is not connected yet');
+        try {
+          const [f] = await chooseFromDropbox({ images: true, multi: false });
+          if (!f) return;
+          const id = store.uid();
+          await store.putPhoto(id, await store.shrinkPhoto(f, 800).catch(() => f));
+          const field = b.getAttribute('data-setdbx');
+          store.save('profiles', { id: prof.id, [field]: id, [field.replace('_id', '_path')]: null });
+          toast(field === 'logo_id' ? 'Logo saved' : 'Headshot saved');
+        } catch (e) { toast(e.message || 'Could not get that from Dropbox'); }
+      }));
       root.querySelector('#hcmode')?.addEventListener('change', (e) => { store.saveSettings({ highContrast: e.target.checked }); applyContrast(); });
       root.querySelector('#myname')?.addEventListener('change', (e) => { store.saveSettings({ myName: firstName(e.target.value) }); toast('Saved'); });
       const hb = root.querySelector('#hb');
@@ -3420,6 +3450,32 @@ setTimeout(() => serverStatus().then((changed) => { if (changed && /^#\/safety/.
 function applyContrast() { document.documentElement.classList.toggle('hc', !!store.settings().highContrast); }
 applyContrast();
 
+// Each section header in its own colour (Sara, 2026-10-27: "highlight each
+// header ... with unique colors"). One place decides: a header whose words
+// name a kind of thing takes that thing's colour (Tours purple, Key dates
+// orange, Seller updates rose...); any other header gets a colour from the
+// header palette by its words, so the same header is always the same colour.
+const HEADER_HUES = [
+  [/getting in|codes?\b|lockbox/i, 'code'], [/tour|showing/i, 'showing'], [/key date|deadline|due/i, 'deadline'],
+  [/clos/i, 'closing'], [/to ?do/i, 'todo'], [/seller|listing/i, 'listing'], [/escrow/i, 'escrow'],
+  [/appoint|calendar|today|coming up/i, 'appt'], [/safety|check-in/i, 'safety'], [/people|vendor|contact|buyer/i, 'people'],
+  [/note|feedback/i, 'notes'], [/remind/i, 'remind'], [/status/i, 'status']
+];
+const HEADER_PALETTE = ['indigo', 'plum', 'ocean', 'forest', 'rust', 'teal', 'berry', 'olive'];
+function headerHue(text) {
+  const t = String(text || '').trim();
+  for (const [re, hue] of HEADER_HUES) if (re.test(t)) return hue;
+  let h = 0; for (const c of t.toLowerCase()) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return HEADER_PALETTE[h % HEADER_PALETTE.length];
+}
+function colorHeaders(root) {
+  root.querySelectorAll('.sec-head > .label, section > .label:first-child, .card > .label:first-child, .sec > .label:first-child, .status-pick .label').forEach((el) => {
+    if (el.closest('.brief')) return; // the greeting keeps its own look
+    el.classList.add('hd');
+    el.dataset.hue = headerHue(el.textContent);
+  });
+}
+
 function render() {
   const hash = location.hash || '#/';
   let view = notFound();
@@ -3431,6 +3487,7 @@ function render() {
   current = view;
   $view.innerHTML = str(view.html);
   wire($view);
+  colorHeaders($view);
   if (view.mount) view.mount($view);
   $nav.querySelectorAll('a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
   // The open house sheet is a kiosk: no nav, no mic, nothing to wander into.

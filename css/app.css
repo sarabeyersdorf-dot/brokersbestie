@@ -515,3 +515,33 @@ details.status-pick[open] > summary .chg { visibility: hidden; }
 .wdots { display: flex; justify-content: center; gap: 8px; margin: 4px 0; }
 .wdot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
 .wdot.on { background: var(--teal); }
+
+/* Section headers, each in its own colour (2026-10-27). A header naming a
+   kind of thing wears that thing's colour; others take one from the header
+   palette (headerHue in app.js). White words on a solid band, so they read
+   at a glance and in the sun. */
+.label.hd { display: inline-block; width: fit-content; align-self: flex-start; padding: 5px 10px 4px; border-radius: 6px; color: #fff; background: var(--hd, #353b3e); letter-spacing: .12em; line-height: 1.2; }
+.label.hd[data-hue="code"] { --hd: #F5C93E; color: #1f2326; }
+.label.hd[data-hue="showing"] { --hd: var(--k-showing); }
+.label.hd[data-hue="deadline"] { --hd: var(--k-deadline); }
+.label.hd[data-hue="closing"] { --hd: var(--k-closing); }
+.label.hd[data-hue="todo"] { --hd: var(--k-todo); }
+.label.hd[data-hue="appt"] { --hd: var(--k-appt); }
+.label.hd[data-hue="listing"] { --hd: var(--s-listing); }
+.label.hd[data-hue="escrow"] { --hd: var(--s-escrow); }
+.label.hd[data-hue="status"] { --hd: var(--s-tour); }
+.label.hd[data-hue="safety"] { --hd: #c8262e; }
+.label.hd[data-hue="people"] { --hd: #1f5f8b; }
+.label.hd[data-hue="notes"] { --hd: #3f6b2a; }
+.label.hd[data-hue="remind"] { --hd: #4b3fa6; }
+.label.hd[data-hue="indigo"] { --hd: #3d3a9e; }
+.label.hd[data-hue="plum"] { --hd: #7a2d6b; }
+.label.hd[data-hue="ocean"] { --hd: #0e6b8a; }
+.label.hd[data-hue="forest"] { --hd: #2e6b45; }
+.label.hd[data-hue="rust"] { --hd: #9c3d1c; }
+.label.hd[data-hue="teal"] { --hd: #0b7a6e; }
+.label.hd[data-hue="berry"] { --hd: #a3285a; }
+.label.hd[data-hue="olive"] { --hd: #5e6420; }
+.sec-head { align-items: center; }
+html.hc .label.hd { color: #fff; }
+html.hc .label.hd[data-hue="code"] { color: #000; }

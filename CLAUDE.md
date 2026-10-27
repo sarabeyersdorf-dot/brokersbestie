@@ -480,3 +480,19 @@ The visitor list syncs when opened, so web sign-ins show up there.
   (`showWelcome`, `settings.welcomed`); Settings → "Show the welcome again".
 - **Not built: sign-up trial and payments.** Needs Sara's Stripe account and a
   pricing decision first. Sign-up itself already exists (email code + team).
+
+## Coloured section headers, Dropbox for branding (2026-10-27)
+
+- Sara: "highlight each header ... with unique colors". `colorHeaders()` runs
+  after every render and gives each section label (`.sec-head > .label`,
+  first `.label` in a card/section) a solid colour band (`.label.hd`,
+  `data-hue`). `headerHue()` in app.js is the one rule: a header that names a
+  kind of thing takes that thing's colour (Getting in = code yellow, Tours /
+  Showing = purple, Key dates = orange, To do = grey, Seller updates = rose,
+  Safety = red, People / Vendors = blue, Notes = green...); any other header
+  gets a fixed colour from `HEADER_PALETTE` by its words, so it never changes.
+  The morning greeting keeps its own look.
+- Dropbox for logo and headshot: Settings → Your profile & branding has
+  **Logo from Dropbox** / **Headshot from Dropbox** (saved straight to the
+  profile), and the profile page has the same two buttons beside the photo
+  pickers. `chooseFromDropbox({ images: true, multi: false })`.
