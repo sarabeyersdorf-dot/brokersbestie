@@ -112,6 +112,7 @@ export function search(query, data) {
   for (const m of data.people || []) rows.push({ kind: 'Person', title: m.name, sub: [m.role, where(m.property_id)].filter(Boolean).join(' · '), propertyId: m.property_id, text: [m.name, m.role, m.phone, m.email, where(m.property_id)].join(' ') });
   for (const n of data.notes || []) rows.push({ kind: 'Note', title: n.text.length > 70 ? n.text.slice(0, 70) + '…' : n.text, sub: where(n.property_id), propertyId: n.property_id, text: [n.text, where(n.property_id)].join(' ') });
   for (const t of data.tasks || []) rows.push({ kind: 'To do', title: t.text, sub: [where(t.property_id), t.due].filter(Boolean).join(' · '), propertyId: t.property_id, text: [t.text, where(t.property_id)].join(' ') });
+  for (const v of data.vendors || []) rows.push({ kind: 'Vendor', title: v.name || v.company, sub: [v.trade, v.company, v.phone].filter(Boolean).join(' · '), href: '#/vendors', text: [v.name, v.company, v.trade, v.phone, v.email, v.notes].join(' ') });
   for (const d of data.dates || []) rows.push({ kind: 'Date', title: d.label, sub: [where(d.property_id), d.due].filter(Boolean).join(' · '), propertyId: d.property_id, text: [d.label, where(d.property_id)].join(' ') });
   return rows.filter((r) => {
     const hay = r.text.toLowerCase();

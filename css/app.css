@@ -411,3 +411,32 @@ details.install-slim[open] > summary .small { visibility: hidden; }
 .door-step.next { background: var(--teal, #1FBFAE); border-color: var(--teal, #1FBFAE); color: #0e1012; }
 .door-drive { text-align: center; color: #cfd6d3; font: 600 16px var(--sans); text-decoration: underline; }
 .door-btn { background: var(--code, #F5C93E); border-color: var(--code, #F5C93E); color: #0e1012; font-weight: 800; }
+
+/* One-tap status on the property page (2026-10-27) */
+.status-strip .chips { flex-wrap: wrap; overflow: visible; }
+.chip.st.on.st-listing { background: var(--teal-on-dark); border-color: var(--teal-on-dark); color: var(--ink); }
+.chip.st.on.st-prep { background: var(--k-prep); border-color: var(--k-prep); color: #fff; }
+.chip.st.on.st-escrow { background: var(--k-deadline); border-color: var(--k-deadline); color: #fff; }
+.chip.st.on.st-tour { background: var(--k-appt); border-color: var(--k-appt); color: #fff; }
+.chip.st.on.st-closed, .chip.st.on.st-cancelled { background: #c5ccc9; border-color: #c5ccc9; color: var(--ink); }
+.chip.st:disabled { opacity: .55; cursor: default; }
+.chip.st.on:disabled { opacity: 1; }
+.toast-undo { margin-left: 10px; border: 0; background: var(--code, #F5C93E); color: #0e1012; font: 800 15px var(--sans); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+
+/* Bright sun mode (2026-10-27): Settings → Bright sun. Black on white,
+   bigger words, solid lines, so a screen reads outdoors at noon. */
+html.hc {
+  --ink: #000; --ink-2: #000; --mute: #1a1a1a; --bg: #fff; --card: #fff;
+  --line: #000; --line-soft: #333; --teal-text: #00574e; --pending: #8a3200;
+}
+html.hc, html.hc body { font-size: 18px; }
+html.hc .card, html.hc .chip, html.hc .btn, html.hc .field input, html.hc .field select, html.hc .field textarea { border-width: 2px; border-color: #000; }
+html.hc .small, html.hc .hint, html.hc .s, html.hc .label { color: #000; }
+html.hc .row .t { font-weight: 700; }
+html.hc .nav { border-top: 2px solid #000; }
+html.hc .nav a { color: #000; }
+/* Toasts sit above Tell Bestie, Undo on the same line (2026-10-27) */
+.toast { bottom: calc(var(--nav-h) + 78px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.toast[hidden] { display: none; }
+.toast-undo { margin-left: 0; flex-shrink: 0; }
+.toast { min-width: min(340px, calc(100% - 32px)); }

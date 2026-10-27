@@ -31,7 +31,7 @@ function columns(table) {
   return cols;
 }
 
-const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'events', 'tours', 'trips', 'expenses', 'checkins', 'profiles', 'visitors'];
+const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'events', 'tours', 'trips', 'expenses', 'checkins', 'profiles', 'visitors', 'vendors'];
 
 test('every table the phone syncs exists, with team_id, id and updated_at', () => {
   for (const t of TABLES) {

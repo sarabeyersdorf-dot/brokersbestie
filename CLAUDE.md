@@ -393,3 +393,21 @@ phone, pruned after 4 days), db/014. A 404/410 from Apple/Google drops the
 phone. On an iPhone it only works from the home-screen app; the card says so.
 **Redeploy the function after editing any file in that folder** — the repo
 copy does not deploy itself.
+
+## Vendors, one-tap status, Undo, bright sun mode (2026-10-27)
+
+- **Vendors** (`#/vendors`, from Today's bottom buttons; db/015 `vendors`,
+  synced): name, company, trade (`VENDOR_TRADES`), phone, email, notes,
+  favorite (shows first). A property's People tab has **From my vendors**,
+  which copies one onto the property as a person (role = trade · company).
+  Search on Today finds vendors (`parse.js`, `href: '#/vendors'`).
+- **Status** on the property page: one chip per status above the tabs, saved
+  on tap with Undo. Disabled on a CRM property (the CRM owns status).
+- **Undo**: `undoToast(msg, fn)` in `ui.js` (6 s, sits above Tell Bestie).
+  `store.remove` returns what went and `removeProperty` returns everything
+  filed under it; `store.restore(list)` puts it back and cancels a delete not
+  yet sent. Every sheet's Delete goes through `del()` in app.js, so the
+  "are you sure?" there is gone; deleting a property or a tour still asks
+  first AND offers Undo. Ticking a to-do or deadline done offers Undo too.
+- **Bright sun mode**: Settings switch, `settings.highContrast` → `html.hc`
+  (black on white, 18px, 2px black lines), applied on every screen.

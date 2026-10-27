@@ -7,7 +7,7 @@
 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
-export const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'events', 'tours', 'trips', 'expenses', 'checkins', 'profiles', 'visitors'];
+export const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'events', 'tours', 'trips', 'expenses', 'checkins', 'profiles', 'visitors', 'vendors'];
 const KEY = (t) => `bb:${t}`;
 const DELETED = 'bb:_deleted';
 const SETTINGS = 'bb:settings';
@@ -105,6 +105,7 @@ export function save(table, row, { quiet = false } = {}) {
 }
 
 export function remove(table, id) {
+  const gone = all(table).find((r) => r.id === id) || null;
   data[table] = all(table).filter((r) => r.id !== id);
   writeJson(KEY(table), data[table]);
   const tomb = readJson(DELETED, []);
@@ -112,14 +113,33 @@ export function remove(table, id) {
   writeJson(DELETED, tomb);
   emit();
   queueSync();
+  return gone ? { table, row: gone } : null;
 }
 
-// Deleting a property takes everything filed under it with it.
+// Deleting a property takes everything filed under it with it. Returns what
+// went, so Undo can put it all back.
 export function removeProperty(id) {
+  const gone = [];
   for (const t of ['access', 'people', 'notes', 'tasks', 'dates', 'events', 'expenses']) {
-    for (const r of where(t, 'property_id', id)) remove(t, r.id);
+    for (const r of where(t, 'property_id', id)) gone.push(remove(t, r.id));
   }
-  remove('properties', id);
+  gone.push(remove('properties', id));
+  return gone.filter(Boolean);
+}
+
+// Undo (2026-10-27): put deleted rows back. A delete not yet sent to the team
+// is simply cancelled; one already sent is saved again.
+export function restore(list) {
+  const items = (Array.isArray(list) ? list : [list]).filter(Boolean);
+  const keys = new Set(items.map((x) => `${x.table}:${x.row.id}`));
+  writeJson(DELETED, readJson(DELETED, []).filter((d) => !keys.has(`${d.table}:${d.id}`)));
+  const now = new Date().toISOString();
+  for (const { table, row } of items) {
+    data[table] = [...all(table).filter((r) => r.id !== row.id), { ...row, updated_at: now, _dirty: true }];
+    writeJson(KEY(table), data[table]);
+  }
+  emit();
+  queueSync();
 }
 
 // ---------- photos (kept on the phone; uploaded in team mode) ----------

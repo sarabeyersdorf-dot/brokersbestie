@@ -3,7 +3,7 @@
 
 import * as store from './store.js';
 import { AUTO_SAFETY, APP_VERSION } from './config.js';
-import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLink, mapLink, todayIso, daysFrom, niceDate, whenText, toast, copy } from './ui.js';
+import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLink, mapLink, todayIso, daysFrom, niceDate, whenText, toast, undoToast, copy } from './ui.js';
 import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMiles, roadMiles, driveMinutes } from './route.js';
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
 import { sampleData } from './sample.js';
@@ -196,6 +196,12 @@ function readForm(form, fields) {
   return out;
 }
 
+// Delete with an Undo toast (2026-10-27).
+function del(table, id, what = 'Deleted') {
+  const gone = store.remove(table, id);
+  if (gone) undoToast(what, () => store.restore(gone));
+}
+
 function formSheet({ title, fields, values = {}, saveLabel = 'Save', onSave, onDelete, extra }) {
   const sheet = openSheet(html`<form class="sec" novalidate>
     <div class="title" style="font-family:var(--tall);text-transform:uppercase;font-weight:700;font-size:24px">${title}</div>
@@ -214,7 +220,8 @@ function formSheet({ title, fields, values = {}, saveLabel = 'Save', onSave, onD
     });
     s.querySelector('[data-cancel]').addEventListener('click', closeSheet);
     const del = s.querySelector('[data-del]');
-    if (del) del.addEventListener('click', () => { if (confirm('Delete this?')) { onDelete(); closeSheet(); } });
+    // No "are you sure?": every delete here comes with Undo.
+    if (del) del.addEventListener('click', () => { onDelete(); closeSheet(); });
   });
   return sheet;
 }
@@ -407,7 +414,7 @@ function viewToday() {
     <main class="wrap">
       ${searchText ? html`<section class="sec">
         <div class="sec-head"><div class="label accent">${results.length} found</div><button class="btn ghost" type="button" id="clearq" style="min-height:36px">Clear</button></div>
-        <div class="card list">${results.length ? results.slice(0, 40).map((r) => html`<a class="row" href="${r.propertyId ? '#/p/' + r.propertyId : '#/'}">
+        <div class="card list">${results.length ? results.slice(0, 40).map((r) => html`<a class="row" href="${r.href || (r.propertyId ? '#/p/' + r.propertyId : '#/')}">
           <span class="pill tour" style="min-width:64px;text-align:center">${r.kind}</span>
           <span class="grow"><span class="t">${r.title}</span><span class="s">${r.sub}</span></span></a>`) : html`<div class="empty">Nothing matches “${searchText}”.</div>`}</div>
       </section>` : ''}
@@ -462,7 +469,7 @@ function viewToday() {
       </section>` : ''}
 
       <section class="sec">
-        <div class="btns"><a class="btn" href="#/miles">${icon('miles', 18)}Mileage</a><a class="btn" href="#/signs">${icon('sign', 18)}Signs</a><a class="btn" href="#/safety">${icon('shield', 18)}Safety check-in</a></div>
+        <div class="btns"><a class="btn" href="#/vendors">${icon('person', 18)}Vendors</a><a class="btn" href="#/miles">${icon('miles', 18)}Mileage</a><a class="btn" href="#/signs">${icon('sign', 18)}Signs</a><a class="btn" href="#/safety">${icon('shield', 18)}Safety check-in</a></div>
       </section>
       ${!searchText && !isInstalled() && !installHidden() ? installCard({ dismissable: true, slim: true }) : ''}
       ${!searchText && !myProfile() && !profileNudgeHidden() ? html`<div class="card pad sec" data-profnudge><div class="label accent">Make it yours</div><div class="small">Add your name, brokerage, license numbers and logo. They go on your open house sign-in sheet and the texts Bestie writes.</div><div class="btns"><a class="btn dark" href="#/profile">Set up my profile</a><button class="btn ghost" type="button" id="profnot">Later</button></div></div>` : ''}
@@ -503,6 +510,7 @@ function viewToday() {
         if (!store.get(table, id)) return toast('That item is no longer here');
         // Deadlines have no done_at column; to-dos do.
         store.save(table, table === 'tasks' ? { id, done: true, done_at: new Date().toISOString() } : { id, done: true });
+        undoToast('Done', () => store.save(table, table === 'tasks' ? { id, done: false, done_at: null } : { id, done: false }));
         toast('Done');
       }));
     }
@@ -661,8 +669,9 @@ function viewPropEdit(id) {
       });
       root.querySelector('#delprop')?.addEventListener('click', () => {
         if (confirm(`Delete ${p.address} and every code, person, note and date filed under it?`)) {
-          store.removeProperty(id);
+          const gone = store.removeProperty(id);
           location.hash = '#/props';
+          undoToast(`${p.address} deleted`, () => { store.restore(gone); location.hash = `#/p/${id}`; });
         }
       });
     }
@@ -706,6 +715,11 @@ function viewHub(id) {
       ${codes.length ? html`<section class="sec"><div class="label accent">Getting in</div>${codeBoxes(codes)}</section>` : html`<a class="card row" href="#/quick/lockbox/${id}"><span class="tile" style="border:0;padding:0"><span class="ic y">${icon('lockbox', 22)}</span></span><span class="grow"><span class="t">Add the lockbox or a code</span><span class="s">Gate, alarm, door keypad, hidden key</span></span></a>`}
       ${p.showing_notes ? html`<div class="card pad"><div class="label" style="margin-bottom:6px">Showing instructions</div><div style="white-space:pre-line">${p.showing_notes}</div></div>` : ''}
 
+      <section class="sec status-strip">
+        <div class="label">Status${p.source === 'crm' ? ' · set by your CRM' : ''}</div>
+        <div class="chips">${['prep', 'listing', 'escrow', 'tour', 'closed', 'cancelled'].map((k) => html`<button type="button" class="chip st ${p.status === k ? 'on st-' + k : ''}" data-status="${k}" ${p.source === 'crm' ? raw('disabled') : ''}>${STATUS[k]}</button>`)}</div>
+        ${p.source === 'crm' ? html`<div class="hint">Change it in your CRM; the next sync brings it here.</div>` : ''}
+      </section>
       <div class="tabs">${tab('overview', 'Overview')}${tab('where', `Where things are · ${spots.length}`)}${tab('people', `People · ${people.length}`)}${tab('notes', `Notes · ${notes.length}`)}</div>
 
       ${hubTab === 'overview' ? html`
@@ -741,7 +755,7 @@ function viewHub(id) {
 
       ${hubTab === 'people' ? html`<section class="sec">
         <div class="card list">${people.length ? people.map(personRow) : html`<div class="empty">No one yet. Add the seller, tenant, escrow officer, the other agent.</div>`}</div>
-        <a class="btn dark block" href="#/quick/contact/${id}">+ Add a person</a>
+        <div class="btns"><a class="btn dark" href="#/quick/contact/${id}">+ Add a person</a><button class="btn" type="button" id="fromvendors">${icon('person', 18)}From my vendors</button></div>
       </section>` : ''}
 
       ${hubTab === 'notes' ? html`<section class="sec">
@@ -757,10 +771,22 @@ function viewHub(id) {
       root.querySelector('#adddate')?.addEventListener('click', () => dateSheet(id));
       root.querySelector('#addtask')?.addEventListener('click', () => addTaskSheet(id));
       root.querySelectorAll('[data-date]').forEach((b) => b.addEventListener('click', () => dateSheet(id, store.get('dates', b.getAttribute('data-date')))));
-      root.querySelectorAll('[data-done]').forEach((b) => b.addEventListener('click', () => store.save('tasks', { id: b.getAttribute('data-done'), done: true, done_at: new Date().toISOString() })));
+      root.querySelectorAll('[data-done]').forEach((b) => b.addEventListener('click', () => {
+        const tid = b.getAttribute('data-done');
+        store.save('tasks', { id: tid, done: true, done_at: new Date().toISOString() });
+        undoToast('Done', () => store.save('tasks', { id: tid, done: false, done_at: null }));
+      }));
       root.querySelectorAll('[data-access]').forEach((b) => b.addEventListener('click', () => accessSheet(store.get('access', b.getAttribute('data-access')))));
       root.querySelectorAll('[data-edit-person]').forEach((b) => b.addEventListener('click', () => personSheet(id, store.get('people', b.getAttribute('data-edit-person')))));
       root.querySelector('#sellerupd')?.addEventListener('click', () => sellerUpdateSheet(id));
+      root.querySelector('#fromvendors')?.addEventListener('click', () => vendorPicker(id));
+      root.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', () => {
+        const next = b.getAttribute('data-status');
+        if (next === p.status) return;
+        const was = p.status;
+        store.save('properties', { id, status: next });
+        undoToast(`Now ${STATUS[next]}`, () => store.save('properties', { id, status: was }));
+      }));
       root.querySelector('#savenote')?.addEventListener('click', () => {
         const t = root.querySelector('#newnote').value.trim();
         if (!t) return;
@@ -776,7 +802,7 @@ function viewHub(id) {
         store.save('notes', { id: n.id, files: withFileNotes(n.files, box) }, { quiet: true });
         toast('Note saved');
       }));
-      root.querySelectorAll('[data-delnote]').forEach((b) => b.addEventListener('click', () => { if (confirm('Delete this note?')) store.remove('notes', b.getAttribute('data-delnote')); }));
+      root.querySelectorAll('[data-delnote]').forEach((b) => b.addEventListener('click', () => { del('notes', b.getAttribute('data-delnote'), 'Note deleted'); }));
       loadPhotos(root);
     }
   };
@@ -806,7 +832,82 @@ function dateSheet(pid, d) {
       if (!v.label || !v.due) { toast('Add what and when'); return false; }
       store.save('dates', { ...(d ? { id: d.id } : {}), property_id: pid, ...v });
     },
-    onDelete: d ? () => store.remove('dates', d.id) : null
+    onDelete: d ? () => del('dates', d.id, 'Date deleted') : null
+  });
+}
+
+// ---------- vendors (2026-10-27) ----------
+// The agent's go-to people, saved once: inspector, title, lender, stager...
+// "From my vendors" on a property's People tab adds one there in a tap.
+const VENDOR_TRADES = ['Inspector', 'Title / escrow', 'Lender', 'Stager', 'Photographer', 'Handyman', 'Contractor', 'Septic', 'Well', 'Pest', 'Roofer', 'Cleaner', 'Landscaper', 'Mover', 'Attorney', 'Insurance', 'Other'];
+const vendorSort = (a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || String(a.name || '').localeCompare(String(b.name || ''));
+function vendorRow(v, { pick = false } = {}) {
+  const sub = [v.trade, v.company].filter(Boolean).join(' · ');
+  return html`<div class="row">
+    <button type="button" class="grow" ${raw(pick ? `data-pickvendor="${esc(v.id)}"` : `data-vendor="${esc(v.id)}"`)} style="background:none;border:0;text-align:left;padding:0;color:inherit">
+      <span class="t">${v.favorite ? '★ ' : ''}${v.name || v.company || 'Vendor'}</span><span class="s">${sub}</span></button>
+    ${!pick && v.phone ? html`<a class="icon-btn" href="tel:${digits(v.phone)}" aria-label="Call ${v.name}">${icon('phone', 18)}</a><a class="icon-btn" href="${smsLink(v.phone)}" aria-label="Text ${v.name}">${icon('text', 18)}</a>` : ''}
+  </div>`;
+}
+let vendorQuery = '';
+function vendorMatches(v, q) {
+  q = q.trim().toLowerCase();
+  return !q || [v.name, v.company, v.trade, v.notes].some((x) => String(x || '').toLowerCase().includes(q));
+}
+function viewVendors() {
+  const list = store.all('vendors').filter((v) => vendorMatches(v, vendorQuery)).sort(vendorSort);
+  const groups = VENDOR_TRADES.map((t) => [t, list.filter((v) => (v.trade || 'Other') === t || (t === 'Other' && !VENDOR_TRADES.includes(v.trade)))]).filter(([, l]) => l.length);
+  return {
+    html: html`${header({ back: '#/', kicker: 'Your people', title: 'Vendors' })}
+    <main class="wrap">
+      <label class="field"><span>Search</span><input id="vq" type="search" value="${vendorQuery}" placeholder="Name, company or trade" autocomplete="off"></label>
+      <button class="btn dark block" type="button" id="addvendor">+ Add a vendor</button>
+      ${groups.length ? groups.map(([t, l]) => html`<section class="sec"><div class="label">${t} · ${l.length}</div><div class="card list">${l.map((v) => vendorRow(v))}</div></section>`)
+        : html`<div class="empty card pad">${vendorQuery ? `No vendor matches “${vendorQuery}”.` : 'No vendors yet. Add your inspector, title rep, lender, stager, handyman: anyone you call on more than one deal.'}</div>`}
+    </main>`,
+    mount(root) {
+      const q = root.querySelector('#vq');
+      q.addEventListener('input', () => { vendorQuery = q.value; const pos = q.selectionStart; render(); const again = document.getElementById('vq'); again?.focus(); again?.setSelectionRange(pos, pos); });
+      root.querySelector('#addvendor').addEventListener('click', () => vendorSheet(null));
+      root.querySelectorAll('[data-vendor]').forEach((b) => b.addEventListener('click', () => vendorSheet(store.get('vendors', b.getAttribute('data-vendor')))));
+    }
+  };
+}
+function vendorSheet(v) {
+  formSheet({
+    title: v ? v.name || 'Vendor' : 'Add a vendor',
+    fields: [
+      { name: 'name', label: 'Name', placeholder: 'Pat Lee' },
+      { name: 'company', label: 'Company', placeholder: 'Sierra Home Inspections' },
+      { name: 'trade', label: 'What they do', type: 'select', options: VENDOR_TRADES.map((t) => [t, t]) },
+      { name: 'phone', label: 'Phone', type: 'tel' },
+      { name: 'email', label: 'Email', type: 'email' },
+      { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Books 3 days out. Great on older homes.' },
+      { name: 'favorite', label: 'Favorite (shows first)', type: 'check' }
+    ],
+    values: v || { trade: 'Inspector' },
+    onSave(val) {
+      if (!val.name && !val.company) { toast('Add a name or company'); return false; }
+      store.save('vendors', { ...(v ? { id: v.id } : {}), ...val, favorite: !!val.favorite });
+    },
+    onDelete: v ? () => del('vendors', v.id, 'Vendor deleted') : null
+  });
+}
+function vendorPicker(pid) {
+  const all = store.all('vendors').sort(vendorSort);
+  if (!all.length) { toast('No vendors yet. Add them under Vendors on Today.'); location.hash = '#/vendors'; return; }
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Add from my vendors</div>
+    <label class="field"><span>Search</span><input id="vpq" type="search" placeholder="Name, company or trade" autocomplete="off"></label>
+    <div class="card list" id="vplist">${all.map((v) => vendorRow(v, { pick: true }))}</div>
+  </div>`, (sh) => {
+    const wire = () => sh.querySelectorAll('[data-pickvendor]').forEach((b) => b.addEventListener('click', () => {
+      const v = store.get('vendors', b.getAttribute('data-pickvendor'));
+      store.save('people', { property_id: pid, name: v.name || v.company, role: [v.trade, v.name && v.company].filter(Boolean).join(' · '), phone: v.phone || '', email: v.email || '' });
+      closeSheet(); toast(`${v.name || v.company} added`);
+    }));
+    sh.querySelector('#vpq').addEventListener('input', (e) => { sh.querySelector('#vplist').innerHTML = str(html`${all.filter((v) => vendorMatches(v, e.target.value)).map((v) => vendorRow(v, { pick: true }))}`); wire(); });
+    wire();
   });
 }
 
@@ -824,7 +925,7 @@ function personSheet(pid, m) {
       if (!v.name) { toast('Add a name'); return false; }
       store.save('people', { ...(m ? { id: m.id } : {}), property_id: pid, ...v });
     },
-    onDelete: m ? () => store.remove('people', m.id) : null
+    onDelete: m ? () => del('people', m.id, 'Person removed') : null
   });
 }
 
@@ -841,7 +942,7 @@ function accessSheet(a) {
     values: a,
     extra: a.photo_id ? html`<img data-photo="${a.photo_id}" data-path="${a.photo_path || ''}" alt="" style="border-radius:10px;max-height:320px;object-fit:cover">` : '',
     onSave(v) { store.save('access', { id: a.id, ...v }); },
-    onDelete: () => store.remove('access', a.id)
+    onDelete: () => del('access', a.id, 'Deleted')
   });
   loadPhotos(document.querySelector('.sheet'));
 }
@@ -1575,7 +1676,7 @@ function viewTour(id) {
         recapSheet(cur, (cur.stops || []).filter((x) => x.shown || x.reaction).map((x) => ({ address: x.address, reaction: x.reaction, mls_url: x.mls_url, date: cur.date })));
       });
       root.querySelectorAll('[data-fb]').forEach((b) => b.addEventListener('click', () => feedbackSheet(fresh().find((x) => x.id === b.getAttribute('data-fb')))));
-      root.querySelector('#deltour').addEventListener('click', () => { if (confirm('Delete this tour?')) { store.remove('tours', id); location.hash = '#/tours'; } });
+      root.querySelector('#deltour').addEventListener('click', () => { if (confirm('Delete this tour?')) { del('tours', id, 'Tour deleted'); location.hash = '#/tours'; } });
     }
   };
 }
@@ -2048,7 +2149,7 @@ function viewMiles(sub) {
           values: e,
           extra: e.photo_id ? html`<img data-photo="${e.photo_id}" data-path="${e.photo_path || ''}" alt="" style="border-radius:10px;max-height:360px;object-fit:contain">` : '',
           onSave(v) { store.save('expenses', { id: e.id, ...v }); },
-          onDelete: () => store.remove('expenses', e.id)
+          onDelete: () => del('expenses', e.id, 'Receipt deleted')
         });
         loadPhotos(document.querySelector('.sheet'));
       }));
@@ -2074,7 +2175,7 @@ function tripSheet(t) {
       store.save('trips', { ...(t ? { id: t.id } : {}), ...v, property_id: v.property_id || null });
       if (location.hash === '#/miles/add') location.hash = '#/miles';
     },
-    onDelete: t ? () => store.remove('trips', t.id) : null
+    onDelete: t ? () => del('trips', t.id, 'Trip deleted') : null
   });
 }
 
@@ -2329,6 +2430,12 @@ function viewSettings() {
       </section>` : ''}
 
       <section class="card pad sec">
+        <div class="label accent">Bright sun mode</div>
+        <div class="small">Black on white, bigger words and solid lines, for reading your screen outdoors.</div>
+        <label class="switch"><input type="checkbox" id="hcmode" ${s.highContrast ? raw('checked') : ''}>Turn on bright sun mode</label>
+      </section>
+
+      <section class="card pad sec">
         <div class="label accent">Your profile & branding</div>
         ${myProfile() ? html`${brandBand(myProfile())}<a class="btn block" href="#/profile">${icon('edit', 18)}Edit profile, logo & license #s</a>`
           : html`<div class="small">Add your name, brokerage, license numbers, logo and colour. They go on your open house sign-in and the texts Bestie writes for you.</div><a class="btn dark block" href="#/profile">Set up my profile</a>`}
@@ -2475,6 +2582,7 @@ function viewSettings() {
         root.querySelector('#crmrun').addEventListener('click', (e) => call({ op: 'run' }, e.currentTarget));
         root.querySelector('#crmoff').addEventListener('click', (e) => { if (confirm('Stop syncing from this CRM? What already came in stays.')) call({ op: 'disconnect' }, e.currentTarget); });
       }
+      root.querySelector('#hcmode')?.addEventListener('change', (e) => { store.saveSettings({ highContrast: e.target.checked }); applyContrast(); });
       root.querySelector('#myname')?.addEventListener('change', (e) => { store.saveSettings({ myName: firstName(e.target.value) }); toast('Saved'); });
       const hb = root.querySelector('#hb');
       root.querySelector('#hbhere').addEventListener('click', async () => {
@@ -2628,7 +2736,7 @@ function eventSheet(e, prefill = {}) {
     },
     // A CRM appointment is cancelled, not removed: the CRM is told at the next
     // sync and deletes it there too. Bestie-only ones just go.
-    onDelete: e ? () => (store.crmLinked(e) ? store.save('events', { id: e.id, cancelled: true }) : store.remove('events', e.id)) : null
+    onDelete: e ? () => (store.crmLinked(e) ? (store.save('events', { id: e.id, cancelled: true }), undoToast('Appointment removed', () => store.save('events', { id: e.id, cancelled: false }))) : del('events', e.id, 'Appointment deleted')) : null
   });
 }
 
@@ -3070,6 +3178,7 @@ const ROUTES = [
   [/^#\/plan$/, () => viewPlan(), 'tours'],
   [/^#\/tours$/, () => viewTours(), 'tours'],
   [/^#\/tour\/([^/]+)$/, (m) => viewTour(m[1]), 'tours'],
+  [/^#\/vendors$/, () => viewVendors(), 'today'],
   [/^#\/door\/([^/]+)\/(\d+)$/, (m) => viewDoor(m[1], Number(m[2])), 'kiosk'],
   [/^#\/buyers$/, () => viewBuyers(), 'tours'],
   [/^#\/buyer\/([^/]+)$/, (m) => viewBuyer(m[1]), 'tours'],
@@ -3082,6 +3191,10 @@ const ROUTES = [
 ];
 
 let current = null;
+// Bright sun mode lives on <html> so every screen, sheet and toast gets it.
+function applyContrast() { document.documentElement.classList.toggle('hc', !!store.settings().highContrast); }
+applyContrast();
+
 function render() {
   const hash = location.hash || '#/';
   let view = notFound();

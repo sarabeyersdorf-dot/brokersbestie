@@ -91,3 +91,10 @@ test('Android repeating speech pieces add up to one phrase, not a stack', async 
   // iPhone style (each phrase once) is unchanged.
   assert.deepEqual(mergeSpeech(mergeSpeech([], '433 East Highway 4'), 'then 1143 Echo Street'), ['433 East Highway 4', 'then 1143 Echo Street']);
 });
+
+test('search finds a vendor by trade and links to the vendor list', () => {
+  const r = search('inspector', { vendors: [{ id: 'v', name: 'Pat Lee', company: 'Sierra Home', trade: 'Inspector', phone: '209' }] });
+  assert.equal(r.length, 1);
+  assert.equal(r[0].href, '#/vendors');
+  assert.equal(r[0].kind, 'Vendor');
+});

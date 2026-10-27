@@ -99,6 +99,28 @@ export function toast(msg) {
   toastTimer = setTimeout(() => (el.hidden = true), 2600);
 }
 
+// A toast with an Undo button (2026-10-27): for deletes and one-tap changes.
+// Stays 6 seconds; Undo runs `undo` once and says so.
+export function undoToast(msg, undo, ms = 6000) {
+  let el = document.querySelector('.toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'toast';
+    el.setAttribute('role', 'status');
+    document.body.appendChild(el);
+  }
+  el.textContent = msg + ' ';
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'toast-undo';
+  b.textContent = 'Undo';
+  b.addEventListener('click', () => { clearTimeout(toastTimer); undo(); toast('Undone'); }, { once: true });
+  el.appendChild(b);
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (el.hidden = true), ms);
+}
+
 export async function copy(text) {
   try {
     await navigator.clipboard.writeText(text);
