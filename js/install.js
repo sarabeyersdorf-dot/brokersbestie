@@ -48,7 +48,19 @@ export function installSteps(p) {
   return ['Open this page on your phone: brokersbestie.vercel.app', 'iPhone: Safari → Share → Add to Home Screen. Android: Chrome ⋮ → Install app.'];
 }
 
-export function installCard({ dismissable = false } = {}) {
+export function installCard({ dismissable = false, slim = false } = {}) {
+  if (slim && !isInstalled()) {
+    // One line on Today; the steps open on a tap (Today cleanup, 2026-10-27).
+    const p = platform();
+    return html`<details class="card sec install-slim" data-install>
+      <summary>${raw(winkFace({ size: 28, label: '' }))}<span class="grow">Put Bestie on your home screen</span><span class="small">How</span></summary>
+      <div class="pad" style="padding-top:0">
+        <button class="btn dark block" type="button" data-install-go ${deferred ? '' : raw('hidden')}>Install Bestie</button>
+        <ol class="install-steps" ${deferred ? raw('hidden') : ''}>${installSteps(p).map((s) => html`<li>${s}</li>`)}</ol>
+        ${dismissable ? html`<button class="btn ghost" type="button" data-install-hide style="min-height:36px">Not now</button>` : ''}
+      </div>
+    </details>`;
+  }
   if (isInstalled()) return html`<section class="card pad sec"><div class="label">On your home screen</div><div class="small">✓ Bestie is installed on this phone.</div></section>`;
   const p = platform();
   return html`<section class="card pad sec install-card" data-install>

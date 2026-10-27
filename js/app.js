@@ -404,9 +404,6 @@ function viewToday() {
       extra: html`<label class="search">${icon('search', 18)}<input id="q" type="search" placeholder="Search everything: address, code, name…" value="${searchText}" aria-label="Search everything" autocomplete="off"></label>`
     })}
     <main class="wrap">
-      ${!searchText && !isInstalled() && !installHidden() ? installCard({ dismissable: true }) : ''}
-      ${!searchText ? sellerDueCard() : ''}
-      ${!searchText && !myProfile() && !profileNudgeHidden() ? html`<div class="card pad sec" data-profnudge><div class="label accent">Make it yours</div><div class="small">Add your name, brokerage, license numbers and logo. They go on your open house sign-in sheet and the texts Bestie writes.</div><div class="btns"><a class="btn dark" href="#/profile">Set up my profile</a><button class="btn ghost" type="button" id="profnot">Later</button></div></div>` : ''}
       ${searchText ? html`<section class="sec">
         <div class="sec-head"><div class="label accent">${results.length} found</div><button class="btn ghost" type="button" id="clearq" style="min-height:36px">Clear</button></div>
         <div class="card list">${results.length ? results.slice(0, 40).map((r) => html`<a class="row" href="${r.propertyId ? '#/p/' + r.propertyId : '#/'}">
@@ -436,13 +433,14 @@ function viewToday() {
         </a>
       </section>` : !empty ? html`<button class="btn block" type="button" id="findme">${icon('pin', 18)}Where am I? Show this property's codes</button>` : ''}
 
-      ${todos.length || !empty ? html`<section class="sec">
+      ${todos.length ? html`<section class="sec">
         <div class="sec-head"><div class="label">To do today · ${shownTodos.length}</div><button class="btn ghost" type="button" id="addtodo" style="min-height:36px">+ Add</button></div>
         <div class="card list">${shownTodos.length ? shownTodos.map((t) => t.pickup ? html`<a class="row ${colorClass(t.ck, t.late)}" href="#/signs"><span class="check" style="border-color:var(--pending)"></span><span class="grow"><span class="t">${t.text}</span><span class="s">${ktag(t.ck, t.late)}${t.sub}</span></span>${icon('chev', 18)}</a>`
           : t.tour ? html`<a class="row ${colorClass(t.ck, t.late)}" href="#/tour/${t.tour}"><span class="check" style="border-color:var(--pending)"></span><span class="grow"><span class="t">${t.text}</span><span class="s">${ktag(t.ck, t.late)}${t.sub}</span></span>${icon('chev', 18)}</a>`
           : html`<button class="row ${colorClass(t.ck, t.late)}" type="button" data-done="${t.table}:${t.id}"><span class="check"></span><span class="grow"><span class="t">${t.text}</span><span class="s ${t.late ? 'wait' : ''}">${ktag(t.ck, t.late)}${t.sub}</span></span></button>`) : html`<div class="empty">${todos.length ? 'Nothing of that kind today.' : 'Nothing due. Nice.'}</div>`}</div>
       </section>` : ''}
 
+      ${!searchText ? sellerDueCard() : ''}
       <section class="sec">
         <div class="sec-head"><div class="label">Quick add${hp ? ' · files to ' + hp.address : ''}</div><a href="#/quick" class="small" style="color:var(--teal-text);font-weight:600">All →</a></div>
         <div class="tiles">
@@ -451,11 +449,11 @@ function viewToday() {
         </div>
       </section>
 
-      <section class="sec">
+      ${tours.length ? html`<section class="sec">
         <div class="sec-head"><div class="label">Tours today · ${tours.length}</div><a class="small" style="color:var(--teal-text);font-weight:600" href="#/plan">Plan a tour →</a></div>
-        ${tours.length ? html`<div class="card list">${tours.map((t) => html`<a class="row" href="#/tour/${t.id}"><span class="num" style="font-size:20px;width:70px">${t.start_minutes != null ? formatClock(t.start_minutes) : ''}</span><span class="grow"><span class="t">${t.name || 'Tour'}</span><span class="s">${(t.stops || []).length} stops · ${(t.stops || []).filter((x) => x.confirmed).length} confirmed</span></span>${icon('chev', 18)}</a>`)}</div>`
-          : html`<a class="card row" href="#/plan">${icon('mic', 20)}<span class="grow"><span class="t">Talk to plan a tour</span><span class="s">Read me the addresses; I'll put them in order</span></span></a>`}
-      </section>
+        <div class="card list">${tours.map((t) => html`<a class="row" href="#/tour/${t.id}"><span class="num" style="font-size:20px;width:70px">${t.start_minutes != null ? formatClock(t.start_minutes) : ''}</span><span class="grow"><span class="t">${t.name || 'Tour'}</span><span class="s">${(t.stops || []).length} stops · ${(t.stops || []).filter((x) => x.confirmed).length} confirmed</span></span>${icon('chev', 18)}</a>`)}</div>
+      </section>` : ''}
+      ${!searchText && (!todos.length || !tours.length) ? html`<section class="sec"><div class="btns">${!tours.length ? html`<a class="btn" href="#/plan">${icon('mic', 18)}Plan a tour</a>` : ''}${!todos.length && !empty ? html`<button class="btn" type="button" id="addtodo">${icon('plus', 18)}Add a to-do</button>` : ''}</div></section>` : ''}
 
       ${live.length ? html`<section class="sec">
         <div class="sec-head"><div class="label">Active · ${live.length}</div><a class="small" style="color:var(--teal-text);font-weight:600" href="#/props">All properties →</a></div>
@@ -465,6 +463,8 @@ function viewToday() {
       <section class="sec">
         <div class="btns"><a class="btn" href="#/miles">${icon('miles', 18)}Mileage</a><a class="btn" href="#/signs">${icon('sign', 18)}Signs</a><a class="btn" href="#/safety">${icon('shield', 18)}Safety check-in</a></div>
       </section>
+      ${!searchText && !isInstalled() && !installHidden() ? installCard({ dismissable: true, slim: true }) : ''}
+      ${!searchText && !myProfile() && !profileNudgeHidden() ? html`<div class="card pad sec" data-profnudge><div class="label accent">Make it yours</div><div class="small">Add your name, brokerage, license numbers and logo. They go on your open house sign-in sheet and the texts Bestie writes.</div><div class="btns"><a class="btn dark" href="#/profile">Set up my profile</a><button class="btn ghost" type="button" id="profnot">Later</button></div></div>` : ''}
       ${!store.cloud.enabled ? html`<div class="hint" style="text-align:center">Everything is saved on this phone.</div>` : ''}
     </main>`,
     mount(root) {
@@ -2438,11 +2438,17 @@ function setFilter(patch) {
 // one-house picker (Calendar).
 function filterBar({ withProperty = false } = {}) {
   const chip = (k, label) => html`<button type="button" class="chip ${(viewFilter.kind || null) === k ? 'on' : ''}" data-kind="${k || ''}">${k ? html`<span class="dot ${colorClass(k)}"></span>` : ''}${label}</button>`;
-  return html`<div class="filters">
+  // Folded to one line until it is needed (Sara, 2026-10-27, Today cleanup).
+  // Open while a filter is on, so what is hidden is never a mystery.
+  const kindName = viewFilter.kind ? ((COLOR_KINDS.find(([k]) => k === viewFilter.kind) || [, ''])[1] + 's') : '';
+  const whoName = viewFilter.who ? viewFilter.who[0].toUpperCase() + viewFilter.who.slice(1) : '';
+  const on = [whoName, kindName, withProperty && viewFilter.property ? (prop(viewFilter.property)?.address || '') : ''].filter(Boolean);
+  return html`<details class="filters" ${on.length ? raw('open') : ''}>
+    <summary class="filters-sum">${icon('filter', 16)}<span>${on.length ? html`Showing: <b>${on.join(' · ')}</b>` : 'Filter'}</span>${on.length ? html`<button type="button" class="chip-clear" data-clearfilter aria-label="Show everything">✕</button>` : ''}</summary>
     ${whoChips()}
     <div class="chips">${chip(null, 'All')}${COLOR_KINDS.map(([k, l]) => chip(k, l + 's'))}</div>
     ${withProperty ? html`<select class="prop-filter" id="propfilter" aria-label="Show one property"><option value="">All properties</option>${props().slice().sort((a, b) => a.address.localeCompare(b.address)).map((p) => html`<option value="${p.id}" ${viewFilter.property === p.id ? raw('selected') : ''}>${p.address}</option>`)}</select>` : ''}
-  </div>`;
+  </details>`;
 }
 // Everyone · Mine · <each other person>. Shown once a team has two people.
 function whoChips() {
@@ -2477,6 +2483,7 @@ function wireFilter(root) {
   }));
   root.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => setFilter({ kind: b.getAttribute('data-kind') || null })));
   root.querySelector('#propfilter')?.addEventListener('change', (e) => setFilter({ property: e.target.value || null }));
+  root.querySelector('[data-clearfilter]')?.addEventListener('click', (e) => { e.preventDefault(); setFilter({ kind: null, who: null, property: null }); });
 }
 
 // One row of the calendar or the Today schedule. Tapping opens what it is.
@@ -3015,6 +3022,8 @@ window.addEventListener('online', render);
 window.addEventListener('offline', render);
 
 $fab.addEventListener('click', tellBestie);
+$fab.setAttribute('aria-label', 'Tell Bestie');
+addEventListener('scroll', () => $fab.classList.toggle('mini', scrollY > 40), { passive: true });
 render();
 store.startCloud();
 setInterval(watchCheckin, 20000);

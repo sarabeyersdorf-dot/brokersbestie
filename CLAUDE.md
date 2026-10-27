@@ -351,3 +351,14 @@ stamped. db/013: `properties.list_date`, `portal_url`, `marketing`,
   together, then "More numbers on your portal: <link>". `mapFeed` only sends
   these keys when present, and `upsert` in `api/_lib/crm.js` groups rows by
   their keys, so a date the agent typed is not blanked by a CRM without one.
+
+## Today cleanup (2026-10-27)
+
+Today's order is: the briefing, "You're at", To do, Tours, Seller updates,
+Quick add, Active, then setup cards (install, profile) LAST. Empty To do / Tours
+sections are gone; a "Plan a tour" / "Add a to-do" button stands in. The
+filter chips are folded into one line (`details.filters`), open while a filter
+is on, with ✕ to clear (Today and Calendar). The install card on Today is one
+line (`installCard({ slim: true })`), the steps open on a tap. Tell Bestie
+shrinks to a round mic once the page is scrolled (`.fab.mini`), and `.wrap`
+has 140px at the bottom so the last card scrolls clear of it.
