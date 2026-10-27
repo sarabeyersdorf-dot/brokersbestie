@@ -13,7 +13,7 @@ import { CRM_CHOICES } from './crmlist.js';
 import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, doorCodes } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -1462,6 +1462,7 @@ function viewTour(id) {
           : s.shown ? html`<button class="btn ghost block" type="button" data-react="${s.id}">How did they like it?</button>` : ''}
         ${s.reaction && s.agent_phone ? html`<button class="btn ghost block" type="button" data-fb="${s.id}">${s.feedback_sent_at ? html`✓ Feedback sent to ${(s.agent || 'agent').split(' ')[0]} · send again` : html`${icon('text', 16)}Text feedback to ${(s.agent || 'the listing agent').split('(')[0].trim()}`}</button>` : ''}
         ${s.requested_at && !s.confirmed ? html`<div class="small wait">Showing requested ${niceDate(s.requested_at.slice(0, 10))} · waiting to hear back</div>` : ''}
+        <a class="btn door-btn block" href="#/door/${id}/${i}">${icon('key', 18)}At the door</a>
         <div class="btns">
           <a class="btn" href="${mapLink(s)}" target="_blank" rel="noopener">Navigate</a>
           <button class="btn ${s.shown ? 'green' : 'dark'}" type="button" data-shown="${s.id}">${s.shown ? '✓ Shown' : 'Mark shown'}</button>
@@ -1906,6 +1907,60 @@ function requestSheet(tour) {
 
 // After a showing: one tap on a face (Cowork's spec, 2026-10-23), an optional
 // note, saved on the stop and filed to the property as showing feedback.
+// ---------- at the door (Sara's review, 2026-10-27) ----------
+// One stop, big and high-contrast for reading in the sun with a buyer beside
+// you: every code huge (tap to copy), how to get in, occupied or vacant, the
+// listing agent's call button, Mark shown, and the next stop. The screen is
+// kept awake while it is open, where the phone allows it.
+let doorLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && !doorLock && navigator.wakeLock) { doorLock = await navigator.wakeLock.request('screen'); doorLock.addEventListener('release', () => { doorLock = null; }); }
+    if (!on && doorLock) { await doorLock.release(); doorLock = null; }
+  } catch { doorLock = null; }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && /^#\/door\//.test(location.hash)) keepAwake(true); });
+addEventListener('hashchange', () => { if (!/^#\/door\//.test(location.hash)) keepAwake(false); });
+
+function viewDoor(tourId, i) {
+  const t = store.get('tours', tourId);
+  const stops = (t && t.stops) || [];
+  const s = stops[i];
+  if (!s) return notFound();
+  const p = s.property_id ? prop(s.property_id) : null;
+  const codes = doorCodes(s, p ? codesOf(p.id) : [], (k) => KINDS[k]?.label || k);
+  const how = [s.access_note, s.notes, p && p.showing_notes].map((x) => String(x || '').trim()).filter(Boolean).filter((x, j, a) => a.indexOf(x) === j);
+  const setStop = (patch) => store.save('tours', { id: tourId, stops: (store.get('tours', tourId).stops || []).map((x) => (x.id === s.id ? { ...x, ...patch } : x)) });
+  return {
+    html: html`<main class="door">
+      <div class="door-top">
+        <a class="door-x" href="#/tour/${tourId}" aria-label="Back to the tour">${icon('back', 22)}Tour</a>
+        <span class="door-n">Stop ${i + 1} of ${stops.length}</span>
+      </div>
+      <div class="door-addr">${String(s.address || '').split(',')[0]}</div>
+      <div class="door-tags">${s.occ === 'O' ? html`<span class="door-tag o">Occupied</span>` : s.occ === 'V' ? html`<span class="door-tag">Vacant</span>` : ''}${s.confirmed ? html`<span class="door-tag ok">✓ Confirmed</span>` : html`<span class="door-tag warn">Not confirmed</span>`}${s.arrive != null ? html`<span class="door-tag">${formatClock(s.arrive)}</span>` : ''}</div>
+      ${codes.length ? html`<div class="door-codes">${codes.map((c) => html`<button class="door-code" type="button" data-copy="${c.code}"><span class="k">${c.label}</span><span class="v">${c.code}</span>${c.where ? html`<span class="w">${c.where}</span>` : ''}</button>`)}</div>`
+        : html`<div class="door-none">${s.code_pending ? 'Code still coming. Text the listing agent.' : 'No code saved for this stop.'}</div>`}
+      ${how.length ? html`<div class="door-how">${how.map((x) => html`<p>${x}</p>`)}</div>` : ''}
+      ${s.agent_phone ? html`<div class="door-agent"><span>${s.agent || 'Listing agent'}</span><a class="door-call" href="tel:${digits(s.agent_phone)}">${icon('phone', 20)}Call</a><a class="door-call" href="${smsLink(s.agent_phone)}">${icon('text', 20)}Text</a></div>` : ''}
+      <button class="door-shown ${s.shown ? 'on' : ''}" type="button" id="dshown">${s.shown ? '✓ Shown' : 'Mark shown'}</button>
+      <div class="door-nav">
+        ${i > 0 ? html`<a class="door-step" href="#/door/${tourId}/${i - 1}">‹ Stop ${i}</a>` : ''}
+        ${i < stops.length - 1 ? html`<a class="door-step next" href="#/door/${tourId}/${i + 1}">Stop ${i + 2} ›</a>` : html`<a class="door-step next" href="#/tour/${tourId}">Done ›</a>`}
+      </div>
+      ${i < stops.length - 1 ? html`<a class="door-drive" href="${mapLink(stops[i + 1])}" target="_blank" rel="noopener">Drive to ${String(stops[i + 1].address || '').split(',')[0]}${stops[i + 1].leg_minutes ? ` · about ${stops[i + 1].leg_minutes} min` : ''}</a>` : ''}
+    </main>`,
+    mount(root) {
+      keepAwake(true);
+      root.querySelector('#dshown').addEventListener('click', () => {
+        const was = !!s.shown;
+        setStop({ shown: !was });
+        if (!was) setTimeout(() => reactionPicker({ ...s, shown: true }), 250);
+      });
+    }
+  };
+}
+
 function reactionPicker(s) {
   if (!s) return;
   let pick = s.reaction || null;
@@ -2973,6 +3028,7 @@ const ROUTES = [
   [/^#\/plan$/, () => viewPlan(), 'tours'],
   [/^#\/tours$/, () => viewTours(), 'tours'],
   [/^#\/tour\/([^/]+)$/, (m) => viewTour(m[1]), 'tours'],
+  [/^#\/door\/([^/]+)\/(\d+)$/, (m) => viewDoor(m[1], Number(m[2])), 'kiosk'],
   [/^#\/buyers$/, () => viewBuyers(), 'tours'],
   [/^#\/buyer\/([^/]+)$/, (m) => viewBuyer(m[1]), 'tours'],
   [/^#\/miles(?:\/(add))?$/, (m) => viewMiles(m[1]), 'today'],

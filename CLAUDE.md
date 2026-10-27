@@ -362,3 +362,15 @@ is on, with ✕ to clear (Today and Calendar). The install card on Today is one
 line (`installCard({ slim: true })`), the steps open on a tap. Tell Bestie
 shrinks to a round mic once the page is scrolled (`.fab.mini`), and `.wrap`
 has 140px at the bottom so the last card scrolls clear of it.
+
+## At the door (2026-10-27)
+
+`#/door/<tour>/<stop index>` (`viewDoor`), opened from the yellow **At the
+door** button on every tour stop. Black and yellow, kiosk tab (no nav, no
+mic): every code huge and tap-to-copy (`doorCodes` in `js/brief.js`: the
+stop's code first, then the property's saved codes, each value once), how to
+get in (stop access note, stop notes, the property's showing instructions),
+Occupied / confirmed / time, Call and Text the listing agent, Mark shown
+(opens the reaction faces), and the next stop with a Drive link. The screen is
+kept awake while it is open (`navigator.wakeLock`, where the phone allows it;
+released on leaving).

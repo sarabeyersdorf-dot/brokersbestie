@@ -120,3 +120,12 @@ test('what is booked is counted by kind', () => {
   assert.equal(bookedSummary([{ kind: 'tour' }, { kind: 'event', sub: 'showing' }]), '2 showings');
   assert.equal(bookedSummary([{ kind: 'tour' }, { kind: 'event', sub: 'inspection' }]), '1 showing and 1 appointment');
 });
+
+import { doorCodes } from '../js/brief.js';
+test('at the door: the stop code first, then saved codes, each value once', () => {
+  const c = doorCodes({ code: '1234', code_label: 'Lockbox' }, [
+    { kind: 'lockbox', code: '1234' }, { kind: 'gate', code: '#5580', location_note: 'Keypad on the left post' }, { kind: 'alarm', code: '' }
+  ], (k) => k[0].toUpperCase() + k.slice(1));
+  assert.deepEqual(c, [{ label: 'Lockbox', code: '1234', where: '' }, { label: 'Gate', code: '#5580', where: 'Keypad on the left post' }]);
+  assert.deepEqual(doorCodes({ code: '' }, []), []);
+});

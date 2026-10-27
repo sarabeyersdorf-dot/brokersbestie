@@ -253,3 +253,20 @@ export function sellerUpdatesDue(props, today, who = null) {
   const cut = addDays(today, -6);
   return (props || []).filter((p) => p.status === 'listing' && isWhose(p.owner, who) && (!p.seller_update_at || dayOf(p.seller_update_at) < cut));
 }
+
+// ---------- at the door (2026-10-27) ----------
+// Every code for one tour stop, biggest first: the code typed on the stop,
+// then the property's saved codes (gate, lockbox, alarm...), each once.
+export function doorCodes(stop, saved = [], kindLabel = (k) => k) {
+  const out = [];
+  const seen = new Set();
+  const add = (label, code, where = '') => {
+    const v = String(code || '').trim();
+    if (!v || seen.has(v.toUpperCase())) return;
+    seen.add(v.toUpperCase());
+    out.push({ label: label || 'Code', code: v, where });
+  };
+  if (stop) add(stop.code_label && stop.code_label !== 'Code' ? stop.code_label : 'Code', stop.code);
+  for (const a of saved) add(a.label || kindLabel(a.kind), a.code, a.location_note || '');
+  return out;
+}

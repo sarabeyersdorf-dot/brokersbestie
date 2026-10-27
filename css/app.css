@@ -381,3 +381,33 @@ details.install-slim > summary { list-style: none; display: flex; align-items: c
 details.install-slim > summary::-webkit-details-marker { display: none; }
 details.install-slim > summary .grow { flex: 1; }
 details.install-slim[open] > summary .small { visibility: hidden; }
+
+/* At the door (2026-10-27): black and yellow, big, for bright sun. */
+.door { position: fixed; inset: 0; z-index: 30; overflow-y: auto; background: #0e1012; color: #fff; padding: calc(14px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 14px; }
+.door-top { display: flex; justify-content: space-between; align-items: center; }
+.door-x { display: inline-flex; align-items: center; gap: 4px; color: #fff; font: 700 17px var(--sans); min-height: 44px; }
+.door-n { font: 700 16px var(--tall); letter-spacing: .08em; text-transform: uppercase; color: #cfd6d3; }
+.door-addr { font-family: var(--tall); font-weight: 800; font-size: 34px; line-height: 1.02; text-transform: uppercase; }
+.door-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.door-tag { border: 2px solid #fff; border-radius: 8px; padding: 4px 10px; font: 700 16px var(--sans); }
+.door-tag.o { background: #fff; color: #0e1012; }
+.door-tag.ok { border-color: #3ddc97; color: #3ddc97; }
+.door-tag.warn { border-color: #ffb547; color: #ffb547; }
+.door-codes { display: flex; flex-direction: column; gap: 10px; }
+.door-code { background: var(--code, #F5C93E); color: #0e1012; border: 0; border-radius: 14px; padding: 12px 16px 14px; text-align: left; display: flex; flex-direction: column; gap: 4px; cursor: pointer; }
+.door-code .k { font: 700 15px var(--sans); text-transform: uppercase; letter-spacing: .06em; }
+.door-code .v { font-family: var(--tall); font-weight: 800; font-size: 64px; line-height: 1; letter-spacing: .04em; word-break: break-all; }
+.door-code .w { font: 600 16px var(--sans); }
+.door-none { border: 2px dashed #ffb547; color: #ffb547; border-radius: 14px; padding: 16px; font: 700 18px var(--sans); }
+.door-how { background: #1d2124; border-radius: 14px; padding: 4px 16px; font-size: 19px; line-height: 1.35; }
+.door-how p { margin: 12px 0; white-space: pre-line; }
+.door-agent { display: flex; align-items: center; gap: 8px; font: 600 17px var(--sans); }
+.door-agent span { flex: 1; min-width: 0; }
+.door-call { display: inline-flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 14px; border: 2px solid #fff; border-radius: 12px; color: #fff; font-weight: 700; }
+.door-shown { min-height: 60px; border: 0; border-radius: 14px; background: #fff; color: #0e1012; font: 800 20px var(--sans); cursor: pointer; }
+.door-shown.on { background: #3ddc97; }
+.door-nav { display: flex; justify-content: space-between; gap: 10px; }
+.door-step { flex: 1; text-align: center; min-height: 56px; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; border-radius: 14px; color: #fff; font: 800 19px var(--sans); }
+.door-step.next { background: var(--teal, #1FBFAE); border-color: var(--teal, #1FBFAE); color: #0e1012; }
+.door-drive { text-align: center; color: #cfd6d3; font: 600 16px var(--sans); text-decoration: underline; }
+.door-btn { background: var(--code, #F5C93E); border-color: var(--code, #F5C93E); color: #0e1012; font-weight: 800; }
