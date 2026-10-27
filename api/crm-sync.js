@@ -4,7 +4,7 @@
 //   POST { op: 'save', provider: 'fub', key, tz } -> Follow Up Boss by API key
 //   POST { op: 'run' }            -> syncs now
 //   POST { op: 'auto' }           -> syncs only if the last sync is over an hour old
-//   POST { op: 'contacts', contacts: 'all'|'deals' } -> which contacts come in, then syncs
+//   POST { op: 'contacts', contacts: 'all'|'deals'|'some:client,vendor' } -> which contacts come in, then syncs
 //   (save takes `contacts` too: the agent is asked when connecting)
 //   POST { op: 'disconnect' }
 // Signed-in team members only. The key is stored server-side and never returned.
@@ -12,9 +12,11 @@
 import { send, readBody, caller, db, env } from './_lib/server.js';
 import { teamOf, linkOf, runSync } from './_lib/crm.js';
 import { CRM_CHOICES, KEY_CRMS } from '../js/crmlist.js';
+import { CONTACT_KINDS, contactsChoice, contactsMode } from '../js/contacts.js';
 
 const HOUR = 3600e3;
-const modeOf = (v) => (v === 'all' ? 'all' : v === 'deals' ? 'deals' : null);
+// 'deals' | 'all' | 'some:<groups>' (see contactsChoice in js/contacts.js).
+const modeOf = (v) => (v === 'deals' ? 'deals' : v === 'all' || String(v || '').startsWith('some:') ? contactsMode(v === 'all' ? CONTACT_KINDS.map((k) => k.id) : [...(contactsChoice(v).kinds || [])]) : null);
 
 function status(link) {
   return { connected: !!(link && link.feed_url), provider: link ? link.provider || 'feed' : null, feed_url: link ? link.feed_url : null, last_synced_at: link ? link.last_synced_at : null, last_result: link ? link.last_result : null, contacts_mode: link ? link.contacts_mode || 'deals' : null };

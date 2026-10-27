@@ -51,3 +51,15 @@ test('already in Contacts (same phone or email) or twice in the file -> skipped'
   assert.deepEqual(add.map((c) => c.name), ['Bo', 'Cy']);
   assert.equal(same.length, 2);
 });
+
+test('which CRM contacts: deals, all, or only some groups', async () => {
+  const { contactsChoice, contactsMode } = await import('../js/contacts.js');
+  assert.deepEqual(contactsChoice('deals'), { all: false, kinds: null });
+  assert.deepEqual(contactsChoice(null), { all: false, kinds: null });
+  assert.deepEqual(contactsChoice('all'), { all: true, kinds: null });
+  assert.deepEqual([...contactsChoice('some:client,vendor,bogus').kinds], ['client', 'vendor']);
+  assert.deepEqual(contactsChoice('some:bogus'), { all: false, kinds: null }, 'nothing real ticked = deals only');
+  assert.equal(contactsMode(['vendor', 'client']), 'some:client,vendor');
+  assert.equal(contactsMode(['client', 'lead', 'sphere', 'vendor', 'other']), 'all');
+  assert.equal(contactsMode([]), 'deals');
+});

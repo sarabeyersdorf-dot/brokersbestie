@@ -7,13 +7,34 @@
 //   - vCard (.vcf), what an iPhone or Android shares from Contacts.
 
 export const CONTACT_KINDS = [
-  { id: 'client', label: 'Client', many: 'Clients' },
-  { id: 'lead', label: 'Lead', many: 'Leads' },
-  { id: 'sphere', label: 'Sphere', many: 'Sphere' },
-  { id: 'vendor', label: 'Vendor', many: 'Vendors' },
-  { id: 'other', label: 'Other', many: 'Other' }
+  { id: 'client', label: 'Client', many: 'Clients', hint: 'buyers, sellers, past clients' },
+  { id: 'lead', label: 'Lead', many: 'Leads', hint: 'prospects' },
+  { id: 'sphere', label: 'Sphere', many: 'Sphere', hint: 'friends, family, referrals' },
+  { id: 'vendor', label: 'Vendor', many: 'Vendors', hint: 'title, lenders, inspectors, other agents' },
+  { id: 'other', label: 'Other', many: 'Other', hint: 'anyone else' }
 ];
 const KIND_IDS = CONTACT_KINDS.map((k) => k.id);
+
+// Which CRM contacts come in, stored in crm_links.contacts_mode as one word:
+//   'deals'                   only the people on deals (none into Contacts)
+//   'all'                     every contact
+//   'some:client,vendor'      only those groups (Sara, 2026-10-27: "give
+//                             option to import just specific groups")
+export function contactsChoice(mode) {
+  const m = String(mode || 'deals');
+  if (m === 'all') return { all: true, kinds: null };
+  if (m.startsWith('some:')) {
+    const kinds = m.slice(5).split(',').filter((k) => KIND_IDS.includes(k));
+    if (kinds.length) return { all: true, kinds: new Set(kinds) };
+  }
+  return { all: false, kinds: null };
+}
+// Ticked groups -> the stored word. Every group = 'all'; none = 'deals'.
+export function contactsMode(kinds) {
+  const k = KIND_IDS.filter((id) => (kinds || []).includes(id));
+  if (!k.length) return 'deals';
+  return k.length === KIND_IDS.length ? 'all' : `some:${k.join(',')}`;
+}
 
 // Free words from a CRM (a stage, a tag, a type) -> one of the kinds.
 export function kindFrom(words) {

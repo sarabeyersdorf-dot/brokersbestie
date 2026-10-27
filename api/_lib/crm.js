@@ -10,6 +10,7 @@ import { db } from './server.js';
 import { mapFeed, crmId, pushChanges, MAX_CONTACTS } from './feed.js';
 import { CONNECTORS, CONTACT_LISTS } from './crms.js';
 import { CRM_CHOICES } from '../../js/crmlist.js';
+import { contactsChoice } from '../../js/contacts.js';
 
 const MAX_FEED_BYTES = 5 * 1024 * 1024;
 
@@ -107,7 +108,8 @@ export async function runSync(teamId, today = new Date().toISOString().slice(0, 
   let shape = null;
   // "All my contacts" (chosen when connecting) brings the whole address book
   // into Contacts; "Just the people on my deals" brings none of it.
-  const allContacts = link.contacts_mode === 'all';
+  const choice = contactsChoice(link.contacts_mode);
+  const allContacts = choice.all;
   let contactsNote = '';
   try {
     let feed;
@@ -153,10 +155,12 @@ export async function runSync(teamId, today = new Date().toISOString().slice(0, 
     // An appointment cancelled in the CRM leaves the calendar too (past ones stay).
     const keep = rows.events.map((e) => e.id);
     await db(`events?team_id=eq.${teamId}&source=eq.crm&crm_dirty=is.false&date=gte.${today}${keep.length ? `&id=not.in.(${encodeURIComponent(quoteList(keep))})` : ''}`, { method: 'DELETE' });
+    // Only the groups the agent ticked; the prune below then clears the rest.
+    if (choice.kinds) rows.contacts = rows.contacts.filter((c) => choice.kinds.has(c.kind));
     if (allContacts && feed.contacts) {
       await upsert('contacts', rows.contacts);
       // Gone from the CRM -> gone here, unless the list was cut short.
-      if (rows.contacts.length < MAX_CONTACTS) await pruneContacts(teamId, new Set(rows.contacts.map((c) => c.id)));
+      if (feed.contacts.length < MAX_CONTACTS) await pruneContacts(teamId, new Set(rows.contacts.map((c) => c.id)));
     } else if (!allContacts) {
       await db(`contacts?team_id=eq.${teamId}&source=eq.crm`, { method: 'DELETE' });
     }

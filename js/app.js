@@ -10,7 +10,7 @@ import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
 import { chooseFromDropbox, dropboxReady } from './dropbox.js';
 import { planShowings, ACTION_WORDS } from './showings.js';
-import { CONTACT_KINDS, parseContacts, planImport } from './contacts.js';
+import { CONTACT_KINDS, parseContacts, planImport, contactsChoice, contactsMode } from './contacts.js';
 import { CRM_CHOICES } from './crmlist.js';
 import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText, feedbackRequestText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
@@ -969,6 +969,7 @@ function vendorPicker(pid) {
 // on a property stay in `people`; "From my contacts" copies one there.
 
 const KIND_LABEL = Object.fromEntries(CONTACT_KINDS.map((k) => [k.id, k.label]));
+const KIND_MANY = Object.fromEntries(CONTACT_KINDS.map((k) => [k.id, k.many]));
 const SHOW_MAX = 100;
 let contactQuery = '';
 let contactKind = null;
@@ -1047,20 +1048,39 @@ function importContacts() {
     if (!found.length) { toast('No contacts found in that file. Use a .csv with a Name column, or a .vcf from your phone.'); return; }
     const { add, same } = planImport(found, store.all('contacts'));
     const untyped = add.filter((x) => !x.kind).length;
+    // The groups in the file (from a Type / Stage / Tags column), largest first.
+    const groups = [...add.reduce((m, x) => m.set(x.kind || '', (m.get(x.kind || '') || 0) + 1), new Map())].sort((a, b) => b[1] - a[1]);
     openSheet(html`<div class="sec">
       <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Import contacts</div>
       <p><b>${found.length}</b> in ${f.name}. <b>${add.length}</b> new${same.length ? html`, ${same.length} already in your contacts (skipped)` : ''}.</p>
       ${add.length ? html`<div class="card list">${add.slice(0, 5).map((x) => html`<div class="row"><span class="grow"><span class="t">${x.name}</span><span class="s">${[x.company, x.phone || x.email].filter(Boolean).join(' · ')}</span></span></div>`)}</div>
         ${add.length > 5 ? html`<p class="small muted">…and ${add.length - 5} more.</p>` : ''}
-        ${untyped ? html`<label class="field"><span>File ${untyped === add.length ? 'them' : `the ${untyped} with no type`} as</span><select id="impkind">${CONTACT_KINDS.map((k) => html`<option value="${k.id}" ${k.id === 'sphere' ? 'selected' : ''}>${k.label}</option>`)}</select></label>` : ''}
+        ${groups.length > 1 ? html`<div class="field"><span>Which groups?</span>${groups.map(([k, n]) => html`<label class="switch"><input type="checkbox" name="impg" value="${k}" checked>${k ? KIND_MANY[k] : 'No type in the file'} · ${n}</label>`)}</div>` : ''}
+        ${untyped ? html`<label class="field" id="impkindf"><span>File ${untyped === add.length ? 'them' : `the ${untyped} with no type`} as</span><select id="impkind">${CONTACT_KINDS.map((k) => html`<option value="${k.id}" ${k.id === 'sphere' ? 'selected' : ''}>${k.label}</option>`)}</select></label>` : ''}
         <button class="btn dark block" type="button" id="impgo">Import ${add.length} contact${add.length === 1 ? '' : 's'}</button>` : html`<p>Everyone in this file is already in your contacts.</p>`}
       <p class="small muted">On an iPhone: Contacts → pick a list → Export → Save to Files, then choose that file here. From a CRM: export contacts as CSV.</p>
     </div>`, (sh) => {
+      const picked = () => {
+        const boxes = [...sh.querySelectorAll('[name=impg]')];
+        const on = new Set(boxes.filter((b) => b.checked).map((b) => b.value));
+        return boxes.length ? add.filter((x) => on.has(x.kind || '')) : add;
+      };
+      const recount = () => {
+        const n = picked().length;
+        const go = sh.querySelector('#impgo');
+        go.textContent = n ? `Import ${n} contact${n === 1 ? '' : 's'}` : 'Tick a group to import';
+        go.disabled = !n;
+        const f = sh.querySelector('#impkindf');
+        if (f) f.hidden = !picked().some((x) => !x.kind);
+      };
+      sh.querySelectorAll('[name=impg]').forEach((b) => b.addEventListener('change', recount));
       sh.querySelector('#impgo')?.addEventListener('click', () => {
         const kind = sh.querySelector('#impkind')?.value || 'sphere';
-        store.saveMany('contacts', add.map((x) => ({ ...x, kind: x.kind || kind, source: 'import' })));
+        const list = picked();
+        if (!list.length) return;
+        store.saveMany('contacts', list.map((x) => ({ ...x, kind: x.kind || kind, source: 'import' })));
         closeSheet();
-        toast(`${add.length} contact${add.length === 1 ? '' : 's'} imported`);
+        toast(`${list.length} contact${list.length === 1 ? '' : 's'} imported`);
       });
     });
   });
@@ -2780,7 +2800,10 @@ function viewSettings() {
         </div>
         <fieldset class="field" id="crmcontacts" style="border:0;padding:0;margin:0"><span>Which contacts should come in?</span>
           <label class="switch"><input type="radio" name="crmc" value="deals">Just the people on my deals</label>
-          <label class="switch"><input type="radio" name="crmc" value="all">All my contacts (your whole address book, under Contacts)</label>
+          <label class="switch"><input type="radio" name="crmc" value="all">My contacts too (under Contacts)</label>
+          <div id="crmgroups" class="sec" hidden style="padding-left:28px"><span class="small muted">Which groups?</span>
+            ${CONTACT_KINDS.map((k) => html`<label class="switch"><input type="checkbox" name="crmg" value="${k.id}" checked>${k.many} <span class="small muted">(${k.hint})</span></label>`)}
+          </div>
         </fieldset>
         <div class="hint">Your listings, deal dates, contacts and appointments come in from the CRM and update each time you open Bestie. Codes, photos and notes stay Bestie's: the CRM never changes them.</div>
         <div class="btns"><button class="btn dark" type="button" id="crmsave">Save and sync</button><button class="btn" type="button" id="crmrun">Sync now</button></div>
@@ -2915,7 +2938,12 @@ function viewSettings() {
           const who = known ? known.label : r.feed_url && /^https?:/.test(r.feed_url) ? new URL(r.feed_url).host : 'your CRM';
           st.textContent = r.connected ? `Connected to ${who}. ${r.last_result || ''}${r.last_synced_at ? ` (${new Date(r.last_synced_at).toLocaleString()})` : ''}` : 'Not connected.';
           if (r.connected) { kind.value = known ? known.id : 'feed'; pickKind(); }
-          if (r.connected && r.contacts_mode) root.querySelectorAll('[name=crmc]').forEach((x) => { x.checked = x.value === r.contacts_mode; });
+          if (r.connected && r.contacts_mode) {
+            const ch = contactsChoice(r.contacts_mode);
+            root.querySelectorAll('[name=crmc]').forEach((x) => { x.checked = x.value === (ch.all ? 'all' : 'deals'); });
+            root.querySelectorAll('[name=crmg]').forEach((x) => { x.checked = !ch.kinds || ch.kinds.has(x.value); });
+            root.querySelector('#crmgroups').hidden = !ch.all;
+          }
           connected = r.connected;
           if (r.connected && !known && !root.querySelector('#crmurl').value) root.querySelector('#crmurl').value = r.feed_url;
           root.querySelector('#crmoff').hidden = !r.connected;
@@ -2942,12 +2970,23 @@ function viewSettings() {
         // Asked on connecting (Sara, 2026-10-27): the whole address book, or
         // only the people on deals. Changing it later syncs straight away.
         let connected = false;
-        const contactsMode = () => (root.querySelector('[name=crmc]:checked') || {}).value || '';
-        root.querySelectorAll('[name=crmc]').forEach((x) => x.addEventListener('change', () => {
-          if (connected) call({ op: 'contacts', contacts: x.value }, root.querySelector('#crmrun'));
-        }));
+        // 'deals', 'all', or only the ticked groups ('some:client,vendor').
+        const chosenMode = () => {
+          const r = (root.querySelector('[name=crmc]:checked') || {}).value || '';
+          if (r !== 'all') return r;
+          return contactsMode([...root.querySelectorAll('[name=crmg]:checked')].map((x) => x.value));
+        };
+        let groupTimer = null;
+        const contactsChanged = () => {
+          root.querySelector('#crmgroups').hidden = (root.querySelector('[name=crmc]:checked') || {}).value !== 'all';
+          if (!connected) return;
+          // Wait a moment so ticking three boxes is one sync, not three.
+          clearTimeout(groupTimer);
+          groupTimer = setTimeout(() => call({ op: 'contacts', contacts: chosenMode() }, root.querySelector('#crmrun')), 1500);
+        };
+        root.querySelectorAll('[name=crmc], [name=crmg]').forEach((x) => x.addEventListener('change', contactsChanged));
         root.querySelector('#crmsave').addEventListener('click', (e) => {
-          const contacts = contactsMode();
+          const contacts = chosenMode();
           if (!contacts) { toast('Pick which contacts to bring in'); root.querySelector('#crmcontacts').scrollIntoView({ block: 'center' }); return; }
           call(kind.value !== 'feed'
             ? { op: 'save', provider: kind.value, key: root.querySelector('#apikey').value.trim(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone, contacts }

@@ -523,3 +523,13 @@ agent's address book, apart from `people` (who is on a property).
 - **The store reads every table in pages of 1,000 and upserts in groups of
   500**: Supabase returns at most 1,000 rows per ask, and a short read used to
   drop the rest from the phone.
+- **Just some groups** (Sara, same day: "give option ... to import just
+  specific groups ... such as vendors and clients"). Under "My contacts too"
+  in Settings a tick box per kind (Clients = buyers, sellers, past clients;
+  Leads; Sphere; Vendors; Other), all ticked by default; changes sync after a
+  1.5 s pause. Stored in the SAME column, no migration: `contacts_mode` =
+  'deals' | 'all' | 'some:client,vendor' (`contactsChoice` / `contactsMode`
+  in js/contacts.js, the one rule for phone and server). `runSync` keeps only
+  the ticked kinds and the prune clears the rest. The import sheet shows the
+  groups found in the file (from its Type/Stage/Tags column) with counts, to
+  untick before importing.
