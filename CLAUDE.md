@@ -533,3 +533,16 @@ agent's address book, apart from `people` (who is on a property).
   the ticked kinds and the prune clears the rest. The import sheet shows the
   groups found in the file (from its Type/Stage/Tags column) with counts, to
   untick before importing.
+
+## Hello, what are we doing today? (2026-10-27)
+
+Sara: "put seller updates on another screen. I think the homepage screen
+needs to be a hello [name] what are we doing today?" Today's header now
+reads the date, **Hello <name>** and "What are we doing today?", then six big
+choices (`doTiles`): Show homes (today's tour if there is one, else the
+planner), At a property (the old "Where am I?" button), Open house
+(`openHousePicker`: straight in with one listing, else pick), Seller updates
+(red count when due), Add a property, Log a drive. The briefing card follows
+as "Your day". **Seller updates are their own screen** (`#/updates`,
+`viewSellerUpdates`: due this week, then sent in the last week); the Today
+card and its "Next week" snooze are gone.

@@ -545,3 +545,9 @@ details.status-pick[open] > summary .chg { visibility: hidden; }
 .sec-head { align-items: center; }
 html.hc .label.hd { color: #fff; }
 html.hc .label.hd[data-hue="code"] { color: #000; }
+
+/* "What are we doing today?" (2026-10-27): the big choices on Today. */
+.do-tiles { gap: 10px; }
+.tile.do { padding: 14px 4px 12px; font-size: 13px; min-height: 104px; justify-content: center; }
+.tile.do .ic { width: 52px; height: 52px; border-radius: 14px; }
+.tile.do .badge { display: inline-block; min-width: 20px; padding: 1px 6px; border-radius: 10px; background: var(--alert); color: #fff; font-size: 12px; line-height: 18px; }

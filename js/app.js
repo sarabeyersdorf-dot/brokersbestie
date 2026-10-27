@@ -418,16 +418,28 @@ function logFeedback(id) {
 }
 
 // Weekly seller updates waiting (2026-10-27). "Next week" hides the card for 7 days.
-const sellerDueHidden = () => { try { return (localStorage.getItem('bb:sellerdue') || '') > todayIso(); } catch { return false; } };
-function sellerDueCard() {
-  if (sellerDueHidden()) return '';
-  const due = sellerUpdatesDue(props(), todayIso(), firstName(store.settings().myName) || null);
-  if (!due.length) return '';
-  return html`<div class="card pad sec" data-sellerdue><div class="label accent">Seller updates · ${due.length}</div>
-    <div class="small">No update in the last week. Bestie writes it from your showings, feedback and open houses; you read it and send.</div>
-    <div class="card list" style="margin-top:8px">${due.slice(0, 6).map((p) => html`<button class="row" type="button" data-sellerupd="${p.id}" style="width:100%;text-align:left;background:none;border:0"><span class="grow"><span class="t">${p.address}</span><span class="s">${p.seller_update_at ? 'Last sent ' + niceDate(p.seller_update_at) : 'Not sent yet'}</span></span>${icon('text', 18)}</button>`)}</div>
-    <div class="btns"><button class="btn ghost" type="button" id="sellerdueno">Next week</button></div></div>`;
+// Seller updates live on their own screen (Sara, 2026-10-27: "put seller
+// updates on another screen"). Due first (none in 7 days), then the rest.
+function viewSellerUpdates() {
+  const me = firstName(store.settings().myName) || null;
+  const mine = props().filter((p) => p.status === 'listing' && isWhose(p.owner, me));
+  const due = sellerUpdatesDue(props(), todayIso(), me);
+  const rest = mine.filter((p) => !due.includes(p));
+  const row = (p) => html`<button class="row" type="button" data-sellerupd="${p.id}" style="width:100%;text-align:left;background:none;border:0"><span class="grow"><span class="t">${p.address}</span><span class="s">${p.seller_update_at ? 'Last sent ' + niceDate(p.seller_update_at) : 'Not sent yet'}</span></span><span class="btn" style="min-height:38px">${icon('text', 16)}Write it</span></button>`;
+  return {
+    html: html`${header({ back: '#/', kicker: 'Your listings', title: 'Seller updates' })}
+    <main class="wrap">
+      <div class="small">Bestie writes each one from your showings, feedback and open houses. You read it, change anything, and send it from your own phone.</div>
+      ${due.length ? html`<section class="sec"><div class="label">Due this week · ${due.length}</div><div class="card list">${due.map(row)}</div></section>` : ''}
+      ${rest.length ? html`<section class="sec"><div class="label">Sent in the last week · ${rest.length}</div><div class="card list">${rest.map(row)}</div></section>` : ''}
+      ${!mine.length ? html`<div class="card">${buddy('No listings yet. A property marked “My listing” shows up here.')}</div>` : ''}
+    </main>`,
+    mount(root) {
+      root.querySelectorAll('[data-sellerupd]').forEach((b) => b.addEventListener('click', () => sellerUpdateSheet(b.getAttribute('data-sellerupd'))));
+    }
+  };
 }
+const sellerDueCount = () => sellerUpdatesDue(props(), todayIso(), firstName(store.settings().myName) || null).length;
 
 // The weekly update for one listing, to its seller.
 function sellerUpdateSheet(pid) {
@@ -446,6 +458,31 @@ function sellerUpdateSheet(pid) {
 
 const profileNudgeHidden = () => { try { return localStorage.getItem('bb:profnudge') === '1'; } catch { return false; } };
 const installHidden = () => { try { return localStorage.getItem('bb:installhide') === '1'; } catch { return false; } };
+// "What are we doing today?" (Sara, 2026-10-27): the big choices first.
+function doTiles(tours) {
+  const tour = tours[0];
+  const due = sellerDueCount();
+  const tile = (attrs, ic, label, cls = '') => html`<${raw(attrs.href ? 'a' : 'button')} class="tile do" ${raw(attrs.href ? `href="${attrs.href}"` : `type="button" id="${attrs.id}"`)}><span class="ic ${cls}">${icon(ic, 26)}</span>${label}</${raw(attrs.href ? 'a' : 'button')}>`;
+  return html`<section class="sec"><div class="tiles three do-tiles">
+    ${tile({ href: tour ? `#/tour/${tour.id}` : '#/plan' }, 'route', tour ? "Today's tour" : 'Show homes', 't')}
+    ${tile({ id: 'findme' }, 'pin', 'At a property', 'y')}
+    ${tile({ id: 'ohpick' }, 'person', 'Open house')}
+    ${tile({ href: '#/updates' }, 'text', html`Seller updates${due ? html` <span class="badge">${due}</span>` : ''}`)}
+    ${tile({ href: '#/p/new' }, 'plus', 'Add a property')}
+    ${tile({ href: '#/miles' }, 'miles', 'Log a drive')}
+  </div></section>`;
+}
+function openHousePicker() {
+  const me = firstName(store.settings().myName) || null;
+  const list = props().filter((p) => ['listing', 'prep'].includes(p.status) && isWhose(p.owner, me));
+  if (list.length === 1) { location.hash = `#/openhouse/${list[0].id}`; return; }
+  if (!list.length) { toast('Mark a property “My listing” first, then run its open house from here.'); return; }
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Which open house?</div>
+    <div class="card list">${list.map((p) => html`<a class="row" href="#/openhouse/${p.id}"><span class="grow"><span class="t">${p.address}</span><span class="s">${p.city || ''}</span></span>${icon('chev', 18)}</a>`)}</div>
+  </div>`, (sh) => sh.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => closeSheet())));
+}
+
 function viewToday() {
   const results = searchText ? search(searchText, store.snapshot()) : [];
   const tours = store.all('tours').filter((x) => x.date === todayIso() && !x.finished);
@@ -459,6 +496,9 @@ function viewToday() {
   return {
     html: html`${header({
       right: html`<span style="display:flex;gap:10px;align-items:center">${modeBadge()}<a href="#/settings" aria-label="Settings" style="color:#fff;display:flex;padding:8px">${icon('gear', 22)}</a></span>`,
+      kicker: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+      title: myName() ? `Hello ${myName()[0].toUpperCase()}${myName().slice(1)}` : 'Hello!',
+      sub: 'What are we doing today?',
       extra: html`<label class="search">${icon('search', 18)}<input id="q" type="search" placeholder="Search everything: address, code, name…" value="${searchText}" aria-label="Search everything" autocomplete="off"></label>`
     })}
     <main class="wrap">
@@ -475,6 +515,7 @@ function viewToday() {
         <div class="btns"><a class="btn dark" href="#/p/new">Add a listing</a><button class="btn" type="button" id="sample">Show sample data</button></div>
       </section>` : ''}
 
+      ${!empty && !searchText ? doTiles(tours) : ''}
       ${!empty && !searchText ? filterBar() : ''}
       ${!empty && !searchText ? briefingCard() : ''}
 
@@ -489,7 +530,7 @@ function viewToday() {
           ${hp.showing_notes ? html`<div class="small">${hp.showing_notes}</div>` : ''}
           <div class="label accent" style="letter-spacing:.04em;text-transform:none;font-size:14px">Open the full card →</div>
         </a>
-      </section>` : !empty ? html`<button class="btn block" type="button" id="findme">${icon('pin', 18)}Where am I? Show this property's codes</button>` : ''}
+      </section>` : ''}
 
       ${todos.length ? html`<section class="sec">
         <div class="sec-head"><div class="label">To do today · ${shownTodos.length}</div><button class="btn ghost" type="button" id="addtodo" style="min-height:36px">+ Add</button></div>
@@ -499,7 +540,6 @@ function viewToday() {
       </section>` : ''}
 
       ${!searchText ? feedbackCard() : ''}
-      ${!searchText ? sellerDueCard() : ''}
       <section class="sec">
         <div class="sec-head"><div class="label">Quick add${hp ? ' · files to ' + hp.address : ''}</div><a href="#/quick" class="small" style="color:var(--teal-text);font-weight:600">All →</a></div>
         <div class="tiles">
@@ -531,8 +571,6 @@ function viewToday() {
       root.querySelector('#profnot')?.addEventListener('click', () => { try { localStorage.setItem('bb:profnudge', '1'); } catch {} root.querySelector('[data-profnudge]')?.remove(); });
       root.querySelectorAll('[data-fbask]').forEach((b) => b.addEventListener('click', () => askFeedback(b.getAttribute('data-fbask'))));
       root.querySelectorAll('[data-fblog]').forEach((b) => b.addEventListener('click', () => logFeedback(b.getAttribute('data-fblog'))));
-      root.querySelectorAll('[data-sellerupd]').forEach((b) => b.addEventListener('click', () => sellerUpdateSheet(b.getAttribute('data-sellerupd'))));
-      root.querySelector('#sellerdueno')?.addEventListener('click', () => { try { localStorage.setItem('bb:sellerdue', addDays(todayIso(), 6)); } catch {} root.querySelector('[data-sellerdue]')?.remove(); });
       const q = root.querySelector('#q');
       q.addEventListener('input', () => {
         searchText = q.value;
@@ -550,6 +588,7 @@ function viewToday() {
         if (!here && fix) toast('None of your properties are within a quarter mile');
         render();
       });
+      root.querySelector('#ohpick')?.addEventListener('click', openHousePicker);
       root.querySelector('#addtodo')?.addEventListener('click', () => addTaskSheet());
       root.querySelector('#readbrief')?.addEventListener('click', (e) => readBriefing(e.currentTarget));
       wireFilter(root);
@@ -3222,7 +3261,7 @@ function briefingCard() {
     b.lateDates.length ? `${b.lateDates.length} deadline${b.lateDates.length === 1 ? '' : 's'} passed, not marked done` : ''
   ].filter(Boolean);
   return html`<section class="card pad sec brief">
-    <div class="sec-head"><div class="hi-wrap"><span class="buddy-hi">${raw(winkFace({ size: 36, label: '' }))}</span><div><div class="label accent">${hello}</div><div class="brief-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div></div></div>
+    <div class="sec-head"><div class="hi-wrap"><span class="buddy-hi">${raw(winkFace({ size: 36, label: '' }))}</span><div><div class="label accent">Your day</div><div class="brief-date">${hello.split(',')[0]}</div></div></div>
       <button class="btn" type="button" id="readbrief" style="min-height:40px;white-space:nowrap" aria-label="Read it to me">${icon('speak', 18)}Listen</button></div>
     <ul class="brief-facts">${facts.map((f) => html`<li>${f}</li>`)}</ul>
     ${shownTimed.length ? html`<div class="card list">${shownTimed.map((i) => dayItemRow(i))}</div>` : ''}
@@ -3610,6 +3649,7 @@ const ROUTES = [
   [/^#\/tours$/, () => viewTours(), 'tours'],
   [/^#\/tour\/([^/]+)$/, (m) => viewTour(m[1]), 'tours'],
   [/^#\/vendors$/, () => viewVendors(), 'today'],
+  [/^#\/updates$/, () => viewSellerUpdates(), 'today'],
   [/^#\/contacts(?:\/(.+))?$/, (m) => viewContacts(m[1] ? decodeURIComponent(m[1]) : null), 'today'],
   [/^#\/showings$/, () => viewShowingsImport(), 'calendar'],
   [/^#\/taxes\/(\d{4})$/, (m) => viewTaxes(m[1]), 'today'],
