@@ -12,7 +12,7 @@ import { chooseFromDropbox, dropboxReady } from './dropbox.js';
 import { CRM_CHOICES } from './crmlist.js';
 import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText, feedbackRequestText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
-import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink, shareWhere } from './push.js';
+import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink, shareWhere, shareLink, stopShareLinks } from './push.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
 import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, doorCodes, feedbackDue } from './brief.js';
 
@@ -1012,8 +1012,22 @@ function shareSheet(p) {
     <label class="field"><span>Message</span><textarea id="msg" style="min-height:180px">${build(false)}</textarea></label>
     <div class="btns"><a class="btn dark" id="sendtext" href="#">Text it</a><button class="btn" type="button" id="sharenative">Share…</button></div>
     <button class="btn ghost block" type="button" id="copymsg">Copy</button>
+    <div class="card pad"><div class="label accent">Safer: a 24-hour link</div>
+      <div class="small">For an assistant, photographer or inspector: a link to this home's codes, directions and showing instructions that stops working tomorrow, so the codes don't sit in their texts forever.</div>
+      <div class="btns"><button class="btn dark" type="button" id="daylink">Make a 24-hour link</button><button class="btn ghost" type="button" id="stoplinks">Stop links now</button></div></div>
   </div>`, (s) => {
     const msg = s.querySelector('#msg');
+    s.querySelector('#daylink').addEventListener('click', async (ev) => {
+      ev.target.disabled = true;
+      try {
+        const url = await shareLink(p.id);
+        msg.value = `${p.address}: codes, directions and showing instructions (this link works for 24 hours): ${url}`;
+        s.querySelector('#withcodes').checked = false; sync();
+        toast('Link made. Text or share it.');
+      } catch (e) { toast(e.message); }
+      ev.target.disabled = false;
+    });
+    s.querySelector('#stoplinks').addEventListener('click', async () => { const n = await stopShareLinks(p.id); toast(n ? `${n} link${n === 1 ? '' : 's'} stopped` : 'No links were open'); });
     const sync = () => (s.querySelector('#sendtext').href = smsLink([], msg.value));
     s.querySelector('#withcodes').addEventListener('change', (e) => { msg.value = build(e.target.checked); sync(); });
     msg.addEventListener('input', sync);

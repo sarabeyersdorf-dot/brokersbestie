@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Showing info</title>
+<link rel="icon" href="icons/favicon-32.png">
+<style>
+  /* A 24-hour code link (2026-10-27): share.html?t=<token>. One property's
+     codes, directions and showing instructions for an assistant, photographer
+     or inspector. Read through the Supabase `reminders` function (op=share),
+     which refuses once the link has ended or the agent stopped it. */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #0e1012; color: #fff; font: 18px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 18px 16px 40px; display: flex; flex-direction: column; gap: 14px; }
+  .kicker { font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #cfd6d3; }
+  h1 { margin: 0; font-size: 32px; line-height: 1.05; text-transform: uppercase; }
+  .tags span { display: inline-block; border: 2px solid #fff; border-radius: 8px; padding: 3px 10px; font-weight: 700; font-size: 15px; margin-right: 6px; }
+  .code { background: #F5C93E; color: #0e1012; border: 0; border-radius: 14px; padding: 12px 16px; text-align: left; width: 100%; font: inherit; }
+  .code .k { font: 700 14px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .06em; }
+  .code .v { display: block; font-size: 52px; font-weight: 800; line-height: 1.05; letter-spacing: .03em; word-break: break-all; }
+  .code .w { font-size: 15px; font-weight: 600; }
+  .box { background: #1d2124; border-radius: 14px; padding: 4px 16px; }
+  .box p { margin: 12px 0; white-space: pre-line; }
+  .box .lbl { margin-top: 12px; font: 700 13px system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #cfd6d3; }
+  a.btn { display: block; text-align: center; min-height: 54px; line-height: 54px; border-radius: 14px; background: #19c3b1; color: #0e1012; font-weight: 800; text-decoration: none; }
+  a.btn.ghost { background: transparent; border: 2px solid #fff; color: #fff; }
+  .end { color: #cfd6d3; font-size: 14px; text-align: center; }
+  .gone { padding: 60px 10px; text-align: center; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main id="m"><div class="kicker">Loading…</div></main>
+<script type="module">
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './js/config.js';
+  const t = new URLSearchParams(location.search).get('t') || '';
+  const m = document.getElementById('m');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const LABEL = { lockbox: 'Lockbox', gate: 'Gate code', alarm: 'Alarm', door: 'Door keypad', key: 'Hidden key' };
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/reminders?op=share&t=${encodeURIComponent(t)}`, { headers: { apikey: SUPABASE_ANON_KEY } });
+    const p = await r.json();
+    if (!r.ok) throw new Error(p.error || 'This link has ended.');
+    const codes = (p.access || []).filter((a) => a.code);
+    const spots = (p.access || []).filter((a) => !a.code && a.location_note);
+    const ends = new Date(p.expires_at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    const map = p.lat != null ? `https://maps.google.com/?q=${p.lat},${p.lng}` : `https://maps.google.com/?q=${encodeURIComponent([p.address, p.city].filter(Boolean).join(', '))}`;
+    document.title = `Showing info · ${p.address}`;
+    m.innerHTML = `
+      <div class="kicker">Showing info${p.agent && p.agent.full_name ? ' from ' + esc(p.agent.full_name) : ''}</div>
+      <h1>${esc(String(p.address).split(',')[0])}</h1>
+      ${p.occupancy === 'O' ? '<div class="tags"><span>Occupied</span></div>' : p.occupancy === 'V' ? '<div class="tags"><span>Vacant</span></div>' : ''}
+      ${codes.map((a) => `<button class="code" type="button" data-copy="${esc(a.code)}"><span class="k">${esc(a.label || LABEL[a.kind] || a.kind)} · tap to copy</span><span class="v">${esc(a.code)}</span>${a.location_note ? `<span class="w">${esc(a.location_note)}</span>` : ''}</button>`).join('')}
+      ${p.showing_notes || p.directions || spots.length ? `<div class="box">
+        ${p.showing_notes ? `<div class="lbl">Getting in</div><p>${esc(p.showing_notes)}</p>` : ''}
+        ${spots.length ? `<div class="lbl">Where things are</div><p>${spots.map((a) => `${esc(a.label || LABEL[a.kind] || a.kind)}: ${esc(a.location_note)}`).join('\n')}</p>` : ''}
+        ${p.directions ? `<div class="lbl">Driving in</div><p>${esc(p.directions)}</p>` : ''}
+      </div>` : ''}
+      <a class="btn" href="${map}" target="_blank" rel="noopener">Directions</a>
+      ${p.agent && p.agent.phone ? `<a class="btn ghost" href="tel:${esc(String(p.agent.phone).replace(/[^\d+]/g, ''))}">Call ${esc((p.agent.full_name || 'the agent').split(' ')[0])}</a>` : ''}
+      <div class="end">This link stops working ${esc(ends)}.</div>`;
+    m.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', async () => { try { await navigator.clipboard.writeText(b.dataset.copy); b.querySelector('.k').textContent = 'Copied'; } catch {} }));
+  } catch (e) {
+    m.innerHTML = `<div class="gone"><h1>Link ended</h1><p>${esc(e.message)}</p></div>`;
+  }
+</script>
+</body>
+</html>

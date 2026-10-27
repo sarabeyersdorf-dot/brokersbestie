@@ -6,6 +6,7 @@
 //                        (help texts their contact now)
 //   GET  ?op=oh&t=       an open house sign-in link: the address and branding
 //   POST {op:'visit'}    a visitor signing in on their own phone (no account)
+//   GET  ?op=share&t=    a 24-hour code link: one property's codes + directions
 // Safety texts go through Twilio when TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN /
 // TWILIO_FROM are set as this function's secrets; until then nothing is texted
 // and the phone keeps saying "phone-only".
@@ -124,6 +125,18 @@ Deno.serve(async (req) => {
       db.from('profiles').select('full_name, title, brokerage, license, phone, brand_color').eq('team_id', link.team_id).eq('owner', link.owner || '').maybeSingle()
     ]);
     return json({ address: prop?.address || '', city: prop?.city || '', agent: prof || null });
+  }
+  if (req.method === 'GET' && url.searchParams.get('op') === 'share') {
+    const t = String(url.searchParams.get('t') || '');
+    const { data: link } = /^[a-f0-9]{32,64}$/.test(t) ? await db.from('share_links').select('*').eq('token', t).maybeSingle() : { data: null };
+    if (!link || link.revoked || new Date(link.expires_at) <= new Date()) return json({ error: 'This link has ended. Ask the agent for a new one.' }, 404);
+    const [{ data: p }, { data: access }, { data: prof }] = await Promise.all([
+      db.from('properties').select('address, city, occupancy, showing_notes, directions, lat, lng').eq('id', link.property_id).maybeSingle(),
+      db.from('access').select('kind, label, code, location_note').eq('property_id', link.property_id),
+      db.from('profiles').select('full_name, phone, brokerage').eq('team_id', link.team_id).eq('owner', link.owner || '').maybeSingle()
+    ]);
+    if (!p) return json({ error: 'This link has ended.' }, 404);
+    return json({ ...p, access: access || [], agent: prof || null, expires_at: link.expires_at });
   }
   const body = await req.json().catch(() => ({}));
   if (body.op === 'run') {

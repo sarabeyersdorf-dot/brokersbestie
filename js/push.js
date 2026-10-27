@@ -108,3 +108,19 @@ export async function shareWhere(fix) {
     await store.cloud.client.from('push_subs').update({ from_lat: fix.lat, from_lng: fix.lng, from_at: new Date().toISOString(), base_lat: store.settings().homeBase?.lat ?? null, base_lng: store.settings().homeBase?.lng ?? null }).eq('id', await idFor(sub.endpoint));
   } catch {}
 }
+
+// A link to one property's codes and directions that ends in 24 hours.
+export async function shareLink(propertyId) {
+  const c = store.cloud;
+  if (!c.user || !c.teamId) throw new Error('Sign in first (Settings → Team mode) to send a 24-hour link.');
+  await store.syncNow();
+  const { data, error } = await c.client.from('share_links').insert({ team_id: c.teamId, property_id: propertyId, owner: (store.settings().myName || '').toLowerCase() || null }).select('token').single();
+  if (error) throw new Error(error.message);
+  return `${location.origin}/share.html?t=${data.token}`;
+}
+export async function stopShareLinks(propertyId) {
+  const c = store.cloud;
+  if (!c.user) return 0;
+  const { data } = await c.client.from('share_links').update({ revoked: true }).eq('property_id', propertyId).eq('revoked', false).select('token');
+  return (data || []).length;
+}
