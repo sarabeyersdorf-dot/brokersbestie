@@ -510,3 +510,8 @@ details.status-pick[open] > summary .chg { visibility: hidden; }
 .brief .brief-date { line-height: 1.05; }
 .qr-box { background: #fff; border-radius: 14px; padding: 12px; margin: 0 auto; width: min(320px, 80vw); }
 .qr-box svg { width: 100%; height: auto; display: block; }
+/* First-run welcome (2026-10-27) */
+.welcome [data-wface] svg { width: 110px; height: auto; }
+.wdots { display: flex; justify-content: center; gap: 8px; margin: 4px 0; }
+.wdot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.wdot.on { background: var(--teal); }

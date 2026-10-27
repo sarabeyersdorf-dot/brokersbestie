@@ -9,6 +9,7 @@ import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './p
 import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
 import { chooseFromDropbox, dropboxReady } from './dropbox.js';
+import { planShowings, ACTION_WORDS } from './showings.js';
 import { CRM_CHOICES } from './crmlist.js';
 import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText, feedbackRequestText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
@@ -2316,6 +2317,80 @@ function viewTaxes(year) {
   };
 }
 
+// ---------- showing confirmations (2026-10-27) ----------
+// Paste ShowingTime / BrokerBay / an agent's text, or add a screenshot; Bestie
+// reads it (api/read-showings.js), shows what it found, and adds the ticked
+// ones: the showing on the calendar, the home (new ones as "Showing / other
+// agent"), the lockbox or gate code, and the listing agent.
+const showState = { text: '', files: [], step: 'paste', plan: [], error: '' };
+function viewShowingsImport() {
+  const st = showState;
+  const row = (x, i) => {
+    const s = x.showing;
+    return html`<label class="row pick">
+      <input type="checkbox" data-sh="${i}" ${x.checked ? raw('checked') : ''} ${x.action === 'same' || x.action === 'skip' ? raw('disabled') : ''}>
+      <span class="grow"><span class="t">${s.address}${s.city ? ', ' + s.city.split(',')[0] : ''}</span>
+      <span class="s"><b>${ACTION_WORDS[x.action]}</b> · ${niceDate(s.date)}${x.start != null ? ' · ' + formatClock(x.start) : ''}${x.property ? '' : ' · new home'}</span>
+      ${x.newCodes.length ? html`<span class="s">Code${x.newCodes.length > 1 ? 's' : ''}: ${x.newCodes.map((c) => c.code).join(', ')}</span>` : ''}
+      ${s.instructions ? html`<span class="s">${s.instructions}</span>` : ''}</span></label>`;
+  };
+  return {
+    form: true,
+    html: html`${header({ back: '#/calendar', kicker: 'Add showings', title: 'From a confirmation' })}
+    <main class="wrap">
+      ${st.step === 'review' ? html`
+        ${st.plan.length ? html`<div class="card list">${st.plan.map(row)}</div>
+          <button class="btn dark big block" type="button" id="shadd">Add the ticked ones</button>` : buddy('No showings found in that. Check it is the confirmation itself, or add a screenshot.', 'maybe')}
+        <button class="btn ghost block" type="button" id="shagain">Read another</button>`
+      : html`
+        <div class="small">Copy a showing confirmation (ShowingTime, BrokerBay, ShowingDesk, or a listing agent's text) and paste it here. Several at once is fine. Or add a screenshot.</div>
+        <label class="field"><span>The confirmation</span><textarea id="shtext" rows="8" placeholder="Paste the email or text here">${st.text}</textarea></label>
+        <div class="btns"><label class="btn">${icon('photo', 18)}Screenshot${st.files.length ? ` · ${st.files.length}` : ''}<input type="file" accept="image/*,application/pdf" multiple id="shfile" hidden></label></div>
+        ${st.error ? html`<div class="warn-box">${st.error}</div>` : ''}
+        <button class="btn dark big block" type="button" id="shread" ${st.step === 'reading' ? raw('disabled') : ''}>${st.step === 'reading' ? 'Reading…' : 'Read it'}</button>
+        <div class="hint">Nothing is added until you tick it. Bestie never changes a showing it isn't sure about: a home it can't match is added as a new one.</div>`}
+    </main>`,
+    mount(root) {
+      root.querySelector('#shtext')?.addEventListener('input', (e) => { st.text = e.target.value; });
+      root.querySelector('#shfile')?.addEventListener('change', (e) => { st.files = [...e.target.files].slice(0, 4); render(); });
+      root.querySelector('#shread')?.addEventListener('click', async () => {
+        if (!st.text.trim() && !st.files.length) { toast('Paste the confirmation or add a screenshot'); return; }
+        st.step = 'reading'; st.error = ''; render();
+        try {
+          const files = await Promise.all(st.files.map(async (f) => ({ type: f.type || 'image/jpeg', data: await toBase64(f) })));
+          const r = await api('/api/read-showings', { method: 'POST', body: JSON.stringify({ text: st.text, files, today: todayIso() }) });
+          st.plan = planShowings(r.showings, store.snapshot());
+          st.step = 'review';
+        } catch (e) { st.step = 'paste'; st.error = navigator.onLine ? e.message : 'No signal right now. Try again when you have one.'; }
+        render();
+      });
+      root.querySelectorAll('[data-sh]').forEach((b) => b.addEventListener('change', () => { st.plan[Number(b.getAttribute('data-sh'))].checked = b.checked; }));
+      root.querySelector('#shagain')?.addEventListener('click', () => { Object.assign(st, { text: '', files: [], step: 'paste', plan: [], error: '' }); render(); });
+      root.querySelector('#shadd')?.addEventListener('click', () => {
+        let n = 0;
+        for (const x of st.plan.filter((y) => y.checked)) {
+          const s = x.showing;
+          let pid = x.property?.id;
+          if (!pid) {
+            const p = store.save('properties', { address: s.address, city: s.city || '', status: 'tour', showing_notes: s.instructions || '' });
+            pid = p.id;
+            geocode([s.address, s.city].filter(Boolean).join(', ')).then((g) => g && store.save('properties', { id: pid, lat: g.lat, lng: g.lng }, { quiet: true }));
+          }
+          for (const c of x.newCodes) store.save('access', { property_id: pid, kind: c.kind || 'lockbox', label: KINDS[c.kind || 'lockbox']?.label || 'Lockbox', code: c.code, location_note: c.where || '' });
+          if (s.listing_agent && !store.where('people', 'property_id', pid).some((m) => m.name === s.listing_agent)) store.save('people', { property_id: pid, name: s.listing_agent, role: 'Listing agent', phone: s.listing_agent_phone || '' });
+          if (x.action === 'cancel') store.save('events', { id: x.existing.id, cancelled: true });
+          else if (x.action === 'move') store.save('events', { id: x.existing.id, start_minutes: x.start, minutes: x.minutes });
+          else store.save('events', { title: `Showing · ${s.address}`, kind: 'showing', date: s.date, start_minutes: x.start, minutes: x.minutes, property_id: pid, notes: s.instructions || '', done: false });
+          n++;
+        }
+        Object.assign(st, { text: '', files: [], step: 'paste', plan: [], error: '' });
+        toast(n ? `${n} showing${n === 1 ? '' : 's'} updated on your calendar` : 'Nothing ticked');
+        location.hash = '#/calendar';
+      });
+    }
+  };
+}
+
 function download(name, text) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
   const a = document.createElement('a');
@@ -2574,6 +2649,7 @@ function viewSettings() {
         <div class="small">Black on white, bigger words and solid lines, for reading your screen outdoors.</div>
         <label class="switch"><input type="checkbox" id="hcmode" ${s.highContrast ? raw('checked') : ''}>Turn on bright sun mode</label>
       </section>
+      <button class="btn ghost block" type="button" id="rewelcome">Show the welcome again</button>
 
       <section class="card pad sec">
         <div class="label accent">Your profile & branding</div>
@@ -2722,6 +2798,7 @@ function viewSettings() {
         root.querySelector('#crmrun').addEventListener('click', (e) => call({ op: 'run' }, e.currentTarget));
         root.querySelector('#crmoff').addEventListener('click', (e) => { if (confirm('Stop syncing from this CRM? What already came in stays.')) call({ op: 'disconnect' }, e.currentTarget); });
       }
+      root.querySelector('#rewelcome')?.addEventListener('click', () => showWelcome());
       root.querySelector('#hcmode')?.addEventListener('change', (e) => { store.saveSettings({ highContrast: e.target.checked }); applyContrast(); });
       root.querySelector('#myname')?.addEventListener('change', (e) => { store.saveSettings({ myName: firstName(e.target.value) }); toast('Saved'); });
       const hb = root.querySelector('#hb');
@@ -2899,6 +2976,7 @@ function viewCalendar() {
         <label class="tab cal-pick">Jump to…<input type="date" id="jump" value="${calFrom}"></label>
       </div>
       ${filterBar({ withProperty: true })}
+      <a class="btn block" href="#/showings">${icon('sheet', 18)}Add showings from a confirmation</a>
       ${days.length ? days.map(({ day, items }) => html`<section class="sec">
         <div class="sec-head"><div class="label ${day === today ? 'accent' : ''}">${dayHeading(day)}${day !== today && day !== addDays(today, 1) ? '' : html` · ${niceDate(day)}`}</div><button class="btn ghost" type="button" data-addon="${day}" style="min-height:32px">+</button></div>
         <div class="card list">${items.map((i) => dayItemRow(i, day))}</div>
@@ -3321,6 +3399,7 @@ const ROUTES = [
   [/^#\/tours$/, () => viewTours(), 'tours'],
   [/^#\/tour\/([^/]+)$/, (m) => viewTour(m[1]), 'tours'],
   [/^#\/vendors$/, () => viewVendors(), 'today'],
+  [/^#\/showings$/, () => viewShowingsImport(), 'calendar'],
   [/^#\/taxes\/(\d{4})$/, (m) => viewTaxes(m[1]), 'today'],
   [/^#\/door\/([^/]+)\/(\d+)$/, (m) => viewDoor(m[1], Number(m[2])), 'kiosk'],
   [/^#\/buyers$/, () => viewBuyers(), 'tours'],
@@ -3383,6 +3462,46 @@ $fab.setAttribute('aria-label', 'Tell Bestie');
 addEventListener('scroll', () => $fab.classList.toggle('mini', scrollY > 40), { passive: true });
 render();
 store.startCloud();
+// First open: a short welcome (2026-10-27). Once per phone, never on the
+// visitor or kiosk pages; Settings → "Show the welcome again".
+const WELCOME = [
+  { face: 'wink', title: 'Hi, I’m Bestie', body: 'Your codes, showings, tours and deadlines in one place, built for the car and the front door.' },
+  { face: 'love', title: 'Every code, one tap', body: 'Save the lockbox, gate and alarm codes with a photo of where they are. At the door, they show up huge.' },
+  { face: 'again', title: 'Tours that plan themselves', body: 'Read Bestie the addresses and it puts them in order, texts the listing agents, and logs your miles.' },
+  { face: 'ok', title: 'Make it yours', body: 'Add your name and brokerage, put Bestie on your home screen, and turn on reminders in Settings.' }
+];
+function showWelcome() {
+  let i = 0;
+  const face = (k) => (k === 'wink' ? winkFace({ size: 110, label: '' }) : k === 'ok' ? okFace({ size: 110, label: '' }) : reactionFace(k, { size: 110, label: '' }));
+  const paint = (sh) => {
+    const w = WELCOME[i];
+    sh.querySelector('[data-wface]').innerHTML = face(w.face);
+    sh.querySelector('[data-wtitle]').textContent = w.title;
+    sh.querySelector('[data-wbody]').textContent = w.body;
+    sh.querySelector('[data-wdots]').innerHTML = WELCOME.map((_, j) => `<span class="wdot${j === i ? ' on' : ''}"></span>`).join('');
+    sh.querySelector('#wnext').textContent = i < WELCOME.length - 1 ? 'Next' : 'Show me around';
+    sh.querySelector('#wsample').hidden = i < WELCOME.length - 1 || props().length > 0;
+  };
+  openSheet(html`<div class="sec welcome" style="text-align:center">
+    <div data-wface></div>
+    <div class="title" data-wtitle style="font-family:var(--tall);font-weight:800;font-size:30px;text-transform:uppercase"></div>
+    <div data-wbody style="font-size:18px"></div>
+    <div class="wdots" data-wdots></div>
+    <button class="btn dark big block" type="button" id="wnext">Next</button>
+    <button class="btn block" type="button" id="wsample" hidden>Look around with sample data</button>
+    <button class="btn ghost block" type="button" id="wskip">Skip</button>
+  </div>`, (sh) => {
+    const done = () => { store.saveSettings({ welcomed: true }); closeSheet(); };
+    sh.querySelector('#wnext').addEventListener('click', () => { if (i < WELCOME.length - 1) { i++; paint(sh); } else done(); });
+    sh.querySelector('#wskip').addEventListener('click', done);
+    sh.querySelector('#wsample').addEventListener('click', () => { done(); document.querySelector('#sample')?.click(); });
+    paint(sh);
+  });
+}
+setTimeout(() => {
+  if (store.settings().welcomed || props().length || /^#\/(door|openhouse)/.test(location.hash)) { if (!store.settings().welcomed && props().length) store.saveSettings({ welcomed: true }); return; }
+  showWelcome();
+}, 600);
 setInterval(watchCheckin, 20000);
 watchCheckin();
 locationAllowed().then(async (yes) => {

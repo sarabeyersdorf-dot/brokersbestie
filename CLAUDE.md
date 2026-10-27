@@ -447,3 +447,36 @@ cleans the fields (`cleanVisit` in `safety.js`, tested), drops anything with
 the hidden `website` field filled (robots), caps 300 a day per property, and
 writes a `visitors` row (`id` `web-…`, notes "Signed in on their own phone").
 The visitor list syncs when opened, so web sign-ins show up there.
+
+## Six more (2026-10-27, Sara: "build it all")
+
+- **Leave-by reminders**: `due.js` uses the phone's last location (sent by
+  `shareWhere` in `js/push.js` when Bestie already had a fix, at most every 10
+  minutes, only with reminders on; db/017 `push_subs.from_*`) or the home base
+  (`base_*`), and the property's pin: drive (`driveMin`, same estimate as
+  route.js) + 5 min to park → "Leave now: … About N min to …". No origin or
+  no pin → the fixed 15/30/60-minute reminder as before.
+- **Feedback from agents who show MY listings**: showings get "Showing agent"
+  + phone (db/018 `events.showing_agent*`, `feedback_asked_at`,
+  `feedback_logged_at`). `feedbackDue` (brief.js): my listing, kind showing,
+  in the last 7 days, over → a **Showing feedback** card on Today: **Ask**
+  (`feedbackRequestText`, composeSheet, their own phone) then **Log it**,
+  which files a "Showing feedback: …" note, so the seller update picks it up.
+- **24-hour code links**: Share sheet → "Make a 24-hour link" (`shareLink`,
+  db/019 `share_links`, team RLS, `revoked`, 24h expiry) → `share.html?t=`,
+  read only through the `reminders` function `GET ?op=share` (codes, where,
+  showing notes, directions, map, the agent's phone). "Stop links now" revokes.
+- **Tax year** `#/taxes/<year>` (from Mileage): `taxYear` / `taxCsv` in
+  brief.js: miles, deduction at the IRS rate (editable there), expenses, by
+  month, "Before you send it" (drives with no purpose, expenses with no
+  receipt photo), one CSV for the accountant.
+- **Showings from confirmations** `#/showings` (Calendar → "Add showings from
+  a confirmation"): paste ShowingTime / BrokerBay / an agent's text, or a
+  screenshot → `api/read-showings.js` (Claude, structured) → `planShowings`
+  (`js/showings.js`, tested): exact street match else a new "Showing / other
+  agent" property; New / Time changed / Cancelled / Already on your calendar;
+  new codes and the listing agent are added. Nothing is saved until ticked.
+- **Welcome**: first open (no properties) shows 4 cards with the buddy
+  (`showWelcome`, `settings.welcomed`); Settings → "Show the welcome again".
+- **Not built: sign-up trial and payments.** Needs Sara's Stripe account and a
+  pricing decision first. Sign-up itself already exists (email code + team).
