@@ -233,7 +233,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .cal-time.allday { font: 700 11px/1.2 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
 .k-date .cal-time.allday { color: var(--pending, #b35300); }
 .done-row { opacity: .55; }
-.cal-pick { position: relative; overflow: hidden; }
+.cal-pick { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; }
 .cal-pick input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
 .brief .brief-date { font: 700 22px/1.1 var(--tall); text-transform: uppercase; }
 .brief-facts { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
