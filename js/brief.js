@@ -289,3 +289,37 @@ export function feedbackDue(data, today, nowMin, who = null) {
   }
   return out.sort((a, b) => String(b.event.date).localeCompare(String(a.event.date)));
 }
+
+// ---------- the tax year (2026-10-27) ----------
+// One year of drives and expenses: totals, by month, and what a preparer will
+// ask about (a drive with no purpose, an expense with no receipt photo).
+export function taxYear(trips, expenses, year, rate = 0) {
+  const y = String(year);
+  const ts = (trips || []).filter((t) => String(t.date || '').startsWith(y));
+  const es = (expenses || []).filter((e) => String(e.date || '').startsWith(y));
+  const months = Array.from({ length: 12 }, (_, i) => ({ month: `${y}-${String(i + 1).padStart(2, '0')}`, miles: 0, spent: 0, drives: 0 }));
+  for (const t of ts) { const m = months[Number(String(t.date).slice(5, 7)) - 1]; if (m) { m.miles += Number(t.miles || 0); m.drives++; } }
+  for (const e of es) { const m = months[Number(String(e.date).slice(5, 7)) - 1]; if (m) m.spent += Number(e.amount || 0); }
+  const miles = months.reduce((s, m) => s + m.miles, 0);
+  const spent = months.reduce((s, m) => s + m.spent, 0);
+  return {
+    year: y, months, miles, spent, drives: ts.length, expenses: es.length,
+    deduction: rate ? Math.round(miles * rate * 100) / 100 : null,
+    noPurpose: ts.filter((t) => !String(t.purpose || '').trim()).length,
+    noReceipt: es.filter((e) => !e.photo_id).length
+  };
+}
+
+export function taxCsv(trips, expenses, year, addressOf = () => '') {
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const y = String(year);
+  const lines = [[`Mileage log ${y}`].map(q).join(','), ['Date', 'Purpose', 'From', 'To', 'Property', 'Miles'].map(q).join(',')];
+  for (const t of (trips || []).filter((x) => String(x.date || '').startsWith(y)).sort((a, b) => String(a.date).localeCompare(String(b.date)))) {
+    lines.push([t.date, t.purpose, t.from_place, t.to_place, addressOf(t.property_id), Number(t.miles || 0).toFixed(1)].map(q).join(','));
+  }
+  lines.push('', [`Expenses ${y}`].map(q).join(','), ['Date', 'What', 'Property', 'Amount', 'Receipt photo'].map(q).join(','));
+  for (const e of (expenses || []).filter((x) => String(x.date || '').startsWith(y)).sort((a, b) => String(a.date).localeCompare(String(b.date)))) {
+    lines.push([e.date, e.what, addressOf(e.property_id), Number(e.amount || 0).toFixed(2), e.photo_id ? 'yes' : 'no'].map(q).join(','));
+  }
+  return lines.join('\n');
+}

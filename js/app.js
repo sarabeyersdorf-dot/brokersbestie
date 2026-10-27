@@ -14,7 +14,7 @@ import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visi
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink, shareWhere, shareLink, stopShareLinks } from './push.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, doorCodes, feedbackDue } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, doorCodes, feedbackDue, taxYear, taxCsv } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -2230,6 +2230,7 @@ function viewMiles(sub) {
       <div class="tabs">${tab('miles', `Drives · ${trips.length}`)}${tab('exp', `Expenses · ${exp.length}`)}</div>
       ${milesTab === 'miles' ? html`
         <div class="btns"><button class="btn dark" type="button" id="addtrip">+ Add a drive</button><button class="btn" type="button" id="csv">Export for taxes</button></div>
+        <a class="btn block" href="#/taxes/${y}">${icon('receipt', 18)}Tax year ${y} summary</a>
         <div class="card list">${trips.length ? trips.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map((t) => html`<button class="row" type="button" data-trip="${t.id}"><span class="grow"><span class="t">${t.purpose || 'Drive'}</span><span class="s">${niceDate(t.date)}${t.property_id ? ' · ' + addr(t.property_id) : ''}${t.to_place ? ' · ' + t.to_place : ''}</span></span><span class="num" style="font-size:18px">${Number(t.miles || 0).toFixed(1)}</span></button>`) : html`<div class="empty">No drives yet. Finishing a tour logs its miles here.</div>`}</div>
         <div class="hint">Each drive keeps the date, purpose, where to, miles and the property: what a tax preparer asks for.</div>`
       : html`
@@ -2282,6 +2283,37 @@ function tripSheet(t) {
     },
     onDelete: t ? () => del('trips', t.id, 'Trip deleted') : null
   });
+}
+
+// The tax year (2026-10-27): miles and receipts in one page, by month, with
+// what a preparer will ask about, and one file for the accountant.
+function viewTaxes(year) {
+  const rate = Number(store.settings().irsRate) || 0;
+  const t = taxYear(store.all('trips'), store.all('expenses'), year, rate);
+  const thisYear = Number(todayIso().slice(0, 4));
+  const fmt = (n) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const monthName = (m) => new Date(m + '-15T12:00:00Z').toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+  return {
+    form: true,
+    html: html`${header({ back: '#/miles', kicker: 'For your taxes', title: `Tax year ${year}`,
+      extra: html`<div class="stats"><div class="stat"><span class="n">${Math.round(t.miles).toLocaleString()}</span><span class="l">Business miles</span></div><div class="stat"><span class="n">${t.deduction != null ? fmt(t.deduction) : '—'}</span><span class="l">Mileage deduction</span></div><div class="stat"><span class="n">${fmt(t.spent)}</span><span class="l">Expenses</span></div></div>` })}
+    <main class="wrap">
+      <div class="tabs">${[thisYear, thisYear - 1, thisYear - 2].map((yy) => html`<a class="tab ${String(yy) === String(year) ? 'on' : ''}" href="#/taxes/${yy}" style="display:inline-flex;align-items:center">${yy}</a>`)}</div>
+      <label class="field"><span>IRS standard mileage rate for ${year} ($ per mile)</span><input id="taxrate" type="number" step="0.001" inputmode="decimal" value="${store.settings().irsRate || ''}" placeholder="Look it up on irs.gov"></label>
+      ${t.noPurpose || t.noReceipt ? html`<div class="warn-box"><b>Before you send it:</b> ${[t.noPurpose ? `${t.noPurpose} drive${t.noPurpose === 1 ? ' has' : 's have'} no purpose` : '', t.noReceipt ? `${t.noReceipt} expense${t.noReceipt === 1 ? ' has' : 's have'} no receipt photo` : ''].filter(Boolean).join(' and ')}. A preparer will ask.</div>` : t.drives || t.expenses ? html`<div class="note-box">Every drive has a purpose and every expense has its receipt.</div>` : ''}
+      <section class="sec"><div class="card list">
+        <div class="row" style="font-weight:700"><span class="grow">Month</span><span style="width:80px;text-align:right">Miles</span><span style="width:100px;text-align:right">Spent</span></div>
+        ${t.months.map((m) => html`<div class="row"><span class="grow">${monthName(m.month)}</span><span class="num" style="width:80px;text-align:right">${m.miles ? m.miles.toFixed(1) : '—'}</span><span class="num" style="width:100px;text-align:right">${m.spent ? fmt(m.spent) : '—'}</span></div>`)}
+        <div class="row" style="font-weight:800"><span class="grow">Total</span><span class="num" style="width:80px;text-align:right">${t.miles.toFixed(1)}</span><span class="num" style="width:100px;text-align:right">${fmt(t.spent)}</span></div>
+      </div></section>
+      <button class="btn dark big block" type="button" id="taxcsv">Download for my accountant</button>
+      <div class="hint">One spreadsheet: every drive (date, purpose, from, to, property, miles) and every expense (date, what, property, amount, receipt). Receipt photos stay on each expense in Mileage & expenses.</div>
+    </main>`,
+    mount(root) {
+      root.querySelector('#taxrate').addEventListener('change', (e) => { store.saveSettings({ irsRate: e.target.value }); render(); });
+      root.querySelector('#taxcsv').addEventListener('click', () => download(`taxes-${year}.csv`, taxCsv(store.all('trips'), store.all('expenses'), year, (id) => addr(id))));
+    }
+  };
 }
 
 function download(name, text) {
@@ -3289,6 +3321,7 @@ const ROUTES = [
   [/^#\/tours$/, () => viewTours(), 'tours'],
   [/^#\/tour\/([^/]+)$/, (m) => viewTour(m[1]), 'tours'],
   [/^#\/vendors$/, () => viewVendors(), 'today'],
+  [/^#\/taxes\/(\d{4})$/, (m) => viewTaxes(m[1]), 'today'],
   [/^#\/door\/([^/]+)\/(\d+)$/, (m) => viewDoor(m[1], Number(m[2])), 'kiosk'],
   [/^#\/buyers$/, () => viewBuyers(), 'tours'],
   [/^#\/buyer\/([^/]+)$/, (m) => viewBuyer(m[1]), 'tours'],

@@ -129,3 +129,20 @@ test('at the door: the stop code first, then saved codes, each value once', () =
   assert.deepEqual(c, [{ label: 'Lockbox', code: '1234', where: '' }, { label: 'Gate', code: '#5580', where: 'Keypad on the left post' }]);
   assert.deepEqual(doorCodes({ code: '' }, []), []);
 });
+
+import { taxYear, taxCsv } from '../js/brief.js';
+test('tax year: totals, by month, deduction, and what a preparer will ask about', () => {
+  const trips = [{ date: '2026-01-05', miles: 10.5, purpose: 'Showing' }, { date: '2026-03-02', miles: 20 }, { date: '2025-12-30', miles: 99 }];
+  const exp = [{ date: '2026-03-10', amount: 12.5, what: 'Lockbox', photo_id: 'p' }, { date: '2026-03-11', amount: 7.5, what: 'Gas' }];
+  const t = taxYear(trips, exp, 2026, 0.7);
+  assert.equal(t.miles, 30.5);
+  assert.equal(t.spent, 20);
+  assert.equal(t.deduction, 21.35);
+  assert.equal(t.months[2].spent, 20);
+  assert.equal(t.noPurpose, 1);
+  assert.equal(t.noReceipt, 1);
+  const csv = taxCsv(trips, exp, 2026, () => '');
+  assert.match(csv, /"Mileage log 2026"/);
+  assert.doesNotMatch(csv, /99\.0/);
+  assert.match(csv, /"2026-03-11","Gas","","7\.50","no"/);
+});
