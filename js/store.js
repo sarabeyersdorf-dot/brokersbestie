@@ -7,13 +7,13 @@
 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
-export const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'events', 'tours', 'trips', 'expenses', 'checkins'];
+export const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'events', 'tours', 'trips', 'expenses', 'checkins', 'profiles', 'visitors'];
 const KEY = (t) => `bb:${t}`;
 const DELETED = 'bb:_deleted';
 const SETTINGS = 'bb:settings';
 
 const listeners = new Set();
-const OWNED = ['properties', 'events', 'tasks', 'tours'];
+const OWNED = ['properties', 'events', 'tasks', 'tours', 'visitors', 'profiles'];
 const data = {};
 
 function readJson(key, fallback) {
@@ -379,6 +379,10 @@ async function uploadPhoto(id, blob) {
   for (const t of ['access', 'expenses']) {
     const row = all(t).find((r) => r.photo_id === id);
     if (row) save(t, { id: row.id, photo_path: path });
+  }
+  for (const k of ['logo', 'headshot']) {
+    const row = all('profiles').find((r) => r[`${k}_id`] === id);
+    if (row) save('profiles', { id: row.id, [`${k}_path`]: path }, { quiet: true });
   }
   const note = all('notes').find((n) => (n.files || []).some((f) => f.id === id));
   if (note) save('notes', { id: note.id, files: note.files.map((f) => (f.id === id ? { ...f, path } : f)) });

@@ -58,3 +58,34 @@ export function recapText(homes, { buyer = '', date = '', me = '' } = {}) {
   const lines = homes.map((h, i) => `${i + 1}. ${h.address}${h.reaction ? ` - ${FACE_WORD[h.reaction]}` : ''}${h.mls_url ? `\n   ${h.mls_url}` : ''}`);
   return `${hi}Here are the homes we saw${date ? ` on ${dayWord(date)}` : ''}:\n${lines.join('\n')}\nLet me know which ones you would like to talk about or see again.${sign(me)}`;
 }
+
+// ---------- open house (2026-10-27) ----------
+// A license as the agent typed it; a bare number reads "Lic. #<n>".
+export const licenseText = (v) => { const t = String(v || '').trim(); return !t ? '' : /^[#\d\s-]+$/.test(t) ? `Lic. #${t.replace(/^#/, '')}` : t; };
+
+// The agent's sign-off from their profile: "Sara Cooper\nLegacy Properties ·
+// DRE 02141987". Falls back to the first name.
+export function signOff(profile, me = '') {
+  if (!profile || !profile.full_name) return me ? cap(me) : '';
+  const line2 = [profile.brokerage, licenseText(profile.license)].filter(Boolean).join(' · ');
+  return [profile.full_name, line2, profile.phone].filter(Boolean).join('\n');
+}
+
+// Thank-you after an open house. Someone who already has an agent is thanked,
+// not solicited: they are pointed back to their own agent.
+export function ohThanksText(v, { address = '', profile = null, me = '', date = '', today = '' } = {}) {
+  const hi = v.first_name ? `Hi ${cap(String(v.first_name).trim())}, ` : 'Hi, ';
+  const when = !date || date === today ? 'today' : `on ${dayWord(date).split(',')[0]}`;
+  const body = v.has_agent
+    ? `thank you for stopping by the open house at ${street(address)} ${when}. If you or ${v.agent_name ? v.agent_name.split(' ')[0] : 'your agent'} have any questions about the home, I am happy to help.`
+    : `thank you for stopping by the open house at ${street(address)} ${when}! I hope you enjoyed it. If you have questions, would like the disclosures, or want to see other homes${v.also_selling ? ' or talk about selling yours' : ''}, just reply here.`;
+  const sig = signOff(profile, me);
+  return `${hi}${body}${sig ? `\n${sig}` : ''}`;
+}
+
+const csvCell = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+export function visitorsCsv(rows, addressOf = () => '') {
+  const head = ['Date', 'First name', 'Last name', 'Phone', 'Email', 'Has an agent', 'Agent name', 'Timeframe', 'Also selling', 'OK to contact', 'Property', 'Followed up'];
+  const lines = rows.map((v) => [v.oh_date, v.first_name, v.last_name, v.phone, v.email, v.has_agent ? 'Yes' : v.has_agent === false ? 'No' : '', v.agent_name, v.timeframe, v.also_selling ? 'Yes' : v.also_selling === false ? 'No' : '', v.consent ? 'Yes' : 'No', addressOf(v.property_id), v.followed_up_at ? v.followed_up_at.slice(0, 10) : ''].map(csvCell).join(','));
+  return [head.join(','), ...lines].join('\n');
+}

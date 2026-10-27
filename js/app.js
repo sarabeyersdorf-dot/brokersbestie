@@ -10,7 +10,7 @@ import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
 import { chooseFromDropbox, dropboxReady } from './dropbox.js';
 import { CRM_CHOICES } from './crmlist.js';
-import { feedbackText, requestGroups, requestText, recapText } from './messages.js';
+import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
 import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey } from './brief.js';
@@ -359,6 +359,7 @@ function todoItems() {
   return items;
 }
 
+const profileNudgeHidden = () => { try { return localStorage.getItem('bb:profnudge') === '1'; } catch { return false; } };
 const installHidden = () => { try { return localStorage.getItem('bb:installhide') === '1'; } catch { return false; } };
 function viewToday() {
   const results = searchText ? search(searchText, store.snapshot()) : [];
@@ -377,6 +378,7 @@ function viewToday() {
     })}
     <main class="wrap">
       ${!searchText && !isInstalled() && !installHidden() ? installCard({ dismissable: true }) : ''}
+      ${!searchText && !myProfile() && !profileNudgeHidden() ? html`<div class="card pad sec" data-profnudge><div class="label accent">Make it yours</div><div class="small">Add your name, brokerage, license numbers and logo. They go on your open house sign-in sheet and the texts Bestie writes.</div><div class="btns"><a class="btn dark" href="#/profile">Set up my profile</a><button class="btn ghost" type="button" id="profnot">Later</button></div></div>` : ''}
       ${searchText ? html`<section class="sec">
         <div class="sec-head"><div class="label accent">${results.length} found</div><button class="btn ghost" type="button" id="clearq" style="min-height:36px">Clear</button></div>
         <div class="card list">${results.length ? results.slice(0, 40).map((r) => html`<a class="row" href="${r.propertyId ? '#/p/' + r.propertyId : '#/'}">
@@ -439,6 +441,7 @@ function viewToday() {
     </main>`,
     mount(root) {
       wireInstall(root, { onHide: () => { try { localStorage.setItem('bb:installhide', '1'); } catch {} } });
+      root.querySelector('#profnot')?.addEventListener('click', () => { try { localStorage.setItem('bb:profnudge', '1'); } catch {} root.querySelector('[data-profnudge]')?.remove(); });
       const q = root.querySelector('#q');
       q.addEventListener('input', () => {
         searchText = q.value;
@@ -690,6 +693,8 @@ function viewHub(id) {
           <a class="btn" href="#/p/${id}/edit">${icon('edit', 18)}Edit details</a>
           ${sheetNote ? html`<button class="btn" type="button" data-tab="notes">${icon('sheet', 18)}MLS sheet</button>` : html`<a class="btn" href="#/sheet/${id}">${icon('sheet', 18)}Snap MLS sheet</a>`}
           <a class="btn" href="#/quick">${icon('plus', 18)}Quick add</a>
+          <a class="btn" href="#/openhouse/${id}">${icon('person', 18)}Open house sign-in</a>
+          ${store.all('visitors').some((v) => v.property_id === id) ? html`<a class="btn" href="#/visitors/${id}">Visitors · ${store.all('visitors').filter((v) => v.property_id === id).length}</a>` : ''}
         </div>` : ''}
 
       ${hubTab === 'where' ? html`<section class="sec">
@@ -1586,6 +1591,200 @@ function viewBuyer(key) {
   };
 }
 
+// ======================================================================
+// PROFILE & BRANDING, and OPEN HOUSE SIGN-IN (Sara, 2026-10-27)
+// ======================================================================
+
+// This phone's agent: the profile it saved, else the team profile with its
+// first name.
+function myProfile() {
+  const s = store.settings();
+  const all = store.all('profiles');
+  return all.find((p) => p.id === s.profileId) || (s.myName ? all.find((p) => p.owner === s.myName) : null) || null;
+}
+// Light brand colours get dark text, dark ones white.
+function onBrand(hex) {
+  const m = String(hex || '').match(/^#?([0-9a-f]{6})$/i);
+  if (!m) return '#ffffff';
+  const n = parseInt(m[1], 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? '#202428' : '#ffffff';
+}
+const BRAND_DEFAULT = '#202428';
+
+// The branded band: logo, agent, brokerage and license numbers.
+function brandBand(prof, { big = false } = {}) {
+  const p = prof || {};
+  const bg = /^#[0-9a-f]{6}$/i.test(p.color || '') ? p.color : BRAND_DEFAULT;
+  const fg = onBrand(bg);
+  return html`<div class="brandband ${big ? 'big' : ''}" style="background:${bg};color:${fg}">
+    ${p.logo_id ? html`<img class="brandlogo" alt="${p.brokerage || 'Logo'}" data-photo="${p.logo_id}" data-path="${p.logo_path || store.photoPath({ id: p.logo_id })}">` : p.brokerage ? html`<div class="brandname">${p.brokerage}</div>` : ''}
+    <div class="brandagent">
+      ${p.headshot_id ? html`<img class="headshot" alt="" data-photo="${p.headshot_id}" data-path="${p.headshot_path || store.photoPath({ id: p.headshot_id })}">` : ''}
+      <div><div class="bn">${p.full_name || 'Your name'}</div>
+      <div class="bs">${[p.title, p.phone].filter(Boolean).join(' · ')}</div>
+      <div class="bs">${[licenseText(p.license), p.brokerage && p.logo_id ? p.brokerage : '', p.brokerage_license ? `Brokerage ${licenseText(p.brokerage_license)}` : ''].filter(Boolean).join(' · ')}</div></div>
+    </div>
+  </div>`;
+}
+
+const PROFILE_FIELDS = [
+  { name: 'full_name', label: 'Your full name', placeholder: 'Sara Cooper' },
+  { name: 'title', label: 'Title', placeholder: 'Broker / Owner, REALTOR®' },
+  { name: 'phone', label: 'Your phone', type: 'tel' },
+  { name: 'email', label: 'Your email', type: 'email' },
+  { name: 'license', label: 'Your license #', placeholder: 'DRE #01234567', hint: 'Type it the way it should print, e.g. “DRE #01234567”.' },
+  { name: 'brokerage', label: 'Brokerage', placeholder: 'Legacy Properties' },
+  { name: 'brokerage_license', label: 'Brokerage license #', placeholder: 'DRE #01234567' },
+  { name: 'brokerage_phone', label: 'Brokerage phone', type: 'tel' },
+  { name: 'website', label: 'Website', type: 'url', placeholder: 'https://' }
+];
+
+function viewProfile() {
+  const p = myProfile() || {};
+  const imgs = { logo_id: p.logo_id || null, headshot_id: p.headshot_id || null };
+  return {
+    form: true,
+    html: html`${header({ back: '#/settings', kicker: 'Set up', title: 'Your profile & branding', sub: 'On your open house sign-in, your texts, and anything Bestie makes for you.' })}
+    <main class="wrap"><form id="prof" class="sec" novalidate>
+      <div id="bandprev">${brandBand(p, { big: true })}</div>
+      ${PROFILE_FIELDS.map((f) => fieldHtml(f, p[f.name]))}
+      <div class="card pad sec">
+        <div class="label accent">Your look</div>
+        <label class="field"><span>Brand colour</span><input id="pcolor" type="color" value="${/^#[0-9a-f]{6}$/i.test(p.color || '') ? p.color : BRAND_DEFAULT}" style="height:48px;padding:4px"></label>
+        <div class="btns">
+          <label class="btn">${icon('photo', 18)}${p.logo_id ? 'Change logo' : 'Add your logo'}<input type="file" accept="image/*" data-img="logo_id" hidden></label>
+          <label class="btn">${icon('person', 18)}${p.headshot_id ? 'Change headshot' : 'Add a headshot'}<input type="file" accept="image/*" data-img="headshot_id" hidden></label>
+        </div>
+        <div class="hint">A logo with a see-through or white background looks best.</div>
+      </div>
+      <button class="btn dark big block" type="submit">Save my profile</button>
+    </form></main>`,
+    mount(root) {
+      const form = root.querySelector('#prof');
+      const read = () => ({ ...readForm(form, PROFILE_FIELDS), color: root.querySelector('#pcolor').value, ...imgs });
+      const preview = () => { root.querySelector('#bandprev').innerHTML = str(brandBand({ ...p, ...read() }, { big: true })); loadPhotos(root); };
+      form.addEventListener('input', preview);
+      root.querySelectorAll('[data-img]').forEach((inp) => inp.addEventListener('change', async () => {
+        const f = inp.files[0];
+        if (!f) return;
+        const id = store.uid();
+        await store.putPhoto(id, await store.shrinkPhoto(f, 800).catch(() => f));
+        imgs[inp.getAttribute('data-img')] = id;
+        preview();
+      }));
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const v = read();
+        if (!v.full_name) return toast('Your name is needed');
+        const me = firstName(v.full_name);
+        const saved = store.save('profiles', { ...(p.id ? { id: p.id } : {}), ...v, logo_path: v.logo_id === p.logo_id ? p.logo_path || null : null, headshot_path: v.headshot_id === p.headshot_id ? p.headshot_path || null : null, owner: me });
+        store.saveSettings({ profileId: saved.id, myName: me });
+        toast('Profile saved');
+        location.hash = '#/settings';
+      });
+      loadPhotos(root);
+    }
+  };
+}
+
+// ---------- open house ----------
+const TIMEFRAMES = [['', 'Pick one (optional)'], ['0-3 months', 'In the next 3 months'], ['3-6 months', '3 to 6 months'], ['6-12 months', '6 to 12 months'], ['Just looking', 'Just looking']];
+let ohThanks = null;
+
+function viewOpenHouse(pid) {
+  const p = prop(pid);
+  if (!p) return notFound();
+  const prof = myProfile();
+  const today = todayIso();
+  const count = store.all('visitors').filter((v) => v.property_id === pid && v.oh_date === today).length;
+  const who = prof && prof.full_name ? prof.full_name.split(' ')[0] : 'us';
+  if (ohThanks) {
+    const name = ohThanks;
+    return {
+      html: html`<div class="kiosk-wrap">${brandBand(prof, { big: true })}
+        <main class="wrap kiosk-main"><div class="kiosk-thanks"><div class="title">Thank you, ${name}!</div><div>Enjoy the home. ${who === 'us' ? 'We' : who} will be right here if you have questions.</div></div></main></div>`,
+      mount(root) { loadPhotos(root); setTimeout(() => { ohThanks = null; if (location.hash === `#/openhouse/${pid}`) render(); }, 3500); }
+    };
+  }
+  return {
+    form: true,
+    html: html`<div class="kiosk-wrap">${brandBand(prof, { big: true })}
+    <main class="wrap kiosk-main"><form id="oh" class="sec" novalidate autocomplete="off">
+      <div class="kiosk-head"><div class="label accent">Welcome to the open house</div><div class="title">${p.address}</div>${p.city ? html`<div class="small">${p.city}</div>` : ''}</div>
+      <div class="grid2">${fieldHtml({ name: 'first_name', label: 'First name' })}${fieldHtml({ name: 'last_name', label: 'Last name' })}</div>
+      ${fieldHtml({ name: 'phone', label: 'Phone', type: 'tel' })}
+      ${fieldHtml({ name: 'email', label: 'Email', type: 'email' })}
+      <div class="field"><span>Are you working with a real estate agent?</span><div class="seg" data-seg="has_agent"><button type="button" data-v="no">No</button><button type="button" data-v="yes">Yes</button></div></div>
+      <div id="agentrow" hidden>${fieldHtml({ name: 'agent_name', label: 'Your agent’s name' })}</div>
+      <div class="field"><span>Do you have a home to sell?</span><div class="seg" data-seg="also_selling"><button type="button" data-v="no">No</button><button type="button" data-v="yes">Yes</button></div></div>
+      ${fieldHtml({ name: 'timeframe', label: 'When are you hoping to move?', type: 'select', options: TIMEFRAMES })}
+      <label class="switch"><input type="checkbox" name="consent">Yes, ${prof && prof.full_name ? prof.full_name : 'the listing agent'} may contact me about this home and others like it.</label>
+      <button class="btn dark big block" type="submit">Sign in</button>
+      <div class="kiosk-foot"><span class="small">${count} signed in today</span><button class="btn ghost" type="button" id="ohend" style="min-height:36px">Agent: end open house</button></div>
+    </form></main></div>`,
+    mount(root) {
+      loadPhotos(root);
+      const pick = {};
+      root.querySelectorAll('[data-seg]').forEach((seg) => seg.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+        const k = seg.getAttribute('data-seg');
+        pick[k] = b.getAttribute('data-v') === 'yes';
+        seg.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+        if (k === 'has_agent') root.querySelector('#agentrow').hidden = !pick[k];
+      })));
+      root.querySelector('#oh').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const f = e.target;
+        const val = (n) => (f.querySelector(`[name=${n}]`)?.value || '').trim();
+        if (!val('first_name')) return toast('Please add your first name');
+        if (!val('phone') && !val('email')) return toast('Please add a phone or an email');
+        store.save('visitors', { property_id: pid, oh_date: today, first_name: val('first_name'), last_name: val('last_name'), phone: val('phone'), email: val('email'), has_agent: pick.has_agent ?? null, agent_name: pick.has_agent ? val('agent_name') : '', also_selling: pick.also_selling ?? null, timeframe: val('timeframe'), consent: f.querySelector('[name=consent]').checked }, { quiet: true });
+        ohThanks = val('first_name');
+        render();
+      });
+      root.querySelector('#ohend').addEventListener('click', () => { if (confirm('End the open house and see who signed in?')) location.hash = `#/visitors/${pid}`; });
+    }
+  };
+}
+
+function viewVisitors(pid) {
+  const p = prop(pid);
+  if (!p) return notFound();
+  const list = store.all('visitors').filter((v) => v.property_id === pid).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const days = [...new Set(list.map((v) => v.oh_date))];
+  return {
+    html: html`${header({ back: `#/p/${pid}`, kicker: 'Open house', title: p.address, sub: `${list.length} visitor${list.length === 1 ? '' : 's'}${days.length > 1 ? ` over ${days.length} open houses` : ''}` })}
+    <main class="wrap">
+      <a class="btn dark big block" href="#/openhouse/${pid}">${icon('person', 18)}Open the sign-in sheet</a>
+      ${days.map((d) => html`<section class="sec"><div class="label accent">${niceDate(d)}</div>
+        <div class="card list">${list.filter((v) => v.oh_date === d).map((v) => html`<div class="row" style="align-items:flex-start">
+          <span class="grow"><span class="t">${[v.first_name, v.last_name].filter(Boolean).join(' ')}${v.has_agent ? html` <span class="pill tour" style="font-size:11px">Has an agent</span>` : ''}${v.also_selling ? html` <span class="pill prep" style="font-size:11px">Selling too</span>` : ''}</span>
+            <span class="s">${[v.phone ? prettyPhone(v.phone) : '', v.email, v.timeframe].filter(Boolean).join(' · ')}</span>
+            <span class="s ${v.followed_up_at ? 'ok' : v.consent ? '' : 'wait'}">${v.followed_up_at ? `✓ Followed up ${niceDate(v.followed_up_at.slice(0, 10))}` : v.consent ? 'OK to contact' : 'Did not tick “OK to contact”'}</span></span>
+          <div style="display:flex;gap:6px;flex-shrink:0">${v.phone ? html`<a class="icon-btn" href="tel:${digits(v.phone)}" aria-label="Call">${icon('phone', 18)}</a>` : ''}<button class="icon-btn" type="button" data-fu="${v.id}" aria-label="Thank-you text">${icon('text', 18)}</button></div>
+        </div>`)}</div></section>`)}
+      ${!list.length ? html`<div class="card empty">No one has signed in yet. Open the sign-in sheet and hand your phone or tablet to visitors.</div>` : html`<button class="btn block" type="button" id="vcsv">Download visitors (spreadsheet for your CRM)</button>`}
+    </main>`,
+    mount(root) {
+      root.querySelectorAll('[data-fu]').forEach((b) => b.addEventListener('click', () => {
+        const v = store.get('visitors', b.getAttribute('data-fu'));
+        composeSheet({
+          title: 'Thanks for visiting', sub: `${v.first_name}${v.has_agent ? ' has an agent, so this only thanks them.' : ''}${v.consent ? '' : ' They did not tick “OK to contact”.'}`,
+          phone: v.phone || '', email: v.email || '',
+          body: ohThanksText(v, { address: p.address, profile: myProfile(), me: store.settings().myName, date: v.oh_date, today: todayIso() }),
+          onSent: () => store.save('visitors', { id: v.id, followed_up_at: new Date().toISOString() })
+        });
+      }));
+      root.querySelector('#vcsv')?.addEventListener('click', () => {
+        const blob = new Blob([visitorsCsv(list, (id) => prop(id)?.address || '')], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = `open-house-${p.address.replace(/[^a-z0-9]+/gi, '-')}.csv`;
+        document.body.appendChild(a); a.click(); a.remove();
+      });
+    }
+  };
+}
+
 // ---------- texts Bestie writes, the agent sends ----------
 // Shows the words, lets the agent change them, then opens THEIR text or email
 // app. Nothing is sent by Bestie. onSent runs when they tap a send button.
@@ -2000,9 +2199,10 @@ function viewSettings() {
       </section>` : ''}
 
       <section class="card pad sec">
-        <div class="label">Your first name</div>
-        <label class="field"><span>Used for “Mine” and your morning greeting</span><input id="myname" autocomplete="given-name" placeholder="Sara" value="${s.myName ? s.myName[0].toUpperCase() + s.myName.slice(1) : ''}"></label>
-        <div class="hint">Use the name your CRM gives you, so your listings and appointments show as yours.</div>
+        <div class="label accent">Your profile & branding</div>
+        ${myProfile() ? html`${brandBand(myProfile())}<a class="btn block" href="#/profile">${icon('edit', 18)}Edit profile, logo & license #s</a>`
+          : html`<div class="small">Add your name, brokerage, license numbers, logo and colour. They go on your open house sign-in and the texts Bestie writes for you.</div><a class="btn dark block" href="#/profile">Set up my profile</a>`}
+        <label class="field"><span>First name for “Mine” and your morning greeting</span><input id="myname" autocomplete="given-name" placeholder="Sara" value="${s.myName ? s.myName[0].toUpperCase() + s.myName.slice(1) : ''}"></label>
       </section>
 
       <section class="card pad sec">
@@ -2036,6 +2236,7 @@ function viewSettings() {
     </main>`,
     mount(root) {
       wireInstall(root);
+      loadPhotos(root);
       root.querySelector('#signin')?.addEventListener('click', async () => {
         const email = root.querySelector('#email').value.trim();
         if (!email) return toast('Type your email');
@@ -2143,7 +2344,7 @@ function viewSettings() {
         root.querySelector('#crmrun').addEventListener('click', (e) => call({ op: 'run' }, e.currentTarget));
         root.querySelector('#crmoff').addEventListener('click', (e) => { if (confirm('Stop syncing from this CRM? What already came in stays.')) call({ op: 'disconnect' }, e.currentTarget); });
       }
-      root.querySelector('#myname').addEventListener('change', (e) => { store.saveSettings({ myName: firstName(e.target.value) }); toast('Saved'); });
+      root.querySelector('#myname')?.addEventListener('change', (e) => { store.saveSettings({ myName: firstName(e.target.value) }); toast('Saved'); });
       const hb = root.querySelector('#hb');
       root.querySelector('#hbhere').addEventListener('click', async () => {
         const fix = await locate();
@@ -2735,7 +2936,10 @@ const ROUTES = [
   [/^#\/buyer\/([^/]+)$/, (m) => viewBuyer(m[1]), 'tours'],
   [/^#\/miles(?:\/(add))?$/, (m) => viewMiles(m[1]), 'today'],
   [/^#\/safety$/, () => viewSafety(), 'today'],
-  [/^#\/settings$/, () => viewSettings(), 'today']
+  [/^#\/settings$/, () => viewSettings(), 'today'],
+  [/^#\/profile$/, () => viewProfile(), 'today'],
+  [/^#\/openhouse\/([^/]+)$/, (m) => viewOpenHouse(m[1]), 'kiosk'],
+  [/^#\/visitors\/([^/]+)$/, (m) => viewVisitors(m[1]), 'props']
 ];
 
 let current = null;
@@ -2752,6 +2956,8 @@ function render() {
   wire($view);
   if (view.mount) view.mount($view);
   $nav.querySelectorAll('a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
+  // The open house sheet is a kiosk: no nav, no mic, nothing to wander into.
+  document.body.classList.toggle('kiosk', tab === 'kiosk');
   $fab.hidden = !!view.form; // a screen with its own form has its own mic
   document.getElementById('offline').hidden = navigator.onLine;
 }

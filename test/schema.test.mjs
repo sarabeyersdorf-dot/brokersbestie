@@ -31,7 +31,7 @@ function columns(table) {
   return cols;
 }
 
-const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'events', 'tours', 'trips', 'expenses', 'checkins'];
+const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'events', 'tours', 'trips', 'expenses', 'checkins', 'profiles', 'visitors'];
 
 test('every table the phone syncs exists, with team_id, id and updated_at', () => {
   for (const t of TABLES) {
@@ -110,4 +110,14 @@ test('a tour knows its buyer', () => {
 
 test('a tour can keep where its recap went', () => {
   for (const c of ['buyer_phone', 'buyer_email', 'recap_sent_at']) assert.ok(columns('tours').has(c), `tours.${c}`);
+});
+
+test('every profile field and every open house answer has a column', () => {
+  const block = app.match(/const PROFILE_FIELDS = \[([\s\S]*?)\n\];/)[1];
+  const names = [...block.matchAll(/name: '([a-z_]+)'/g)].map((m) => m[1]);
+  assert.ok(names.length >= 8);
+  const pc = columns('profiles');
+  for (const n of [...names, 'color', 'logo_id', 'logo_path', 'headshot_id', 'headshot_path', 'owner']) assert.ok(pc.has(n), `profiles.${n}`);
+  const vc = columns('visitors');
+  for (const n of ['property_id', 'oh_date', 'first_name', 'last_name', 'phone', 'email', 'has_agent', 'agent_name', 'also_selling', 'timeframe', 'consent', 'followed_up_at', 'owner']) assert.ok(vc.has(n), `visitors.${n}`);
 });

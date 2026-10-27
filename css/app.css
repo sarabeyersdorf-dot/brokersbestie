@@ -346,3 +346,24 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .fnote { flex: 1; min-width: 0; display: flex; }
 .fnote textarea { width: 100%; min-height: 92px; border: 1px solid #b9c1be; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 15px; resize: vertical; background: #fff; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* ---------- branding band and the open house kiosk ---------- */
+.brandband { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 14px; }
+.brandband.big { border-radius: 0 0 18px 18px; padding: 18px 16px calc(18px); padding-top: calc(18px + env(safe-area-inset-top)); }
+.card .brandband, #bandprev .brandband { border-radius: 14px; padding-top: 14px; }
+.brandlogo { max-height: 56px; max-width: 70%; object-fit: contain; align-self: flex-start; background: #fff; border-radius: 8px; padding: 4px 8px; }
+.brandname { font-family: var(--tall); font-weight: 800; font-size: 24px; text-transform: uppercase; letter-spacing: .02em; }
+.brandagent { display: flex; gap: 12px; align-items: center; }
+.headshot { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; flex: none; border: 2px solid rgba(255,255,255,.7); }
+.brandagent .bn { font-weight: 700; font-size: 18px; }
+.brandagent .bs { font-size: 13px; opacity: .9; }
+body.kiosk .nav, body.kiosk .fab, body.kiosk .update-bar { display: none !important; }
+body.kiosk #view { padding-bottom: 24px; }
+.kiosk-main { max-width: 640px; margin: 0 auto; }
+.kiosk-head .title { font-family: var(--tall); font-weight: 800; font-size: 30px; text-transform: uppercase; line-height: 1.05; }
+.kiosk-main .field input, .kiosk-main .field select { min-height: 52px; font-size: 18px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.seg button { min-height: 52px; border: 2px solid var(--line, #c9d0cd); border-radius: 12px; background: #fff; font: 600 17px/1 var(--sans, inherit); color: var(--ink); }
+.seg button.on { background: #202428; color: #fff; border-color: #202428; }
+.kiosk-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 18px; }
+.kiosk-thanks { text-align: center; padding: 60px 8px; display: flex; flex-direction: column; gap: 12px; font-size: 18px; }
+.kiosk-thanks .title { font-family: var(--tall); font-weight: 800; font-size: 40px; text-transform: uppercase; }

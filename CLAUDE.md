@@ -302,3 +302,31 @@ it opens THEIR text or email app (`sms:` / `mailto:`); Bestie sends nothing.
   <buyer> every home they've seen" (buyer page). Buyer phone/email typed once
   in the sheet, kept on the tour (`tours.buyer_phone`, `buyer_email`,
   `recap_sent_at`, db/011).
+
+## Profile & branding, and the open house sign-in (2026-10-27)
+
+Sara: "build the open house sign-in and make sure that users can add their own
+branding, brokerage, license #'s when they set up".
+- **profiles** (db/012, synced, team RLS): one per agent (`owner` = first-name
+  key). `#/profile`: name, title, phone, email, license #, brokerage, brokerage
+  license #, brokerage phone, website, brand colour, logo, headshot (images in
+  the photos bucket by id; `logo_path`/`headshot_path` filled on upload).
+  `PROFILE_FIELDS` is the form; a schema test checks every field has a column.
+  `myProfile()` = settings.profileId, else the team profile with my first name.
+  Saving sets `myName` from the full name. Settings shows it (`brandBand`);
+  Today nudges "Make it yours" until a profile exists or "Later".
+- Licenses print as typed ("DRE #02141987"); a bare number reads "Lic. #…"
+  (`licenseText`, messages.js). `signOff(profile)` = name / brokerage ·
+  license / phone, used on the open house thank-you.
+- **Open house** `#/openhouse/<property>` is a KIOSK (route tab 'kiosk' →
+  `body.kiosk` hides the nav, mic and update bar): branded band, address,
+  first/last name, phone, email (phone OR email required), agent yes/no (+
+  name), selling yes/no, timeframe, "may contact me" tick (unticked by
+  default). Saves a **visitors** row (db/012) quietly, shows "Thank you,
+  <name>!" for 3.5 s, then a fresh form. Never shows other visitors.
+  "Agent: end open house" (confirm) → `#/visitors/<property>`.
+- `#/visitors/<property>`: visitors by day with "Has an agent" / "Selling
+  too" tags, call, and a thank-you text (`ohThanksText`: someone with an
+  agent is only thanked and pointed back to their agent, never solicited),
+  stamped `followed_up_at`; "Download visitors" CSV (`visitorsCsv`) for any
+  CRM import. Entry: the property page's "Open house sign-in" / "Visitors · N".
