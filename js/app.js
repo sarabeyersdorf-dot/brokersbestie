@@ -9,6 +9,7 @@ import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './p
 import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
 import { chooseFromDropbox, dropboxReady } from './dropbox.js';
+import { CRM_CHOICES } from './crmlist.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
 import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey } from './brief.js';
@@ -1870,11 +1871,12 @@ function viewSettings() {
       <section class="card pad sec">
         <div class="label accent">Connect your CRM</div>
         <div class="small" id="crmstate">Checking…</div>
-        <label class="field"><span>Your CRM</span><select id="crmkind"><option value="fub">Follow Up Boss</option><option value="feed">Another CRM (Bestie feed link)</option></select></label>
-        <div id="crmfub" class="sec">
-          <label class="field"><span>Follow Up Boss API key</span><input id="fubkey" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"></label>
-          <div class="hint">In Follow Up Boss: <b>Admin → API → Create API Key</b>, then paste it here. Bestie only reads: your deals become properties (address, price, close date), the people on them become contacts, and appointments you made in Follow Up Boss go on the calendar. Nothing is ever changed in Follow Up Boss.</div>
+        <label class="field"><span>Your CRM</span><select id="crmkind">${CRM_CHOICES.map((c) => html`<option value="${c.id}">${c.label}${c.beta ? ' (new)' : ''}</option>`)}</select></label>
+        <div id="crmkey1" class="sec">
+          <label class="field"><span id="apikeylabel">API key</span><input id="apikey" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"></label>
+          <div class="hint" id="apikeyhelp"></div>
         </div>
+        <div id="crmsoon" class="note-box" hidden></div>
         <div id="crmfeed" class="sec" hidden>
           <label class="field"><span>Feed link (from your CRM)</span><input id="crmurl" type="url" autocomplete="off" placeholder="https://yourcrm.com/api/crm/bestie-feed"></label>
           <label class="field"><span>Feed key</span><input id="crmkey" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"></label>
@@ -1981,13 +1983,27 @@ function viewSettings() {
       if (store.cloud.user) {
         const st = root.querySelector('#crmstate');
         const kind = root.querySelector('#crmkind');
-        const pickKind = () => { root.querySelector('#crmfub').hidden = kind.value !== 'fub'; root.querySelector('#crmfeed').hidden = kind.value !== 'feed'; };
+        const pickKind = () => {
+          const c = CRM_CHOICES.find((x) => x.id === kind.value) || {};
+          const keyed = !c.soon && c.id !== 'feed';
+          root.querySelector('#crmkey1').hidden = !keyed;
+          root.querySelector('#crmfeed').hidden = c.id !== 'feed';
+          root.querySelector('#crmsoon').hidden = !c.soon;
+          root.querySelector('#crmsoon').textContent = c.soon ? c.help : '';
+          root.querySelector('#crmsave').disabled = !!c.soon;
+          if (keyed) {
+            root.querySelector('#apikeylabel').textContent = c.keyLabel;
+            root.querySelector('#apikeyhelp').textContent = `${c.help} Paste it here. Bestie only reads: ${c.brings}. Nothing is ever changed in ${c.label}.${c.beta ? ' New connection: if something looks off after syncing, use Send feedback.' : ''}`;
+          }
+        };
+        pickKind();
         kind.addEventListener('change', pickKind);
         const show = (r) => {
-          const who = r.provider === 'fub' ? 'Follow Up Boss' : r.feed_url ? new URL(r.feed_url).host : '';
+          const known = CRM_CHOICES.find((c) => c.id === r.provider && c.id !== 'feed');
+          const who = known ? known.label : r.feed_url && /^https?:/.test(r.feed_url) ? new URL(r.feed_url).host : 'your CRM';
           st.textContent = r.connected ? `Connected to ${who}. ${r.last_result || ''}${r.last_synced_at ? ` (${new Date(r.last_synced_at).toLocaleString()})` : ''}` : 'Not connected.';
-          if (r.connected) { kind.value = r.provider === 'fub' ? 'fub' : 'feed'; pickKind(); }
-          if (r.connected && r.provider !== 'fub' && !root.querySelector('#crmurl').value) root.querySelector('#crmurl').value = r.feed_url;
+          if (r.connected) { kind.value = known ? known.id : 'feed'; pickKind(); }
+          if (r.connected && !known && !root.querySelector('#crmurl').value) root.querySelector('#crmurl').value = r.feed_url;
           root.querySelector('#crmoff').hidden = !r.connected;
         };
         api('/api/crm-sync').then(show).catch((e) => { st.textContent = e.message; });
@@ -2009,8 +2025,8 @@ function viewSettings() {
           await copy(key);
           toast('New key copied. Paste it into your CRM too, then Save and sync.');
         });
-        root.querySelector('#crmsave').addEventListener('click', (e) => call(kind.value === 'fub'
-          ? { op: 'save', provider: 'fub', key: root.querySelector('#fubkey').value.trim(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone }
+        root.querySelector('#crmsave').addEventListener('click', (e) => call(kind.value !== 'feed'
+          ? { op: 'save', provider: kind.value, key: root.querySelector('#apikey').value.trim(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone }
           : { op: 'save', url: root.querySelector('#crmurl').value.trim(), key: root.querySelector('#crmkey').value.trim() }, e.currentTarget));
         root.querySelector('#crmrun').addEventListener('click', (e) => call({ op: 'run' }, e.currentTarget));
         root.querySelector('#crmoff').addEventListener('click', (e) => { if (confirm('Stop syncing from this CRM? What already came in stays.')) call({ op: 'disconnect' }, e.currentTarget); });

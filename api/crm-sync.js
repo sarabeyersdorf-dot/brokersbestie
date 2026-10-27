@@ -9,6 +9,7 @@
 
 import { send, readBody, caller, db, env } from './_lib/server.js';
 import { teamOf, linkOf, runSync } from './_lib/crm.js';
+import { CRM_CHOICES, KEY_CRMS } from '../js/crmlist.js';
 
 const HOUR = 3600e3;
 
@@ -25,12 +26,14 @@ export default async function handler(req, res) {
   if (req.method === 'GET') return send(res, 200, status(await linkOf(teamId)));
   if (req.method !== 'POST') return send(res, 405, { error: 'GET or POST' });
   const body = await readBody(req).catch(() => ({}));
-  if (body.op === 'save' && body.provider === 'fub') {
+  if (body.op === 'save' && KEY_CRMS.includes(body.provider)) {
+    const crm = CRM_CHOICES.find((c) => c.id === body.provider);
     const key = String(body.key || '').trim();
     const existing = await linkOf(teamId);
-    if (!key && !(existing && existing.provider === 'fub' && existing.feed_key)) return send(res, 400, { error: 'Paste your Follow Up Boss API key' });
+    // A key from one CRM is never sent to another.
+    if (!key && !(existing && existing.provider === crm.id && existing.feed_key)) return send(res, 400, { error: `Paste your ${crm.keyLabel}` });
     const tz = /^[A-Za-z_]+\/[A-Za-z_\/-]+$/.test(String(body.tz || '')) ? String(body.tz) : 'America/Los_Angeles';
-    const row = { team_id: teamId, provider: 'fub', feed_url: 'https://api.followupboss.com/v1', tz, updated_at: new Date().toISOString(), ...(key ? { feed_key: key } : {}) };
+    const row = { team_id: teamId, provider: crm.id, feed_url: `crm:${crm.id}`, tz, updated_at: new Date().toISOString(), ...(key ? { feed_key: key } : {}) };
     await db('crm_links?on_conflict=team_id', { method: 'POST', body: row, prefer: 'resolution=merge-duplicates,return=minimal' });
     const result = await runSync(teamId);
     return send(res, 200, { ...status(await linkOf(teamId)), result });
@@ -40,7 +43,7 @@ export default async function handler(req, res) {
     if (!/^https:\/\/[^\s]+$/i.test(url)) return send(res, 400, { error: 'The feed link must start with https://' });
     const key = String(body.key || '').trim();
     const existing = await linkOf(teamId);
-    const row = { team_id: teamId, provider: 'feed', feed_url: url, updated_at: new Date().toISOString(), ...(key || !existing || existing.provider === 'fub' ? { feed_key: key } : {}) }; // never send a Follow Up Boss key to a feed link
+    const row = { team_id: teamId, provider: 'feed', feed_url: url, updated_at: new Date().toISOString(), ...(key || !existing || (existing.provider && existing.provider !== 'feed') ? { feed_key: key } : {}) }; // never send a Follow Up Boss key to a feed link
     await db('crm_links?on_conflict=team_id', { method: 'POST', body: row, prefer: 'resolution=merge-duplicates,return=minimal' });
     const result = await runSync(teamId);
     return send(res, 200, { ...status(await linkOf(teamId)), result });

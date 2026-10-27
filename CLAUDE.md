@@ -256,3 +256,27 @@ fetched; FUB only returns appointments created IN FUB by the key's owner.
 "Another CRM (Bestie feed link)" is the old path (Legacy). A generic "any CRM
 API key" is not possible: each CRM has its own API, so each needs a connector
 like fub.js.
+
+## kvCORE, Lofty, CINC (2026-10-27)
+
+Sara: "add kvCORE, Cinc and Lofty too". `js/crmlist.js` (`CRM_CHOICES`) is the
+ONE list Settings shows and the server checks (`KEY_CRMS`); `api/_lib/crms.js`
+`CONNECTORS` maps each id to its feed function (fub, kvcore, lofty) and a test
+fails if one is missing. Key-connected CRMs store `feed_url = 'crm:<id>'`.
+- **Lofty**: key from Settings → Integrations → API, header
+  `Authorization: token <key>`, base api.lofty.com. Transaction fields per
+  Lofty's docs (transactionId, leadId, transactionName, transactionType,
+  transactionStatus, homePrice, expectedCloseDate/closeDate in ms); leads via
+  /v1.0/leads/{id}; appointments tried at /v2.0/appointments then tasks.
+- **kvCORE / BoldTrail**: "User" token from Lead Engine → Lead Dropbox → My
+  API Tokens (1 year), `Authorization: Bearer`, base api.kvcore.com/v2/public;
+  transactions tried at /transactions, /transaction, /deals; contacts at
+  /contact/{id} or /contacts/{id}. No appointments (not in its public API).
+- Both were written WITHOUT the full reference (docs sites unreachable): list
+  endpoints are tried in order, fields read tolerantly (`pick`, `toDay`
+  handles ISO / seconds / ms), and each sync stores the FIELD NAMES that came
+  back in `crm_links.last_shape` (db/010; names only, never values). After a
+  tester's first sync, read last_shape and fix the connector to match.
+- **CINC** is listed as "coming soon" and cannot be saved: CINC only allows
+  approved integrator apps (OAuth with client id + secret from CINC, token at
+  authv2.cincapi.com). Sara has to apply to CINC as a partner first.

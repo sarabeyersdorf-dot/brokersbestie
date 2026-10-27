@@ -144,5 +144,8 @@ export async function fubFeed(key, { tz, today, fetchImpl = fetch } = {}) {
   } catch (e) {
     if (/refused/.test(e.message)) throw e; // a bad key is a bad key; anything else: deals still come in
   }
-  return fubToFeed({ deals, people, appointments }, { tz, today: day });
+  const feed = fubToFeed({ deals, people, appointments }, { tz, today: day });
+  const keys = (r) => (r && r[0] ? Object.keys(r[0]).slice(0, 40).join(',') : '');
+  feed.shape = `deals: ${keys(deals)}${appointments.length ? ` | appointments: ${keys(appointments)}` : ''}`;
+  return feed;
 }
