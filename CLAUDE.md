@@ -429,7 +429,7 @@ Sara: "do your recommendations". **One meaning per colour**:
 - Status on a property page is one line ("Status [pill] Change") that opens a
   2-column picker (`details.status-pick`); read-only on a CRM property.
 - Unknown occupancy shows nothing (the lone "?" read as an error).
-- **The lockbox buddy**: `buddy(text, mood)` in app.js for empty spots
+- **The lockbox buddy** (see phase 6 below for where it may appear): `buddy(text, mood)` in app.js for empty spots
   (properties, people, where things are, tours, buyers, vendors), a winking
   buddy beside the morning greeting, and a "Tour done!" sheet with the love
   face and "Send <buyer> the recap".
@@ -711,3 +711,22 @@ at the bottom of every mode) to `viewTodayFull`, the old page.
 - **Setup cards** (install, profile): "Later" hides one for 3 days; the second
   time it lives in Settings only (`setupHidden` / `dismissSetup`,
   `bb:setup:<key>`; the old one-time flags count as both).
+
+## Tour done and where the buddy goes (2026-10-28, phase 6)
+
+`#/tourdone/<id>` (`viewTourDone`) opens when the last stop is marked shown
+(`maybeTourDone`: door quick face, All 8, the face picker) or on **Finish the
+tour** (asks first if stops are unmarked). `finishTour` stamps
+`finished_at` and logs the route's miles as a trip (edit it from the tile);
+**Not done yet?** (`unfinishTour`) removes that trip and reopens the tour, and
+the door's Undo does the same. Screen: winking buddy in the header, "Nice
+work", "N homes with <buyer>", three tiles (homes shown, hours from
+`tourHours`, miles saved to mileage), **What they thought** (tap a face to
+change it), **Wrap up**: recap (Review), feedback texts "X of Y sent" + Send
+last / Send next, gear left out at these homes or "Nothing left out ✓".
+Stops now carry `shown_at`.
+**The buddy only at the end of a moment**: tour done, empty lists, safety
+check-in, offline (phase 9a), the trial-ending banner, the first property
+saved (`settings.firstPropDone`). Never on code cards, errors or "not found",
+money (the price screen, a payment problem), or anything a client sees. The
+greeting buddy is gone; the logo in the header is the app's mark and stays.

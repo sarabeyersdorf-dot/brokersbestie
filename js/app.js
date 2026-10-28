@@ -1074,6 +1074,10 @@ function viewPropEdit(id) {
           if (x('x_mls') || files.length) store.save('notes', { property_id: saved.id, text: [x('x_mls') ? `MLS listing: ${x('x_mls')}` : 'MLS sheet', ...said].join(' · '), source: 'mls_sheet', files });
         }
         location.hash = `#/p/${saved.id}`;
+        if (!id && props().filter((x) => !x.sample).length === 1 && !store.settings().firstPropDone) {
+          store.saveSettings({ firstPropDone: true });
+          setTimeout(() => openSheet(html`<div class="sec" style="text-align:center">${buddy('Your first property is saved. Its codes now open with one tap, even with no signal.')}<button class="btn dark block" type="button" id="fpok">Got it</button></div>`, (sh) => sh.querySelector('#fpok').addEventListener('click', closeSheet)), 300);
+        }
       });
       root.querySelector('#delprop')?.addEventListener('click', () => {
         if (confirm(`Delete ${p.address} and every code, person, note and date filed under it?`)) {
@@ -2192,7 +2196,7 @@ function viewTour(id) {
       </div>
       ${i < stops.length - 1 && stops[i + 1].leg_miles ? html`<div class="leg">↓ about ${stops[i + 1].leg_minutes} min · ${stops[i + 1].leg_miles} mi${occWord(stops[i + 1].occ) ? ` · next is ${occWord(stops[i + 1].occ).toLowerCase()}` : ''}</div>` : ''}`)}
       ${stops.some((s) => s.shown) ? html`<button class="btn big block" type="button" id="recap">${icon('text', 18)}${t.recap_sent_at ? 'Send the recap again' : `Send ${buyerOf(t) ? buyerOf(t).split(' ')[0] : 'your buyer'} the tour recap`}</button>` : ''}
-      ${t.finished ? html`<div class="note-box">Tour finished. ${t.trip_id ? 'The miles are in your mileage log.' : ''}</div>` : html`<button class="btn dark big block" type="button" id="finish">Finish tour and log the miles</button>`}
+      ${t.finished ? html`<a class="note-box" href="#/tourdone/${t.id}" style="display:block;color:inherit">Tour finished. ${t.trip_id ? 'The miles are in your mileage log.' : ''} See the wrap-up ›</a>` : html`<button class="btn dark big block" type="button" id="finish">Finish the tour</button>`}
       <button class="btn ghost block" type="button" id="deltour">${icon('trash', 16)}Delete this tour</button>
     </main>`,
     mount(root) {
@@ -2225,8 +2229,8 @@ function viewTour(id) {
       });
       root.querySelectorAll('[data-shown]').forEach((b) => b.addEventListener('click', () => {
         const s = fresh().find((x) => x.id === b.getAttribute('data-shown'));
-        setStop(s.id, { shown: !s.shown });
-        if (!s.shown) setTimeout(() => reactionPicker(s), 300);
+        setStop(s.id, { shown: !s.shown, shown_at: s.shown ? null : s.shown_at || new Date().toISOString() });
+        if (!s.shown) setTimeout(() => reactionPicker({ ...s, shown: true }), 300);
       }));
       root.querySelectorAll('[data-react]').forEach((b) => b.addEventListener('click', () => {
         reactionPicker(fresh().find((x) => x.id === b.getAttribute('data-react')));
@@ -2271,27 +2275,10 @@ function viewTour(id) {
         })));
       });
       root.querySelector('#finish')?.addEventListener('click', () => {
-        formSheet({
-          title: 'Log the miles',
-          fields: [{ name: 'miles', label: 'Miles driven', type: 'number', hint: 'Estimated from the route. Use your odometer if you have it.' }, { name: 'purpose', label: 'Purpose' }],
-          values: { miles: t.miles || '', purpose: t.name },
-          saveLabel: 'Finish tour',
-          onSave(v) {
-            const trip = v.miles ? store.save('trips', { date: t.date, purpose: v.purpose || t.name, from_place: t.start_place, to_place: stops.map((s) => s.address).join(' → '), miles: v.miles, tour_id: id }) : null;
-            save({ finished: true, trip_id: trip?.id || null });
-            const shown = stops.filter((x) => x.shown).length;
-            setTimeout(() => openSheet(html`<div class="sec" style="text-align:center">
-              <div class="buddy-empty">${raw(reactionFace('love', { size: 96, label: '' }))}</div>
-              <div class="title" style="font-family:var(--tall);font-weight:800;font-size:30px;text-transform:uppercase">Tour done!</div>
-              <div>${shown} of ${stops.length} home${stops.length === 1 ? '' : 's'} shown${trip ? ` · ${v.miles} miles logged` : ''}.</div>
-              ${shown ? html`<button class="btn dark big block" type="button" id="donerecap">${icon('text', 18)}Send ${buyerOf(t) ? buyerOf(t).split(' ')[0] : 'your buyer'} the recap</button>` : ''}
-              <button class="btn ghost block" type="button" id="doneclose">Close</button>
-            </div>`, (sh) => {
-              sh.querySelector('#doneclose').addEventListener('click', closeSheet);
-              sh.querySelector('#donerecap')?.addEventListener('click', () => { closeSheet(); setTimeout(() => document.querySelector('#recap')?.click(), 150); });
-            }), 200);
-          }
-        });
+        const left = fresh().filter((x) => !x.shown).length;
+        if (left && !confirm(`${left} home${left === 1 ? ' is' : 's are'} not marked shown. Finish the tour anyway?`)) return;
+        finishTour(id);
+        location.hash = `#/tourdone/${id}`;
       });
       root.querySelector('#setbuyer')?.addEventListener('click', () => formSheet({
         title: 'Who is this tour for?',
@@ -2306,6 +2293,97 @@ function viewTour(id) {
       });
       root.querySelectorAll('[data-fb]').forEach((b) => b.addEventListener('click', () => feedbackSheet(fresh().find((x) => x.id === b.getAttribute('data-fb')))));
       root.querySelector('#deltour').addEventListener('click', () => { if (confirm('Delete this tour?')) { del('tours', id, 'Tour deleted'); location.hash = '#/tours'; } });
+    }
+  };
+}
+
+// ---------- Tour done (2026-10-28, phase 6) ----------
+// Shown when the last stop is marked (or Finish the tour). Finishing logs the
+// route's miles to Mileage (editable there); "Not done yet" undoes it.
+function finishTour(id) {
+  const t = store.get('tours', id);
+  if (!t || t.finished) return t;
+  const stops = t.stops || [];
+  const trip = !t.trip_id && Number(t.miles) > 0 ? store.save('trips', { date: t.date, purpose: t.name || 'Showing tour', from_place: t.start_place, to_place: stops.map((x) => x.address).join(' → '), miles: Number(t.miles), tour_id: id }) : null;
+  return store.save('tours', { id, finished: true, finished_at: new Date().toISOString(), ...(trip ? { trip_id: trip.id } : {}) });
+}
+function unfinishTour(id) {
+  const t = store.get('tours', id);
+  if (!t) return;
+  if (t.trip_id && store.get('trips', t.trip_id)) store.remove('trips', t.trip_id);
+  store.save('tours', { id, finished: false, finished_at: null, trip_id: null });
+}
+// Every stop shown and the tour still open: finish it and show the wrap-up.
+function maybeTourDone(id) {
+  const t = store.get('tours', id);
+  const stops = (t && t.stops) || [];
+  if (!t || t.finished || !stops.length || !stops.every((x) => x.shown)) return false;
+  finishTour(id);
+  location.hash = `#/tourdone/${id}`;
+  return true;
+}
+// Hours on the tour: from the planned start (or the first stop less its
+// drive) to when it was finished, on the day of the tour.
+function tourHours(t) {
+  const stops = t.stops || [];
+  const start = t.start_minutes ?? (stops[0] && stops[0].arrive != null ? stops[0].arrive - (stops[0].leg_minutes || 0) : null);
+  let end = null;
+  if (t.finished_at && t.date === todayIso()) { const d = new Date(t.finished_at); end = d.getHours() * 60 + d.getMinutes(); }
+  else { const last = stops.map((x) => x.arrive).filter((x) => x != null).pop(); if (last != null) end = last + 30; }
+  if (start == null || end == null || end <= start) return null;
+  return Math.round((end - start) / 6) / 10;
+}
+
+function viewTourDone(id) {
+  const t = store.get('tours', id);
+  if (!t) return notFound();
+  const stops = t.stops || [];
+  const shown = stops.filter((x) => x.shown);
+  const buyer = buyerOf(t);
+  const trip = t.trip_id ? store.get('trips', t.trip_id) : null;
+  const hrs = tourHours(t);
+  const withPhone = shown.filter((x) => String(x.agent_phone || '').replace(/\D/g, ''));
+  const sent = withPhone.filter((x) => x.feedback_sent_at);
+  const unsent = withPhone.filter((x) => !x.feedback_sent_at);
+  const pids = new Set(stops.map((x) => x.property_id).filter(Boolean));
+  const gear = pickups().filter((a) => pids.has(a.property_id));
+  return {
+    html: html`${header({
+      back: '#/tours', kicker: 'Tour done', title: 'Nice work',
+      sub: `${shown.length} home${shown.length === 1 ? '' : 's'}${buyer ? ` with ${buyer}` : ''}`,
+      right: html`<span class="done-buddy">${raw(winkFace({ size: 56, onDark: true, label: '' }))}</span>`
+    })}
+    <main class="wrap">
+      <div class="stat-tiles">
+        <div class="stat"><span class="v num">${shown.length}</span><span class="k">homes shown</span></div>
+        <div class="stat"><span class="v num">${hrs != null ? hrs : '—'}</span><span class="k">hours</span></div>
+        <button class="stat" type="button" id="tdmiles"><span class="v num">${trip ? Number(trip.miles).toFixed(trip.miles % 1 ? 1 : 0) : '—'}</span><span class="k">${trip ? 'miles saved to mileage' : 'no miles logged'}</span></button>
+      </div>
+      <section class="sec">
+        <div class="label">What they thought</div>
+        <div class="card list">${shown.length ? shown.map((x) => html`<button class="row" type="button" data-tdface="${x.id}">
+          ${x.reaction ? raw(reactionFace(x.reaction, { size: 40, label: '' })) : html`<span class="td-noface">?</span>`}
+          <span class="grow"><span class="t">${street(x.address)}</span><span class="s">${x.reaction ? reactionLabel(x.reaction) : 'No face yet · tap to add'}${x.reaction_note ? ' · ' + x.reaction_note : ''}</span></span></button>`) : html`<div class="empty">No homes were marked shown.</div>`}</div>
+      </section>
+      <section class="sec">
+        <div class="label">Wrap up</div>
+        <div class="card list">
+          ${shown.length ? html`<div class="row"><span class="grow"><span class="t">Recap for ${buyer ? buyer.split(' ')[0] : 'your buyer'}</span><span class="s">${t.recap_sent_at ? '✓ Sent' : 'Each home and how they felt'}</span></span><button class="btn ${t.recap_sent_at ? '' : 'dark'}" type="button" id="tdrecap" style="min-height:40px">Review</button></div>` : ''}
+          ${withPhone.length ? html`<div class="row"><span class="grow"><span class="t">Feedback texts</span><span class="s">${sent.length} of ${withPhone.length} sent</span></span>${unsent.length ? html`<button class="btn dark" type="button" id="tdfb" style="min-height:40px">${unsent.length === 1 ? 'Send last' : `Send next · ${unsent.length} left`}</button>` : html`<span class="ok">All sent ✓</span>`}</div>` : ''}
+          <div class="row"><span class="grow"><span class="t">Gear left out</span><span class="s">${gear.length ? gear.map((a) => `${a.label || KINDS[a.kind].label} at ${addr(a.property_id)}`).join(' · ') : ''}</span></span>${gear.length ? html`<a class="btn" href="#/signs" style="min-height:40px">See it</a>` : html`<span class="ok">Nothing left out ✓</span>`}</div>
+        </div>
+      </section>
+      <button class="btn ghost block" type="button" id="tdundo">Not done yet? Back to the tour</button>
+    </main>`,
+    mount(root) {
+      root.querySelector('#tdmiles').addEventListener('click', () => (trip ? tripSheet(trip) : (location.hash = '#/miles')));
+      root.querySelectorAll('[data-tdface]').forEach((b) => b.addEventListener('click', () => reactionPicker(stops.find((x) => x.id === b.getAttribute('data-tdface')))));
+      root.querySelector('#tdrecap')?.addEventListener('click', () => {
+        const cur = store.get('tours', id);
+        recapSheet(cur, (cur.stops || []).filter((x) => x.shown || x.reaction).map((x) => ({ address: x.address, reaction: x.reaction, mls_url: x.mls_url, date: cur.date })));
+      });
+      root.querySelector('#tdfb')?.addEventListener('click', () => feedbackSheet(unsent[0]));
+      root.querySelector('#tdundo').addEventListener('click', () => { unfinishTour(id); location.hash = `#/tour/${id}`; });
     }
   };
 }
@@ -2752,7 +2830,12 @@ function viewDoor(tourId, i) {
         const k = b.getAttribute('data-quick');
         const before = s;
         const r = saveReaction(s.id, k, s.reaction_note || '');
-        undoToast(`Shown · ${reactionLabel(k)}`, () => undoReaction(before, r));
+        undoToast(`Shown · ${reactionLabel(k)}`, () => {
+          undoReaction(before, r);
+          // Undone on the last stop after the wrap-up opened: reopen the tour.
+          if (store.get('tours', tourId)?.finished) { unfinishTour(tourId); location.hash = `#/door/${tourId}/${i}`; }
+        });
+        setTimeout(() => maybeTourDone(tourId), 900);
       }));
       root.querySelector('#dall').addEventListener('click', () => allFacesSheet(tourId, i));
       root.querySelector('#dlate').addEventListener('click', () => lateSheet(t, s));
@@ -2782,7 +2865,7 @@ function saveReaction(stopId, pick, note = '', extra = {}) {
   const tour = store.all('tours').find((t) => (t.stops || []).some((x) => x.id === stopId));
   if (!tour) return null;
   const was = tour.stops.find((x) => x.id === stopId);
-  store.save('tours', { id: tour.id, stops: tour.stops.map((x) => (x.id === stopId ? { ...x, shown: true, reaction: pick, reaction_note: note, reaction_at: new Date().toISOString(), ...extra } : x)) });
+  store.save('tours', { id: tour.id, stops: tour.stops.map((x) => (x.id === stopId ? { ...x, shown: true, shown_at: x.shown_at || new Date().toISOString(), reaction: pick, reaction_note: note, reaction_at: new Date().toISOString(), ...extra } : x)) });
   const n = was.property_id && (pick !== was.reaction || note !== (was.reaction_note || '')) ? store.save('notes', { property_id: was.property_id, text: `Showing feedback: ${reactionLabel(pick)}${note ? ' · ' + note : ''}` }) : null;
   return { tourId: tour.id, stop: store.get('tours', tour.id).stops.find((x) => x.id === stopId), noteId: n ? n.id : null };
 }
@@ -2827,7 +2910,8 @@ function allFacesSheet(tourId, i) {
       const r = saveReaction(s.id, pick, note, toBuyer ? { hide_from_buyer: !toBuyer.checked } : {});
       const textIt = sh.querySelector('#fbtext')?.checked;
       closeSheet();
-      location.hash = next ? `#/door/${tourId}/${i + 1}` : `#/tour/${tourId}`;
+      if (next) location.hash = `#/door/${tourId}/${i + 1}`;
+      else if (!maybeTourDone(tourId)) location.hash = `#/tour/${tourId}`;
       if (textIt && r && r.stop.agent_phone) {
         const body = feedbackText(r.stop, { me: store.settings().myName, date: tour.date, today: todayIso() });
         const fresh = store.get('tours', tourId);
@@ -2900,6 +2984,7 @@ function reactionPicker(s) {
       render();
       // Listing agents always ask: offer the text straight away.
       const saved = r && r.stop;
+      if (r && maybeTourDone(r.tourId)) return;
       if (saved && saved.agent_phone && !saved.feedback_sent_at) setTimeout(() => feedbackSheet(saved), 350);
     });
   });
@@ -3041,7 +3126,7 @@ function viewShowingsImport() {
     <main class="wrap">
       ${st.step === 'review' ? html`
         ${st.plan.length ? html`<div class="card list">${st.plan.map(row)}</div>
-          <button class="btn dark big block" type="button" id="shadd">Add the ticked ones</button>` : buddy('No showings found in that. Check it is the confirmation itself, or add a screenshot.', 'maybe')}
+          <button class="btn dark big block" type="button" id="shadd">Add the ticked ones</button>` : html`<div class="empty">No showings found in that. Check it is the confirmation itself, or add a screenshot.</div>`}
         <button class="btn ghost block" type="button" id="shagain">Read another</button>`
       : html`
         <div class="small">Copy a showing confirmation (ShowingTime, BrokerBay, ShowingDesk, or a listing agent's text) and paste it here. Several at once is fine. Or add a screenshot.</div>
@@ -3782,7 +3867,7 @@ function briefingCard() {
     b.lateDates.length ? `${b.lateDates.length} deadline${b.lateDates.length === 1 ? '' : 's'} passed, not marked done` : ''
   ].filter(Boolean);
   return html`<section class="card pad sec brief">
-    <div class="sec-head"><div class="hi-wrap"><span class="buddy-hi">${raw(winkFace({ size: 36, label: '' }))}</span><div><div class="label accent">Your day</div><div class="brief-date">${hello.split(',')[0]}</div></div></div>
+    <div class="sec-head"><div class="hi-wrap"><div><div class="label accent">Your day</div><div class="brief-date">${hello.split(',')[0]}</div></div></div>
       <button class="btn" type="button" id="readbrief" style="min-height:40px;white-space:nowrap" aria-label="Read it to me">${icon('speak', 18)}Listen</button></div>
     <ul class="brief-facts">${facts.map((f) => html`<li>${f}</li>`)}</ul>
     ${shownTimed.length ? html`<div class="card list">${shownTimed.map((i) => dayItemRow(i))}</div>` : ''}
@@ -3836,8 +3921,9 @@ function planBanner() {
   const urgent = b.state === 'lapsed' && b.enforced;
   const soon = b.state === 'trial' && !b.subscribed && b.daysLeft <= 3;
   if (!urgent && !soon && b.state !== 'past_due') return '';
+  // The buddy only on a trial ending, never on a payment problem (money).
   return html`<a class="card pad sec plan-banner ${urgent || b.state === 'past_due' ? 'bad' : ''}" href="#/billing">
-    <div class="label">${urgent ? 'Read-only' : b.state === 'past_due' ? 'Payment problem' : 'Free trial'}</div>
+    ${soon ? html`<span class="banner-buddy">${raw(winkFace({ size: 40, label: '' }))}</span>` : ''}<div class="label">${urgent ? 'Read-only' : b.state === 'past_due' ? 'Payment problem' : 'Free trial'}</div>
     <div>${planSentence(b)}</div><div class="small" style="font-weight:700">See plans →</div></a>`;
 }
 
@@ -4251,6 +4337,7 @@ const ROUTES = [
   [/^#\/plan$/, () => viewPlan(), 'tours'],
   [/^#\/tours$/, () => viewTours(), 'tours'],
   [/^#\/tour\/([^/]+)$/, (m) => viewTour(m[1]), 'tours'],
+  [/^#\/tourdone\/([^/]+)$/, (m) => viewTourDone(m[1]), 'tours'],
   [/^#\/vendors$/, () => viewVendors(), 'today'],
   [/^#\/updates$/, () => viewSellerUpdates(), 'today'],
   [/^#\/billing$/, () => viewBilling(), 'today'],

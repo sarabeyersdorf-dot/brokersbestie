@@ -177,3 +177,14 @@ test('Today picks its screen by mode, and "Show everything" keeps the full page'
   assert.match(app, /\[\/\^#\\\/all\$\/, \(\) => viewToday\(true\)/);
   for (const k of ['Up next', 'Leave by', 'Start tour', 'Due today', 'How did ${street(prev.address)} go?', 'Later today', 'Feedback still owed', 'To bring back', 'Miles to save', 'Show everything on Today']) assert.ok(app.includes(k), k);
 });
+
+test('tour done: the last stop opens the wrap-up, and the buddy keeps to its moments', async () => {
+  const fs = await import('node:fs');
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  for (const k of ['Nice work', 'homes shown', 'miles saved to mileage', 'What they thought', 'Wrap up', 'Send last', 'Nothing left out ✓', 'Not done yet?']) assert.ok(app.includes(k), k);
+  assert.match(app, /setTimeout\(\(\) => maybeTourDone\(tourId\), 900\)/); // quick face on the last stop
+  assert.match(app, /else if \(!maybeTourDone\(tourId\)\)/); // All 8 on the last stop
+  // Never on the morning greeting or a "not found" result.
+  assert.doesNotMatch(app, /buddy-hi">\$\{raw\(winkFace/);
+  assert.doesNotMatch(app, /buddy\('No showings found/);
+});
