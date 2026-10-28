@@ -486,3 +486,14 @@ export function loadSample(rows) {
   }
   emit();
 }
+
+// How many saved changes are still waiting to reach the team (2026-10-28,
+// phase 9a): rows marked dirty plus deletes not yet sent. Zero when not signed
+// in, because then nothing is meant to leave the phone.
+export function pendingCount() {
+  if (!cloud.user) return 0;
+  const sampleProps = new Set(all('properties').filter((p) => p.sample).map((p) => p.id));
+  let n = readJson(DELETED, []).length;
+  for (const t of TABLES) n += all(t).filter((r) => r._dirty && !r.sample && !sampleProps.has(r.property_id)).length;
+  return n;
+}

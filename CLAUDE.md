@@ -764,3 +764,13 @@ Small print: one plan covers the team and anyone on it can choose it here
 (there is no separate Team settings), plus the support email. Subscribed,
 complimentary, payment-problem and ended states keep `planSentence` and
 Manage billing. The server is asked at most every 30 s (`billingAskedAt`).
+
+## Saved for no signal (2026-10-28, phase 9a)
+
+`store.pendingCount()` = dirty rows + unsent deletes (0 when not signed in).
+Property page band and the door read "Saved on this phone · updated <time>"
+plus " · N changes will send when you have signal" when N > 0 (`pendingWords`).
+With no signal, `offlineCard()` (a calm buddy row: "No signal. You're fine.
+All N codes and today's tour are saved on this phone.") sits at the top of
+every Today mode and the property page; the old orange "No signal" bar is
+always hidden now.

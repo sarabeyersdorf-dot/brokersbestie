@@ -772,6 +772,7 @@ function viewTodayPlan() {
   return {
     html: html`${todayHeader(`${greet()}${myName() ? ', ' + cap1(myName()) : ''}`, summary)}
     <main class="wrap">
+      ${offlineCard()}
       ${planBanner()}
       ${doRow(tours)}
       ${hereCard()}
@@ -812,6 +813,7 @@ function viewTodayField(focus) {
   return {
     html: html`${todayHeader(tour ? tour.name || 'Showing tour' : ev.title || 'Showing', tour ? `Stop ${i + 1} of ${n}` : `${formatClock(ev.start_minutes)}${ev.location ? ' · ' + ev.location : ''}`)}
     <main class="wrap">
+      ${offlineCard()}
       ${planBanner()}
       <section class="card pad sec nextcard">
         <div class="sec-head"><div class="label">${tour ? 'Next stop' : 'Up next'}</div>${leaveWords ? html`<span class="lead-time">${leaveWords}</span>` : ''}</div>
@@ -862,6 +864,7 @@ function viewTodayWrap() {
   return {
     html: html`${todayHeader(`${greet()}${myName() ? ', ' + cap1(myName()) : ''}`, 'Wrapping up today')}
     <main class="wrap">
+      ${offlineCard()}
       ${planBanner()}
       ${owed.length ? html`<section class="sec"><div class="label">Feedback still owed · ${owed.length}</div><div class="card list">${owed.map((x) => html`<button class="row" type="button" data-owed="${x.id}"><span class="grow"><span class="t">${street(x.address)}</span><span class="s">${x.agent || 'Listing agent'}${x.reaction ? ` · ${reactionLabel(x.reaction)}` : ''}</span></span><span class="btn" style="min-height:38px">${icon('text', 16)}Text</span></button>`)}</div></section>` : ''}
       ${feedbackCard()}
@@ -938,6 +941,7 @@ function viewTodayFull() {
       extra: html`<label class="search">${icon('search', 18)}<input id="q" type="search" placeholder="Search everything: address, code, name…" value="${searchText}" aria-label="Search everything" autocomplete="off"></label>`
     })}
     <main class="wrap">
+      ${!searchText ? offlineCard() : ''}
       ${!searchText ? planBanner() : ''}
       ${searchText ? html`<section class="sec">
         <div class="sec-head"><div class="label accent">${results.length} found</div><button class="btn ghost" type="button" id="clearq" style="min-height:36px">Clear</button></div>
@@ -1247,6 +1251,7 @@ function viewHub(id) {
       extra: html`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${badges(p, true)}<span class="sub">${[p.hoa && `HOA ${p.hoa}`, p.solar && `Solar ${p.solar}`, coe != null && p.status === 'escrow' ? `Closes ${niceDate(p.coe_date)} (${coe >= 0 ? coe + ' days' : 'passed'})` : ''].filter(Boolean).join(' · ')}</span></div>`
     })}
     <main class="wrap">
+      ${offlineCard()}
       <div class="actions">
         <a class="action teal" href="${mapLink(p)}" target="_blank" rel="noopener">${icon('pin', 22)}Directions</a>
         ${main ? html`<a class="action" href="tel:${digits(main.phone)}">${icon('phone', 22)}Call ${main.role ? main.role.split(' ')[0].toLowerCase() : ''}</a>
@@ -1255,7 +1260,7 @@ function viewHub(id) {
       </div>
 
       <section class="sec getin">
-        <div class="sec-head"><div class="label">Getting in</div><span class="saved-at">Saved on this phone · ${savedAtWords(p, access)}</span></div>
+        <div class="sec-head"><div class="label">Getting in</div><span class="saved-at">Saved on this phone · updated ${savedAtWords(p, access)}${pendingWords()}</span></div>
         ${codes.length ? codeBoxes(codes) : html`<a class="card row" href="#/quick/lockbox/${id}"><span class="tile" style="border:0;padding:0"><span class="ic y">${icon('lockbox', 22)}</span></span><span class="grow"><span class="t">Add the lockbox or a code</span><span class="s">Gate, alarm, door keypad, hidden key</span></span></a>`}
         ${p.occupancy === 'O' || p.occupancy === 'V' || heads.length ? html`<div class="heads">${occBadge(p.occupancy)}${heads.map((h) => html`<span class="head-tag">${h}</span>`)}</div>` : ''}
         ${p.showing_notes ? html`<div class="getin-txt"><div class="getin-k">How to get in</div><div style="white-space:pre-line">${p.showing_notes}</div></div>` : ''}
@@ -1325,6 +1330,19 @@ function viewHub(id) {
       loadPhotos(root);
     }
   };
+}
+
+// Saved for no signal (2026-10-28, phase 9a). One quiet line wherever codes
+// are shown, and a calm card when the phone really has no signal.
+function pendingWords() {
+  const n = store.pendingCount();
+  return n ? ` · ${n} change${n === 1 ? '' : 's'} will send when you have signal` : '';
+}
+function offlineCard() {
+  if (navigator.onLine) return '';
+  const codes = store.all('access').filter((a) => a.code).length;
+  const tour = store.all('tours').some((t) => t.date === todayIso() && !t.finished);
+  return html`<div class="card offline-card">${buddy(`No signal. You're fine. All ${codes} code${codes === 1 ? '' : 's'}${tour ? " and today's tour are" : ' are'} saved on this phone.`, 'ok')}</div>`;
 }
 
 // "Saved on this phone · 2:15 PM": the latest change to the property or its
@@ -2928,7 +2946,8 @@ function viewDoor(tourId, i) {
       ${heads.length ? html`<div class="door-heads">${heads.map((h) => html`<span class="door-head">${h}</span>`)}</div>` : ''}
       <div class="door-meta">${s.arrive != null ? html`<b>${formatClock(s.arrive)}</b> · ` : ''}${s.confirmed ? html`<span class="ok-on-dark">✓ Confirmed</span>` : 'Not confirmed yet'}</div>
       ${codes.length ? html`<div class="door-codes">${codes.map((c) => html`<button class="door-code" type="button" data-copy="${c.code}"><span class="k">${c.label}</span><span class="v">${c.code}</span>${c.where ? html`<span class="w">${c.where}</span>` : ''}</button>`)}</div>
-        <div class="door-copyhint">Tap a code to copy it</div>`
+        <div class="door-copyhint">Tap a code to copy it</div>
+        <div class="door-saved">${navigator.onLine ? '' : 'No signal. '}Saved on this phone · updated ${savedAtWords(p || s, p ? store.where('access', 'property_id', p.id) : [])}${pendingWords()}</div>`
         : html`<div class="door-none">${s.code_pending ? 'Code still coming. Text the listing agent.' : 'No code saved for this stop.'}</div>`}
       ${how.length ? html`<div class="door-how">${how.map((x) => html`<p>${x}</p>`)}</div>` : ''}
       <div class="door-act">
@@ -4563,7 +4582,7 @@ function render() {
   // The open house sheet is a kiosk: no nav, no mic, nothing to wander into.
   document.body.classList.toggle('kiosk', tab === 'kiosk');
   $fab.hidden = !!view.form; // a screen with its own form has its own mic
-  document.getElementById('offline').hidden = navigator.onLine;
+  document.getElementById('offline').hidden = true; // the calm offlineCard() replaces the old bar
 }
 
 let lastHash = location.hash;

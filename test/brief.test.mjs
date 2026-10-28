@@ -196,3 +196,14 @@ test('first run: the setup checklist is Today for a phone with no properties', a
   for (const k of ['noreply@send.brokersbestie.app', 'Check your spam folder', 'Your name & license number', 'Add your first property', 'Or snap a photo of an MLS sheet', 'Reminders only work from the home screen app', 'Add to Home Screen', 'Later, when you\'re ready', 'Connect your CRM', 'Invite your team', 'I work alone']) assert.ok(app.includes(k), k);
   assert.doesNotMatch(app, /function showWelcome/);
 });
+
+test('saved for no signal: a quiet line where codes show, a calm card offline', async () => {
+  const fs = await import('node:fs');
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  assert.match(app, /changes will send when you have signal|change\$\{n === 1 \? '' : 's'\} will send when you have signal/);
+  assert.match(app, /No signal\. You're fine\. All \$\{codes\}/);
+  assert.match(app, /class="door-saved"/);
+  assert.match(app, /Saved on this phone · updated \$\{savedAtWords\(p, access\)\}\$\{pendingWords\(\)\}/);
+  const store = fs.readFileSync(new URL('../js/store.js', import.meta.url), 'utf8');
+  assert.match(store, /export function pendingCount\(\)/);
+});

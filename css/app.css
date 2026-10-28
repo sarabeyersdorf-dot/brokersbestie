@@ -747,3 +747,10 @@ button.stat { cursor: pointer; }
 .pp-badge { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 4px; background: var(--ink); color: #fff; font: 800 11px/1.6 var(--sans); letter-spacing: .08em; text-transform: uppercase; vertical-align: 2px; }
 .pp-price { font: 800 28px/1 var(--tall); white-space: nowrap; }
 .pp-price .small { font-family: var(--sans); font-weight: 600; }
+
+/* Saved for no signal, phase 9a (2026-10-28) */
+.offline-card .buddy-empty { padding: 12px 14px; }
+.offline-card .buddy-empty svg { width: 52px; }
+.door-saved { text-align: center; color: #9aa4a1; font: 500 13px var(--sans); }
+.offline-card .buddy-empty { flex-direction: row; text-align: left; gap: 12px; padding: 10px 14px; }
+.offline-card .buddy-empty svg { width: 44px; flex-shrink: 0; }
