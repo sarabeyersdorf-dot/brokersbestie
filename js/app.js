@@ -5,7 +5,7 @@ import * as store from './store.js';
 import { APP_VERSION, SUPPORT_EMAIL } from './config.js';
 import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLink, mapLink, todayIso, daysFrom, niceDate, whenText, toast, undoToast, copy } from './ui.js';
 import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMiles, roadMiles, driveMinutes } from './route.js';
-import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
+import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech, quickProperty } from './parse.js';
 import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
 import { chooseFromDropbox, dropboxReady } from './dropbox.js';
@@ -541,6 +541,127 @@ async function deleteAccountSheet() {
   });
 }
 
+// ---------- First run: a setup checklist (2026-10-28, phase 7) ----------
+// Goal: the first gate code saved in under 2 minutes. Four steps with a
+// progress bar, then "Later, when you're ready" (CRM, team). It is Today for
+// a phone with no properties of its own, and Settings links to it after.
+const ownProps = () => props().filter((p) => !p.sample);
+function setupSteps() {
+  const c = store.cloud;
+  const prof = myProfile();
+  return [
+    { key: 'signin', done: !c.enabled || !!c.user },
+    { key: 'name', done: !!(prof && prof.full_name) },
+    { key: 'prop', done: ownProps().length > 0 },
+    { key: 'home', done: isInstalled() }
+  ];
+}
+function viewSetup() {
+  const steps = setupSteps();
+  const doneN = steps.filter((x) => x.done).length;
+  const on = steps.find((x) => !x.done)?.key || null;
+  const c = store.cloud;
+  const s = store.settings();
+  const prof = myProfile() || {};
+  const step = (key, n, title, body) => {
+    const st = steps.find((x) => x.key === key);
+    return html`<section class="card pad sec setup-step ${st.done ? 'done' : ''} ${on === key ? 'now' : ''}">
+      <div class="ss-head"><span class="ss-n">${st.done ? '✓' : n}</span><span class="ss-t">${title}</span></div>
+      ${st.done && on !== key ? '' : body}
+    </section>`;
+  };
+  return {
+    form: true,
+    html: html`${header({ kicker: 'Welcome to Brokers Bestie', title: 'Let’s get you set up', sub: 'About two minutes. Your first gate code is saved by the end.' })}
+    <main class="wrap">
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="4" aria-valuenow="${doneN}"><span style="width:${doneN * 25}%"></span></div>
+      <div class="small"><b>${doneN} of 4 done</b></div>
+
+      ${step('signin', 1, c.user ? `Signed in as ${c.user.email}` : 'Sign in', c.user ? '' : html`
+        <label class="field"><span>Your email</span><input id="sx_email" type="email" autocomplete="email" value="${s.pendingEmail || ''}" placeholder="you@brokerage.com"></label>
+        <button class="btn dark block" type="button" id="sx_send">Email me a sign-in code</button>
+        <div class="hint">The code comes from <b>noreply@send.brokersbestie.app</b>. Not there in a minute? Check your spam folder.</div>
+        <div id="sx_codebox" ${s.pendingEmail ? '' : raw('hidden')}>
+          <label class="field"><span>Code from the email</span><input id="sx_otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10" class="codein"></label>
+          <button class="btn teal big block" type="button" id="sx_verify">Sign in</button>
+        </div>`)}
+
+      ${step('name', 2, prof.full_name ? `${prof.full_name}${prof.license ? ' · ' + licenseText(prof.license) : ''}` : 'Your name & license number', html`
+        <label class="field"><span>Your full name</span><input id="sx_name" value="${prof.full_name || ''}" placeholder="Sara Cooper" autocomplete="name"></label>
+        <label class="field"><span>Your license #</span><input id="sx_lic" value="${prof.license || ''}" placeholder="DRE #01234567"></label>
+        <button class="btn dark block" type="button" id="sx_saveme">Save</button>
+        <div class="hint">They go on your open house sheet and the texts Bestie writes. Brokerage and logo can wait: Settings → Your profile.</div>`)}
+
+      ${step('prop', 3, ownProps().length ? `First property saved: ${ownProps()[0].address}` : 'Add your first property', html`
+        <label class="field"><span>Address and the gate or lockbox code</span><textarea id="sx_prop" rows="2" placeholder="100 Ridge Rd, Murphys, gate code 2580"></textarea></label>
+        <div class="btns"><button class="btn" type="button" data-mic="sx_prop">${icon('mic', 18)}Say it</button><button class="btn dark" type="button" id="sx_addprop">Save it</button></div>
+        <a class="small" href="#/sheet" style="color:var(--teal-text);font-weight:700">Or snap a photo of an MLS sheet ›</a>`)}
+
+      ${step('home', 4, isInstalled() ? 'Bestie is on your home screen' : 'Put Bestie on your home screen', html`
+        <div class="small">Reminders only work from the home screen app.</div>
+        <div class="ios-share">On iPhone: tap <span class="share-ic">${icon('share', 18)}</span> Share at the bottom of Safari, then <b>Add to Home Screen</b>.</div>
+        ${installCard()}`)}
+
+      <section class="sec">
+        <div class="label">Later, when you're ready</div>
+        <div class="card list">
+          <a class="row" href="#/settings"><span class="grow"><span class="t">Connect your CRM</span><span class="s">Optional. Brings in your deals, dates and appointments.</span></span>${icon('chev', 18)}</a>
+          ${s.worksAlone ? html`<div class="row"><span class="grow"><span class="t">You work alone</span><span class="s">Change it any time in Settings.</span></span><button class="btn ghost" type="button" id="sx_team" style="min-height:36px">I have a team</button></div>`
+            : html`<div class="row"><span class="grow"><span class="t">Invite your team</span><span class="s">They see the same codes and properties.</span></span><button class="btn" type="button" id="sx_invite" style="min-height:40px" ${c.user ? '' : raw('disabled')}>Invite</button><button class="btn ghost" type="button" id="sx_alone" style="min-height:40px">I work alone</button></div>`}
+        </div>
+      </section>
+
+      ${doneN === 4 ? html`<div class="card pad sec" style="text-align:center">${buddy('You’re all set.')}<button class="btn dark big block" type="button" id="sx_done">Go to Today</button></div>`
+        : html`<div class="btns" style="justify-content:center"><button class="btn ghost" type="button" id="sx_skip">Skip for now</button>${!props().length ? html`<button class="btn ghost" type="button" id="sx_sample">Look around with sample data</button>` : ''}</div>`}
+    </main>`,
+    mount(root) {
+      wireMics(root);
+      wireInstall(root);
+      const send = root.querySelector('#sx_send');
+      send?.addEventListener('click', async () => {
+        const email = root.querySelector('#sx_email').value.trim();
+        if (!email) return toast('Type your email');
+        try { await store.signIn(email); store.saveSettings({ pendingEmail: email }); root.querySelector('#sx_codebox').hidden = false; root.querySelector('#sx_otp').focus(); toast('Check your email for the code'); }
+        catch (e) { if (/Too many/.test(e.message)) { store.saveSettings({ pendingEmail: email }); root.querySelector('#sx_codebox').hidden = false; } toast(e.message); }
+      });
+      root.querySelector('#sx_verify')?.addEventListener('click', async () => {
+        const email = root.querySelector('#sx_email').value.trim() || store.settings().pendingEmail;
+        const code = root.querySelector('#sx_otp').value.trim();
+        if (code.replace(/\D/g, '').length < 6) return toast('Type the code from the email');
+        try { await store.verifyCode(email, code); store.saveSettings({ pendingEmail: '' }); toast('Signed in'); render(); } catch (e) { toast(e.message); }
+      });
+      root.querySelector('#sx_saveme')?.addEventListener('click', () => {
+        const name = root.querySelector('#sx_name').value.trim();
+        if (!name) return toast('Your name is needed');
+        const me = firstName(name);
+        const cur = myProfile() || {};
+        const saved = store.save('profiles', { ...(cur.id ? { id: cur.id } : {}), full_name: name, license: root.querySelector('#sx_lic').value.trim(), owner: me });
+        store.saveSettings({ profileId: saved.id, myName: me });
+        render();
+      });
+      root.querySelector('#sx_addprop')?.addEventListener('click', () => {
+        const q = quickProperty(root.querySelector('#sx_prop').value);
+        if (!q.address) return toast('Type or say the address first');
+        const p = store.save('properties', { address: q.address, status: 'listing' });
+        if (q.code) store.save('access', { property_id: p.id, kind: q.kind, label: KINDS[q.kind]?.label || 'Code', code: q.code, ...(KINDS[q.kind]?.tracked ? { status: 'out' } : {}) });
+        geocode(q.address).then((g) => g && store.save('properties', { id: p.id, lat: g.lat, lng: g.lng }, { quiet: true })).catch(() => {});
+        toast(q.code ? `Saved, with the ${(KINDS[q.kind]?.label || 'code').toLowerCase()} ${q.code}` : 'Saved. Add its codes from the property page.');
+        // Stay on the checklist: Today stops showing it once a property exists.
+        if (location.hash !== '#/setup') location.hash = '#/setup'; else render();
+      });
+      root.querySelector('#sx_invite')?.addEventListener('click', async () => {
+        try { const code = await store.inviteCode(); await copy(code); openSheet(html`<div class="sec"><div class="label">Invite code</div><div class="num" style="font-size:44px;text-align:center">${code}</div><div class="small">Copied. Your teammate signs in, then enters this code under Settings → Join a team. It works for 7 days.</div><button class="btn block" type="button" onclick="this.closest('.sheet-back').remove()">Done</button></div>`); } catch (e) { toast(e.message); }
+      });
+      root.querySelector('#sx_alone')?.addEventListener('click', () => { store.saveSettings({ worksAlone: true }); render(); });
+      root.querySelector('#sx_team')?.addEventListener('click', () => { store.saveSettings({ worksAlone: false }); render(); });
+      const finish = () => { store.saveSettings({ setupDone: true, welcomed: true }); location.hash = '#/'; render(); };
+      root.querySelector('#sx_done')?.addEventListener('click', finish);
+      root.querySelector('#sx_skip')?.addEventListener('click', finish);
+      root.querySelector('#sx_sample')?.addEventListener('click', () => { store.loadSample(sampleData()); store.saveSettings({ welcomed: true }); location.hash = '#/'; toast('Sample data added. Clear it any time in Settings.'); });
+    }
+  };
+}
+
 // ---------- Today changes with the time of day (2026-10-28, phase 5) ----------
 // Plan (before the first event), Field (on a tour, or from 90 minutes before a
 // showing) and Wrap-up (after the last event); todayMode in brief.js decides.
@@ -552,6 +673,7 @@ const cap1 = (x) => (x ? x[0].toUpperCase() + x.slice(1) : '');
 const street = (a) => String(a || '').split(',')[0];
 
 function viewToday(all = false) {
+  if (!all && !searchText && !props().length && !store.settings().setupDone) return viewSetup();
   if (all || searchText || !props().length) return viewTodayFull();
   const m = todayMode(store.snapshot(), todayIso(), nowMinutes());
   if (m.mode === 'field') return viewTodayField(m.focus);
@@ -2926,7 +3048,7 @@ function allFacesSheet(tourId, i) {
 // listing agent; Open in Messages, and Also text buyer.
 function lateSheet(tour, s) {
   const prof = myProfile();
-  const me = (prof && prof.name) || store.settings().myName || '';
+  const me = (prof && prof.full_name) || store.settings().myName || '';
   const now = new Date();
   const base = s.arrive != null ? s.arrive : now.getHours() * 60 + now.getMinutes();
   let mins = 10;
@@ -3445,7 +3567,7 @@ function viewSettings() {
         <div class="small">Black on white, bigger words and solid lines, for reading your screen outdoors.</div>
         <label class="switch"><input type="checkbox" id="hcmode" ${s.highContrast ? raw('checked') : ''}>Turn on bright sun mode</label>
       </section>
-      <button class="btn ghost block" type="button" id="rewelcome">Show the welcome again</button>
+      <a class="btn ghost block" href="#/setup">${(() => { const n = setupSteps().filter((x) => x.done).length; return n < 4 ? `Setup checklist · ${n} of 4 done` : 'Setup checklist'; })()}</a>
 
       <section class="card pad sec">
         <div class="label accent">Your profile & branding</div>
@@ -3634,7 +3756,6 @@ function viewSettings() {
         root.querySelector('#crmrun').addEventListener('click', (e) => call({ op: 'run' }, e.currentTarget));
         root.querySelector('#crmoff').addEventListener('click', (e) => { if (confirm('Stop syncing from this CRM? What already came in stays.')) call({ op: 'disconnect' }, e.currentTarget); });
       }
-      root.querySelector('#rewelcome')?.addEventListener('click', () => showWelcome());
       root.querySelector('#delacct')?.addEventListener('click', () => deleteAccountSheet());
       root.querySelector('#wipephone')?.addEventListener('click', async () => {
         if (!confirm('Erase every property, code, note, tour and photo on this phone? This cannot be undone.')) return;
@@ -4341,6 +4462,7 @@ const ROUTES = [
   [/^#\/vendors$/, () => viewVendors(), 'today'],
   [/^#\/updates$/, () => viewSellerUpdates(), 'today'],
   [/^#\/billing$/, () => viewBilling(), 'today'],
+  [/^#\/setup$/, () => viewSetup(), 'today'],
   [/^#\/contacts(?:\/(.+))?$/, (m) => viewContacts(m[1] ? decodeURIComponent(m[1]) : null), 'today'],
   [/^#\/showings$/, () => viewShowingsImport(), 'calendar'],
   [/^#\/taxes\/(\d{4})$/, (m) => viewTaxes(m[1]), 'today'],
@@ -4440,46 +4562,8 @@ $fab.setAttribute('aria-label', 'Tell Bestie');
 addEventListener('scroll', () => $fab.classList.toggle('mini', scrollY > 40), { passive: true });
 render();
 store.startCloud();
-// First open: a short welcome (2026-10-27). Once per phone, never on the
-// visitor or kiosk pages; Settings → "Show the welcome again".
-const WELCOME = [
-  { face: 'wink', title: 'Hi, I’m Bestie', body: 'Your codes, showings, tours and deadlines in one place, built for the car and the front door.' },
-  { face: 'love', title: 'Every code, one tap', body: 'Save the lockbox, gate and alarm codes with a photo of where they are. At the door, they show up huge.' },
-  { face: 'again', title: 'Tours that plan themselves', body: 'Read Bestie the addresses and it puts them in order, texts the listing agents, and logs your miles.' },
-  { face: 'ok', title: 'Make it yours', body: 'Add your name and brokerage, put Bestie on your home screen, and turn on reminders in Settings.' }
-];
-function showWelcome() {
-  let i = 0;
-  const face = (k) => (k === 'wink' ? winkFace({ size: 110, label: '' }) : k === 'ok' ? okFace({ size: 110, label: '' }) : reactionFace(k, { size: 110, label: '' }));
-  const paint = (sh) => {
-    const w = WELCOME[i];
-    sh.querySelector('[data-wface]').innerHTML = face(w.face);
-    sh.querySelector('[data-wtitle]').textContent = w.title;
-    sh.querySelector('[data-wbody]').textContent = w.body;
-    sh.querySelector('[data-wdots]').innerHTML = WELCOME.map((_, j) => `<span class="wdot${j === i ? ' on' : ''}"></span>`).join('');
-    sh.querySelector('#wnext').textContent = i < WELCOME.length - 1 ? 'Next' : 'Show me around';
-    sh.querySelector('#wsample').hidden = i < WELCOME.length - 1 || props().length > 0;
-  };
-  openSheet(html`<div class="sec welcome" style="text-align:center">
-    <div data-wface></div>
-    <div class="title" data-wtitle style="font-family:var(--tall);font-weight:800;font-size:30px;text-transform:uppercase"></div>
-    <div data-wbody style="font-size:18px"></div>
-    <div class="wdots" data-wdots></div>
-    <button class="btn dark big block" type="button" id="wnext">Next</button>
-    <button class="btn block" type="button" id="wsample" hidden>Look around with sample data</button>
-    <button class="btn ghost block" type="button" id="wskip">Skip</button>
-  </div>`, (sh) => {
-    const done = () => { store.saveSettings({ welcomed: true }); closeSheet(); };
-    sh.querySelector('#wnext').addEventListener('click', () => { if (i < WELCOME.length - 1) { i++; paint(sh); } else done(); });
-    sh.querySelector('#wskip').addEventListener('click', done);
-    sh.querySelector('#wsample').addEventListener('click', () => { done(); document.querySelector('#sample')?.click(); });
-    paint(sh);
-  });
-}
-setTimeout(() => {
-  if (store.settings().welcomed || props().length || /^#\/(door|openhouse)/.test(location.hash)) { if (!store.settings().welcomed && props().length) store.saveSettings({ welcomed: true }); return; }
-  showWelcome();
-}, 600);
+// First open: the setup checklist is Today until there is a property
+// (viewSetup, 2026-10-28); Settings → Setup checklist after that.
 setInterval(watchCheckin, 20000);
 watchCheckin();
 locationAllowed().then(async (yes) => {

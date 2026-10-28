@@ -150,3 +150,22 @@ export function mergeSpeech(chunks, next) {
   }
   return [...chunks, t];
 }
+
+// First-run "add your first property" box (2026-10-28): one line, typed or
+// said, e.g. "100 Ridge Rd Murphys gate code pound 2580". The address is
+// everything before the code words; the code is what follows them. Spoken
+// "pound"/"hash"/"star" become # and *. No code words: it is all address.
+const CODE_WORDS = /\b(gate|lockbox|lock box|alarm|door|keypad|supra|code|combo|combination)\b/i;
+export function quickProperty(text) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  const m = t.match(CODE_WORDS);
+  if (!m) return { address: t.replace(/[,.\s]+$/, ''), code: '', kind: '' };
+  const address = t.slice(0, m.index).replace(/[,.\s-]+$/, '').trim();
+  const rest = t.slice(m.index);
+  const kind = /gate/i.test(rest) ? 'gate' : /alarm/i.test(rest) ? 'alarm' : /door|keypad/i.test(rest) ? 'door' : 'lockbox';
+  const code = rest
+    .replace(/\b(pound|hash|number sign)\s*/gi, '#').replace(/\bstar\s*/gi, '*')
+    .replace(CODE_WORDS, '').replace(/\b(code|combo|combination|is|the|number)\b/gi, '')
+    .replace(/[,:.]/g, ' ').replace(/(\d)\s+(?=\d)/g, '$1').replace(/#\s+/g, '#').trim();
+  return { address, code, kind };
+}

@@ -730,3 +730,20 @@ check-in, offline (phase 9a), the trial-ending banner, the first property
 saved (`settings.firstPropDone`). Never on code cards, errors or "not found",
 money (the price screen, a payment problem), or anything a client sees. The
 greeting buddy is gone; the logo in the header is the app's mark and stays.
+
+## First run: setup checklist (2026-10-28, phase 7) — replaces the welcome cards
+
+`viewSetup` (`#/setup`) is Today for a phone with no properties until
+`settings.setupDone` (Go to Today / Skip for now). A progress bar and four
+steps (`setupSteps`): **Sign in** inline (email code; says it comes from
+noreply@send.brokersbestie.app and to check spam; counts as done when team
+mode is off), **Your name & license number** (writes the profile, sets
+`myName`), **Add your first property** (one box, typed or said;
+`quickProperty` in parse.js splits "100 Ridge Rd gate code pound 2580" into
+the address and a gate/lockbox/alarm/door code; or "snap a photo of an MLS
+sheet"), **Put Bestie on your home screen** ("Reminders only work from the
+home screen app", the iPhone Share icon, the install card). Saving the
+property stays on `#/setup`. "Later, when you're ready": Connect your CRM
+(Settings), Invite your team / **I work alone** (`settings.worksAlone`).
+Settings links "Setup checklist · N of 4 done". `showWelcome` is gone, and
+the install card no longer carries the buddy.

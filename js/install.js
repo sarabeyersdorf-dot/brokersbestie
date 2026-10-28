@@ -5,8 +5,7 @@ import { SUPPORT_EMAIL } from './config.js';
 // it gets the steps for the browser it is actually in. The usual reason it
 // "doesn't work" on iPhone: the link opened inside Gmail, Messages' preview or
 // another app, whose share sheet has no Add to Home Screen.
-import { html, raw } from './ui.js';
-import { winkFace } from './faces.js';
+import { html, raw, icon } from './ui.js';
 
 let deferred = null;
 const listeners = new Set();
@@ -54,7 +53,7 @@ export function installCard({ dismissable = false, slim = false } = {}) {
     // One line on Today; the steps open on a tap (Today cleanup, 2026-10-27).
     const p = platform();
     return html`<details class="card sec install-slim" data-install>
-      <summary>${raw(winkFace({ size: 28, label: '' }))}<span class="grow">Put Bestie on your home screen</span><span class="small">How</span></summary>
+      <summary>${icon('share', 20)}<span class="grow">Put Bestie on your home screen</span><span class="small">How</span></summary>
       <div class="pad" style="padding-top:0">
         <button class="btn dark block" type="button" data-install-go ${deferred ? '' : raw('hidden')}>Install Bestie</button>
         <ol class="install-steps" ${deferred ? raw('hidden') : ''}>${installSteps(p).map((s) => html`<li>${s}</li>`)}</ol>
@@ -65,7 +64,7 @@ export function installCard({ dismissable = false, slim = false } = {}) {
   if (isInstalled()) return html`<section class="card pad sec"><div class="label">On your home screen</div><div class="small">✓ Bestie is installed on this phone.</div></section>`;
   const p = platform();
   return html`<section class="card pad sec install-card" data-install>
-    <div class="install-head">${raw(winkFace({ size: 44, label: '' }))}<div><div class="label">Put Bestie on your home screen</div><div class="small">It opens like an app and works with no signal.</div></div></div>
+    <div class="install-head"><div><div class="label">Put Bestie on your home screen</div><div class="small">It opens like an app and works with no signal.</div></div></div>
     <button class="btn dark big block" type="button" data-install-go ${deferred ? '' : raw('hidden')}>Install Bestie</button>
     <ol class="install-steps" ${deferred ? raw('hidden') : ''}>${installSteps(p).map((s) => html`<li>${s}</li>`)}</ol>
     ${dismissable ? html`<button class="btn ghost" type="button" data-install-hide style="min-height:36px">Not now</button>` : ''}

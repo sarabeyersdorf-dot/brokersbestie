@@ -98,3 +98,11 @@ test('search finds a vendor by trade and links to the vendor list', () => {
   assert.equal(r[0].href, '#/vendors');
   assert.equal(r[0].kind, 'Vendor');
 });
+
+import { quickProperty } from '../js/parse.js';
+test('first property: one box gives the address and the code', () => {
+  assert.deepEqual(quickProperty('100 Ridge Rd Murphys gate code pound 2580'), { address: '100 Ridge Rd Murphys', code: '#2580', kind: 'gate' });
+  assert.deepEqual(quickProperty('12 Oak Knoll Ct, lockbox 4417'), { address: '12 Oak Knoll Ct', code: '4417', kind: 'lockbox' });
+  assert.deepEqual(quickProperty('55 Main St, alarm code is 7 3 1 9'), { address: '55 Main St', code: '7319', kind: 'alarm' });
+  assert.deepEqual(quickProperty('305 Cedar Hollow Ln'), { address: '305 Cedar Hollow Ln', code: '', kind: '' });
+});
