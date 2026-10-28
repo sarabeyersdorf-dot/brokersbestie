@@ -146,3 +146,34 @@ test('tax year: totals, by month, deduction, and what a preparer will ask about'
   assert.doesNotMatch(csv, /99\.0/);
   assert.match(csv, /"2026-03-11","Gas","","7\.50","no"/);
 });
+
+import { todayMode, listenLength } from '../js/brief.js';
+test('Today mode: plan, field around a tour or showing, wrap after', () => {
+  const day = '2026-10-28';
+  const tour = { id: 't', date: day, stops: [{ arrive: 600 }, { arrive: 660 }] };
+  const data = { tours: [tour], events: [{ id: 'e', date: day, start_minutes: 900, minutes: 60, kind: 'meeting' }] };
+  assert.equal(todayMode(data, day, 420).mode, 'plan');        // 7:00, tour at 10:00
+  assert.equal(todayMode(data, day, 520).mode, 'field');       // 8:40, within 90 min
+  assert.equal(todayMode(data, day, 520).focus.id, 't');
+  const started = { ...data, tours: [{ ...tour, stops: [{ arrive: 600, shown: true }, { arrive: 660 }] }] };
+  assert.equal(todayMode(started, day, 800).mode, 'field');   // still on tour, a stop left
+  const done = { ...data, tours: [{ ...tour, finished: true }] };
+  assert.equal(todayMode(done, day, 800).mode, 'plan');       // 1:20, meeting at 3:00 still ahead
+  assert.equal(todayMode(done, day, 1000).mode, 'wrap');      // after the meeting
+  assert.equal(todayMode({}, day, 800).mode, 'plan');         // nothing booked
+  const showing = { events: [{ id: 's', date: day, start_minutes: 840, kind: 'showing' }] };
+  assert.equal(todayMode(showing, day, 760).mode, 'field');   // 80 min before a showing
+  assert.equal(todayMode(showing, day, 700).mode, 'plan');
+});
+test('briefing length in words people use', () => {
+  assert.equal(listenLength('word '.repeat(100)), 'about 40 sec');
+  assert.equal(listenLength('word '.repeat(400)), 'about 3 min');
+});
+
+test('Today picks its screen by mode, and "Show everything" keeps the full page', async () => {
+  const fs = await import('node:fs');
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  assert.match(app, /if \(all \|\| searchText \|\| !props\(\)\.length\) return viewTodayFull\(\)/);
+  assert.match(app, /\[\/\^#\\\/all\$\/, \(\) => viewToday\(true\)/);
+  for (const k of ['Up next', 'Leave by', 'Start tour', 'Due today', 'How did ${street(prev.address)} go?', 'Later today', 'Feedback still owed', 'To bring back', 'Miles to save', 'Show everything on Today']) assert.ok(app.includes(k), k);
+});

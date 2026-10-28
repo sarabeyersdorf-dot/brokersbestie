@@ -695,3 +695,19 @@ body:has(.pbar) .fab { bottom: calc(var(--nav-h) + 78px + env(safe-area-inset-bo
 body:has(.pbar) .toast { bottom: calc(var(--nav-h) + 140px + env(safe-area-inset-bottom)); }
 body.kiosk .pbar { display: none; }
 .top .pill::before { box-shadow: 0 0 0 2px rgba(255,255,255,.9); }
+
+/* Today by time of day, phase 5 (2026-10-28) */
+.do-row { margin: -4px -16px 0; padding: 0 16px 2px; }
+.do-row .chip { gap: 6px; }
+.do-row .badge { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--teal-text); color: #fff; font-size: 11px; line-height: 16px; text-align: center; }
+.do-row .badge.late { background: var(--alert); }
+.upnext .un-lead { font: 800 26px/1.05 var(--tall); text-transform: uppercase; color: var(--teal-text); }
+.upnext .un-title { font: 700 20px var(--sans); }
+.brief-line { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
+.nextcard .nc-addr { font: 800 28px/1.05 var(--tall); text-transform: uppercase; }
+.nextcard .lead-time { font: 800 18px var(--tall); text-transform: uppercase; color: var(--teal-text); padding-bottom: 4px; }
+.door-faces.light .door-face { background: var(--card); border-color: var(--line); color: var(--ink); min-height: 64px; }
+.door-faces.light .door-face .n { background: var(--bg); color: var(--ink); }
+.safety-bar { border-left: 6px solid var(--ink); }
+.all-link { display: block; text-align: center; padding: 12px; font-weight: 700; color: var(--teal-text); }
+.btn.door-btn, .card .btn.door-btn { background: var(--code); border-color: var(--code); color: #0e1012; font-weight: 800; }

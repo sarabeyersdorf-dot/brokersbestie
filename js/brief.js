@@ -344,3 +344,42 @@ export function taxCsv(trips, expenses, year, addressOf = () => '') {
   }
   return lines.join('\n');
 }
+
+// ---------- Today changes with the time of day (2026-10-28, phase 5) ----------
+// 'plan' before the first event (and between events with no showing near),
+// 'field' during a tour or from 90 minutes before a showing to its end, 'wrap'
+// once everything booked today is over. Nothing booked: 'plan'.
+export const FIELD_LEAD = 90;
+export function todayMode(data, today, nowMin) {
+  const spans = [];
+  for (const e of data.events || []) {
+    if (e.date !== today || e.cancelled || e.start_minutes == null) continue;
+    spans.push({ type: 'event', id: e.id, showing: e.kind === 'showing', start: e.start_minutes, end: e.start_minutes + (e.minutes || 30), done: !!e.done });
+  }
+  for (const t of data.tours || []) {
+    if (t.date !== today) continue;
+    const stops = t.stops || [];
+    const times = stops.map((s) => s.arrive).filter((x) => x != null);
+    const start = times.length ? Math.min(...times) : t.start_minutes;
+    if (start == null) continue;
+    const end = (times.length ? Math.max(...times) : start) + 30;
+    const done = !!t.finished || (stops.length > 0 && stops.every((s) => s.shown));
+    spans.push({ type: 'tour', id: t.id, showing: true, start, end, done, started: stops.some((s) => s.shown) });
+  }
+  if (!spans.length) return { mode: 'plan', spans };
+  // A tour that has begun stays in the field until it is done (or long past).
+  const live = spans.find((s) => s.type === 'tour' && !s.done && (s.started || nowMin >= s.start - FIELD_LEAD) && nowMin <= s.end + 120);
+  if (live) return { mode: 'field', focus: live, spans };
+  const near = spans.find((s) => s.showing && !s.done && nowMin >= s.start - FIELD_LEAD && nowMin <= s.end);
+  if (near) return { mode: 'field', focus: near, spans };
+  const open = spans.filter((s) => !s.done && s.end >= nowMin);
+  if (!open.length) return { mode: 'wrap', spans };
+  return { mode: 'plan', spans };
+}
+
+// About how long the spoken briefing runs ("about 40 sec", "about 2 min").
+export function listenLength(text) {
+  const words = String(text || '').split(/\s+/).filter(Boolean).length;
+  const secs = Math.max(10, Math.round(words / 2.6 / 5) * 5);
+  return secs < 60 ? `about ${secs} sec` : `about ${Math.round(secs / 60)} min`;
+}

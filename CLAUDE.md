@@ -684,3 +684,30 @@ tab is gone. A bottom bar above the nav (`.pbar`): Send seller update
 (listings and escrows) + **More** (`hubMoreSheet`: Edit details, Snap MLS
 sheet / MLS sheet, Quick add, Open house sign-in, Visitors). Tell Bestie and
 Undo sit above the bar on this page.
+
+## Today changes with the time of day (2026-10-28, phase 5) — supersedes "Today cleanup" / "Hello"
+
+`todayMode(data, today, nowMin)` in brief.js decides (tested): **field** on a
+tour that has begun (or from `FIELD_LEAD` = 90 min before its first stop)
+until every stop is shown or it is finished, and from 90 min before a showing
+appointment to its end; **wrap** once everything booked today is over;
+otherwise **plan** (also when nothing is booked). `viewToday(all)` sends
+search, a phone with no properties, and `#/all` ("Show everything on Today",
+at the bottom of every mode) to `viewTodayFull`, the old page.
+- **Plan** (`viewTodayPlan`): "Morning, Sara" + one-line summary (showings,
+  deadlines, miles); search; the six choices as one row of small chips
+  (`doRow`); **Up next** (leave-by = first stop − its drive − 5 min, the stops
+  with times and occupied/vacant, Start tour → the door, Tour page, and "Your
+  day · about N sec" with Listen, `listenLength`); **Due today** (3 lines,
+  "On your route" when a pickup's property is on today's tour).
+- **Field** (`viewTodayField`): header = the tour and "Stop X of Y". Next stop
+  card: "Leave in X min", address + badge, drive notes, yellow codes,
+  Directions, At the door, Running late. "How did <last stop> go?" with the 4
+  quick faces + more, quick add (Gate code, Photo, Note, Receipt) filed to
+  that stop's property, the safety bar while a check-in runs, Later today.
+- **Wrap** (`viewTodayWrap`): feedback still owed (shown stops with an agent
+  phone and no `feedback_sent_at`) + the listing-feedback card, gear to bring
+  back, miles to save (unfinished tours), seller updates due, still due.
+- **Setup cards** (install, profile): "Later" hides one for 3 days; the second
+  time it lives in Settings only (`setupHidden` / `dismissSetup`,
+  `bb:setup:<key>`; the old one-time flags count as both).

@@ -127,7 +127,7 @@ test('occupied / vacant shows on every tour surface, with no color of its own', 
   assert.match(app, /occBadge\(s\.occ, \{ big: true, extra: s\.occ === 'O' \? 'knock first'/); // at the door
   assert.match(app, /nextStopWords\(next\)/); // next stop button
   assert.match(app, /tour-stop[\s\S]{0,200}occBadge\(x\.occ\)/); // Today's tour list
-  assert.doesNotMatch(css.slice(css.indexOf('Occupied / vacant (2026-10-28)')), /--occ-o|--occ-v|--alert/);
+  const occCss = css.slice(css.indexOf('Occupied / vacant (2026-10-28)')); assert.doesNotMatch(occCss.slice(0, occCss.indexOf('\n\n')), /--occ-o|--occ-v|--alert/);
 });
 
 test('at the door: four quick faces + All 8, late and call, next stop; buttons 56px+', () => {

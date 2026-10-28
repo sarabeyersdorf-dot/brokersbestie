@@ -17,7 +17,7 @@ import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visi
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink, shareWhere, shareLink, stopShareLinks } from './push.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, headsUp, feedbackDue, taxYear, taxCsv } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, headsUp, todayMode, listenLength, feedbackDue, taxYear, taxCsv } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -466,8 +466,27 @@ function sellerUpdateSheet(pid) {
   });
 }
 
-const profileNudgeHidden = () => { try { return localStorage.getItem('bb:profnudge') === '1'; } catch { return false; } };
-const installHidden = () => { try { return localStorage.getItem('bb:installhide') === '1'; } catch { return false; } };
+// Setup cards on Today (install, profile): "Later" hides one for 3 days; the
+// second time it stays in Settings only (2026-10-28). An old one-time hide
+// from before counts as both.
+const SETUP_OLD = { profile: 'bb:profnudge', install: 'bb:installhide' };
+function setupHidden(key) {
+  try {
+    if (localStorage.getItem(SETUP_OLD[key]) === '1') return true;
+    const v = JSON.parse(localStorage.getItem('bb:setup:' + key) || '{}');
+    return (v.n || 0) >= 2 || (v.until && Date.now() < v.until);
+  } catch { return false; }
+}
+function dismissSetup(key) {
+  try {
+    const v = JSON.parse(localStorage.getItem('bb:setup:' + key) || '{}');
+    const n = (v.n || 0) + 1;
+    localStorage.setItem('bb:setup:' + key, JSON.stringify({ n, until: Date.now() + 3 * 86400e3 }));
+    toast(n >= 2 ? 'Moved to Settings' : 'Hidden for a few days');
+  } catch {}
+}
+const profileNudgeHidden = () => setupHidden('profile');
+const installHidden = () => setupHidden('install');
 // "What are we doing today?" (Sara, 2026-10-27): the big choices first.
 function doTiles(tours) {
   const tour = tours[0];
@@ -522,7 +541,263 @@ async function deleteAccountSheet() {
   });
 }
 
-function viewToday() {
+// ---------- Today changes with the time of day (2026-10-28, phase 5) ----------
+// Plan (before the first event), Field (on a tour, or from 90 minutes before a
+// showing) and Wrap-up (after the last event); todayMode in brief.js decides.
+// "Show everything on Today" (#/all) is the full page as it was. Searching,
+// and a phone with no properties yet, always get the full page.
+const nowMinutes = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+const greet = () => { const h = new Date().getHours(); return h < 12 ? 'Morning' : h < 17 ? 'Afternoon' : 'Evening'; };
+const cap1 = (x) => (x ? x[0].toUpperCase() + x.slice(1) : '');
+const street = (a) => String(a || '').split(',')[0];
+
+function viewToday(all = false) {
+  if (all || searchText || !props().length) return viewTodayFull();
+  const m = todayMode(store.snapshot(), todayIso(), nowMinutes());
+  if (m.mode === 'field') return viewTodayField(m.focus);
+  if (m.mode === 'wrap') return viewTodayWrap();
+  return viewTodayPlan();
+}
+
+function todayHeader(title, sub) {
+  return header({
+    right: html`<span style="display:flex;gap:10px;align-items:center">${modeBadge()}<a href="#/settings" aria-label="Settings" style="color:#fff;display:flex;padding:8px">${icon('gear', 22)}</a></span>`,
+    kicker: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+    title, sub,
+    extra: html`<label class="search">${icon('search', 18)}<input id="q" type="search" placeholder="Search everything: address, code, name…" value="${searchText}" aria-label="Search everything" autocomplete="off"></label>`
+  });
+}
+const everythingLink = () => html`<a class="all-link" href="#/all">Show everything on Today ›</a>`;
+function setupCards() {
+  return html`${!isInstalled() && !installHidden() ? installCard({ dismissable: true, slim: true }) : ''}
+    ${!myProfile() && !profileNudgeHidden() ? html`<div class="card pad sec" data-profnudge><div class="label accent">Make it yours</div><div class="small">Add your name, brokerage, license numbers and logo. They go on your open house sign-in sheet and the texts Bestie writes.</div><div class="btns"><a class="btn dark" href="#/profile">Set up my profile</a><button class="btn ghost" type="button" id="profnot">Later</button></div></div>` : ''}`;
+}
+// The six big choices as one row of small scrolling buttons.
+function doRow(tours) {
+  const tour = tours[0];
+  const due = sellerDueCount();
+  const late = due ? sellerPastDueCount() : 0;
+  return html`<div class="chips do-row">
+    <a class="chip" href="${tour ? `#/tour/${tour.id}` : '#/plan'}">${icon('route', 16)}${tour ? "Today's tour" : 'Show homes'}</a>
+    <button class="chip" type="button" id="findme">${icon('pin', 16)}At a property</button>
+    <button class="chip" type="button" id="ohpick">${icon('person', 16)}Open house</button>
+    <a class="chip" href="#/updates">${icon('text', 16)}Seller updates${due ? html` <span class="badge ${late ? 'late' : ''}">${due}</span>` : ''}</a>
+    <a class="chip" href="#/p/new">${icon('plus', 16)}Add a property</a>
+    <a class="chip" href="#/miles">${icon('miles', 16)}Log a drive</a>
+  </div>`;
+}
+function hereCard() {
+  const hp = here && here.p;
+  if (!hp) return '';
+  return html`<section class="sec">
+    <div class="label accent">You're at · ${Math.round(here.d * 5280)} ft away</div>
+    <a class="card pad sec" href="#/p/${hp.id}" style="color:var(--ink)">
+      <div style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase;line-height:1.05">${hp.address}</div>
+      ${codeBoxes(codesOf(hp.id).slice(0, 4))}
+      <div class="label accent" style="letter-spacing:.04em;text-transform:none;font-size:14px">Open the full card →</div>
+    </a>
+  </section>`;
+}
+function briefLine() {
+  const data = store.snapshot();
+  const text = briefingText(briefing(data, todayIso(), { pickups: pickups().length }), data, { hello: 'Good morning', name: myName() || '' });
+  return html`<div class="brief-line"><span class="grow"><b>Your day</b> · ${listenLength(text)}</span><button class="btn" type="button" id="readbrief" style="min-height:40px">${icon('speak', 18)}Listen</button></div>`;
+}
+// One to-do line: dot + word, "On your route" when a pickup is on today's tour.
+function todoLine(t, routePids) {
+  const onRoute = t.pickup && routePids.has(t.pid);
+  const inner = html`<span class="grow"><span class="t">${t.text}</span><span class="s">${ktag(t.ck, t.late)}${onRoute ? html`<span class="tag">On your route</span> ` : ''}${t.sub}</span></span>`;
+  if (t.pickup) return html`<a class="row" href="#/signs"><span class="check" style="border-color:var(--pending)"></span>${inner}${icon('chev', 18)}</a>`;
+  if (t.tour) return html`<a class="row" href="#/tour/${t.tour}"><span class="check" style="border-color:var(--pending)"></span>${inner}${icon('chev', 18)}</a>`;
+  return html`<button class="row" type="button" data-done="${t.table}:${t.id}"><span class="check"></span>${inner}</button>`;
+}
+const todaysTours = () => store.all('tours').filter((x) => x.date === todayIso() && !x.finished);
+const routePidsOf = (tours) => new Set(tours.flatMap((t) => (t.stops || []).map((s) => s.property_id).filter(Boolean)));
+
+function viewTodayPlan() {
+  const tours = todaysTours();
+  const day = todayIso();
+  const now = nowMinutes();
+  const items = dayItems(store.snapshot(), day).filter((i) => !i.done);
+  const showings = tours.reduce((n, t) => n + (t.stops || []).length, 0) + items.filter((i) => i.kind === 'event' && i.sub === 'showing').length;
+  const deadlines = store.all('dates').filter((d) => !d.done && d.due === day).length;
+  const miles = Math.round(tours.reduce((n, t) => n + Number(t.miles || 0), 0));
+  const summary = [showings ? `${showings} showing${showings === 1 ? '' : 's'}` : '', deadlines ? `${deadlines} deadline${deadlines === 1 ? '' : 's'}` : '', miles ? `about ${miles} mi` : ''].filter(Boolean).join(' · ') || 'Nothing booked today';
+  const todos = todoItems().sort((a, b) => (b.late ? 1 : 0) - (a.late ? 1 : 0));
+  const tour = tours.find((t) => (t.stops || []).length);
+  const nextEvent = items.find((i) => i.kind === 'event' && (i.start == null || i.start >= now));
+  let upnext = '';
+  if (tour) {
+    const st = tour.stops;
+    const i0 = Math.max(0, st.findIndex((x) => !x.shown));
+    const first = st[i0];
+    const leave = first && first.arrive != null && i0 === 0 ? first.arrive - (first.leg_minutes || 0) - 5 : null;
+    upnext = html`<section class="card pad sec upnext">
+      <div class="label">Up next</div>
+      ${leave != null ? html`<div class="un-lead">Leave by ${formatClock(leave)}</div>` : ''}
+      <div class="un-title">${tour.name || 'Showing tour'}</div>
+      <div class="tour-stops">${st.map((x) => html`<span class="tour-stop ${x.shown ? 'done' : ''}">${x.arrive != null ? html`<span class="num">${formatClock(x.arrive)}</span>` : ''}<span class="a">${street(x.address)}</span>${occBadge(x.occ)}</span>`)}</div>
+      <div class="btns"><a class="btn dark" href="#/door/${tour.id}/${i0}">Start tour</a><a class="btn" href="#/tour/${tour.id}">Tour page</a></div>
+      ${briefLine()}
+    </section>`;
+  } else {
+    upnext = html`<section class="card pad sec upnext">
+      <div class="label">Up next</div>
+      ${nextEvent ? html`<div class="card list">${dayItemRow(nextEvent)}</div>` : html`<div class="un-title">Nothing booked today</div><div class="btns"><a class="btn dark" href="#/plan">${icon('mic', 18)}Plan a tour</a></div>`}
+      ${briefLine()}
+    </section>`;
+  }
+  return {
+    html: html`${todayHeader(`${greet()}${myName() ? ', ' + cap1(myName()) : ''}`, summary)}
+    <main class="wrap">
+      ${planBanner()}
+      ${doRow(tours)}
+      ${hereCard()}
+      ${upnext}
+      ${todos.length ? html`<section class="sec">
+        <div class="sec-head"><div class="label">Due today · ${todos.length}</div>${todos.length > 3 ? html`<a class="small" href="#/all" style="color:var(--teal-text);font-weight:600">See all ›</a>` : ''}</div>
+        <div class="card list">${todos.slice(0, 3).map((t) => todoLine(t, routePidsOf(tours)))}</div>
+      </section>` : ''}
+      ${setupCards()}
+      ${everythingLink()}
+    </main>`,
+    mount: (root) => wireTodayCommon(root)
+  };
+}
+
+function viewTodayField(focus) {
+  const now = nowMinutes();
+  const tour = focus.type === 'tour' ? store.get('tours', focus.id) : null;
+  const ev = focus.type === 'event' ? store.get('events', focus.id) : null;
+  let s, i = 0, n = 1, prev = null;
+  if (tour) {
+    const st = tour.stops || [];
+    i = st.findIndex((x) => !x.shown); if (i < 0) i = st.length - 1;
+    s = st[i]; n = st.length; prev = i > 0 ? st[i - 1] : null;
+  } else {
+    const ep = ev.property_id ? prop(ev.property_id) : null;
+    s = { id: ev.id, address: ep ? ep.address : ev.location || ev.title, property_id: ev.property_id || null, arrive: ev.start_minutes, occ: ep ? ep.occupancy : '', agent: ev.showing_agent || '', agent_phone: ev.showing_agent_phone || '', lat: ep?.lat, lng: ep?.lng };
+  }
+  const p = s.property_id ? prop(s.property_id) : null;
+  const codes = doorCodes(s, p ? codesOf(p.id) : [], (k) => KINDS[k]?.label || k);
+  const leaveIn = s.arrive != null ? s.arrive - (s.leg_minutes || 0) - now : null;
+  const leaveWords = leaveIn == null ? '' : leaveIn > 0 ? `Leave in ${leaveIn} min` : now < s.arrive ? 'Leave now' : `Due ${formatClock(s.arrive)}`;
+  const drive = [p && p.directions, s.access_note].map((x) => String(x || '').trim()).filter(Boolean)[0] || '';
+  const later = dayItems(store.snapshot(), todayIso()).filter((x) => !x.done && x.id !== focus.id && (x.start == null ? x.kind === 'date' : x.start > now)).slice(0, 4);
+  const chk = activeCheckin();
+  const askPrev = prev && !prev.reaction;
+  const pid = s.property_id || '';
+  return {
+    html: html`${todayHeader(tour ? tour.name || 'Showing tour' : ev.title || 'Showing', tour ? `Stop ${i + 1} of ${n}` : `${formatClock(ev.start_minutes)}${ev.location ? ' · ' + ev.location : ''}`)}
+    <main class="wrap">
+      ${planBanner()}
+      <section class="card pad sec nextcard">
+        <div class="sec-head"><div class="label">${tour ? 'Next stop' : 'Up next'}</div>${leaveWords ? html`<span class="lead-time">${leaveWords}</span>` : ''}</div>
+        <div class="nc-addr">${street(s.address)}</div>
+        <div class="heads">${occBadge(s.occ)}${s.arrive != null ? html`<span class="small"><b>${formatClock(s.arrive)}</b>${s.leg_minutes ? ` · ${s.leg_minutes} min drive` : ''}</span>` : ''}</div>
+        ${drive ? html`<div class="small" style="white-space:pre-line">${drive}</div>` : ''}
+        ${codes.length ? codeBoxes(codes.map((c) => ({ label: c.label, code: c.code, location_note: c.where }))) : html`<div class="small wait">No code saved for this stop.</div>`}
+        <div class="btns">
+          <a class="btn teal" href="${mapLink(s)}" target="_blank" rel="noopener">${icon('pin', 18)}Directions</a>
+          ${tour ? html`<a class="btn door-btn" href="#/door/${tour.id}/${i}">At the door</a>` : p ? html`<a class="btn" href="#/p/${p.id}">Open property</a>` : ''}
+          <button class="btn" type="button" id="flate">${icon('clock', 18)}Running late</button>
+        </div>
+      </section>
+      ${askPrev ? html`<section class="card pad sec">
+        <div class="label">How did ${street(prev.address)} go?</div>
+        <div class="door-faces light">${DOOR_FACES.map((k) => html`<button class="door-face" type="button" data-pquick="${k}">${raw(reactionFace(k, { size: 36, label: '' }))}<span>${reactionLabel(k)}</span></button>`)}<button class="door-face all" type="button" id="pmore"><span class="n">8</span><span>more</span></button></div>
+      </section>` : ''}
+      <section class="sec">
+        <div class="tiles">${['gate', 'photo', 'note', 'receipt'].map((k) => html`<a class="tile" href="#/quick/${k}${pid ? '/' + pid : ''}"><span class="ic ${KINDS[k].y ? 'y' : ''}">${icon(KINDS[k].icon, 22)}</span>${KINDS[k].short || KINDS[k].label}</a>`)}</div>
+      </section>
+      ${chk ? html`<a class="card row safety-bar" href="#/safety">${icon('shield', 20)}<span class="grow"><span class="t">Safety check-in is on</span><span class="s">Check in by ${new Date(chk.due_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span></span>${icon('chev', 18)}</a>` : ''}
+      ${later.length ? html`<section class="sec"><div class="label">Later today</div><div class="card list">${later.map((x) => dayItemRow(x))}</div></section>` : ''}
+      ${everythingLink()}
+    </main>`,
+    mount(root) {
+      wireTodayCommon(root);
+      wireDayRows(root);
+      root.querySelector('#flate').addEventListener('click', () => lateSheet(tour || { buyer_phone: '' }, s));
+      root.querySelectorAll('[data-pquick]').forEach((b) => b.addEventListener('click', () => {
+        const k = b.getAttribute('data-pquick');
+        const r = saveReaction(prev.id, k, prev.reaction_note || '');
+        undoToast(`${street(prev.address)} · ${reactionLabel(k)}`, () => undoReaction(prev, r));
+      }));
+      root.querySelector('#pmore')?.addEventListener('click', () => reactionPicker(prev));
+    }
+  };
+}
+
+function viewTodayWrap() {
+  const day = todayIso();
+  const tours = store.all('tours').filter((t) => t.date === day);
+  const owed = tours.flatMap((t) => (t.stops || []).filter((x) => x.shown && x.agent_phone && !x.feedback_sent_at));
+  const gear = pickups();
+  const unlogged = tours.filter((t) => !t.finished && (t.stops || []).some((x) => x.shown));
+  const due = sellerDueCount();
+  const still = todoItems().filter((t) => !t.pickup);
+  const nothing = !owed.length && !gear.length && !unlogged.length && !due && !still.length;
+  return {
+    html: html`${todayHeader(`${greet()}${myName() ? ', ' + cap1(myName()) : ''}`, 'Wrapping up today')}
+    <main class="wrap">
+      ${planBanner()}
+      ${owed.length ? html`<section class="sec"><div class="label">Feedback still owed · ${owed.length}</div><div class="card list">${owed.map((x) => html`<button class="row" type="button" data-owed="${x.id}"><span class="grow"><span class="t">${street(x.address)}</span><span class="s">${x.agent || 'Listing agent'}${x.reaction ? ` · ${reactionLabel(x.reaction)}` : ''}</span></span><span class="btn" style="min-height:38px">${icon('text', 16)}Text</span></button>`)}</div></section>` : ''}
+      ${feedbackCard()}
+      ${gear.length ? html`<section class="sec"><div class="label">To bring back · ${gear.length}</div><div class="card list">${gear.slice(0, 5).map((a) => html`<a class="row" href="#/signs"><span class="grow"><span class="t">${a.label || KINDS[a.kind].label}</span><span class="s">${addr(a.property_id)}${a.location_note ? ' · ' + a.location_note : ''}</span></span>${icon('chev', 18)}</a>`)}</div></section>` : ''}
+      ${unlogged.length ? html`<section class="sec"><div class="label">Miles to save</div><div class="card list">${unlogged.map((t) => html`<a class="row" href="#/tour/${t.id}"><span class="grow"><span class="t">${t.name || 'Tour'}</span><span class="s">About ${Math.round(Number(t.miles || 0))} mi · finish the tour to log them</span></span>${icon('chev', 18)}</a>`)}</div></section>` : ''}
+      ${due ? html`<a class="card row" href="#/updates"><span class="grow"><span class="t">Seller updates due · ${due}</span><span class="s">Bestie writes them; you send</span></span>${icon('chev', 18)}</a>` : ''}
+      ${still.length ? html`<section class="sec"><div class="label">Still due today · ${still.length}</div><div class="card list">${still.slice(0, 3).map((t) => todoLine(t, new Set()))}</div></section>` : ''}
+      ${nothing ? html`<div class="card">${buddy('All wrapped up for today.')}</div>` : ''}
+      ${everythingLink()}
+    </main>`,
+    mount(root) {
+      wireTodayCommon(root);
+      root.querySelectorAll('[data-owed]').forEach((b) => b.addEventListener('click', () => {
+        const id = b.getAttribute('data-owed');
+        const stop = tours.flatMap((t) => t.stops || []).find((x) => x.id === id);
+        if (stop) feedbackSheet(stop);
+      }));
+      root.querySelectorAll('[data-fbask]').forEach((b) => b.addEventListener('click', () => askFeedback(b.getAttribute('data-fbask'))));
+      root.querySelectorAll('[data-fblog]').forEach((b) => b.addEventListener('click', () => logFeedback(b.getAttribute('data-fblog'))));
+    }
+  };
+}
+
+// What every Today screen wires: search, the setup cards, the choices, done
+// ticks, the briefing, and the once-a-session syncs.
+function wireTodayCommon(root) {
+  wireInstall(root, { onHide: () => dismissSetup('install') });
+  root.querySelector('#profnot')?.addEventListener('click', () => { dismissSetup('profile'); root.querySelector('[data-profnudge]')?.remove(); });
+  const q = root.querySelector('#q');
+  q?.addEventListener('input', () => {
+    searchText = q.value;
+    const pos = q.selectionStart;
+    render();
+    const again = document.getElementById('q');
+    again.focus();
+    try { again.setSelectionRange(pos, pos); } catch {}
+  });
+  root.querySelector('#findme')?.addEventListener('click', async () => {
+    const fix = await locate();
+    here = nearest(fix);
+    if (!here && fix) toast('None of your properties are within a quarter mile');
+    render();
+  });
+  root.querySelector('#ohpick')?.addEventListener('click', openHousePicker);
+  root.querySelector('#readbrief')?.addEventListener('click', (e) => readBriefing(e.currentTarget));
+  root.querySelectorAll('[data-done]').forEach((b) => b.addEventListener('click', () => {
+    const v = b.getAttribute('data-done');
+    const table = v.slice(0, v.indexOf(':'));
+    const id = v.slice(v.indexOf(':') + 1);
+    if (!store.get(table, id)) return toast('That item is no longer here');
+    store.save(table, table === 'tasks' ? { id, done: true, done_at: new Date().toISOString() } : { id, done: true });
+    undoToast('Done', () => store.save(table, table === 'tasks' ? { id, done: false, done_at: null } : { id, done: false }));
+  }));
+  autoCrmSync();
+  refreshBilling();
+}
+
+function viewTodayFull() {
   const results = searchText ? search(searchText, store.snapshot()) : [];
   const tours = store.all('tours').filter((x) => x.date === todayIso() && !x.finished);
   const live = props().filter((p) => LIVE.includes(p.status)).sort((a, b) => (a.status === 'escrow' ? -1 : 0) - (b.status === 'escrow' ? -1 : 0));
@@ -607,8 +882,8 @@ function viewToday() {
       ${!store.cloud.enabled ? html`<div class="hint" style="text-align:center">Everything is saved on this phone.</div>` : ''}
     </main>`,
     mount(root) {
-      wireInstall(root, { onHide: () => { try { localStorage.setItem('bb:installhide', '1'); } catch {} } });
-      root.querySelector('#profnot')?.addEventListener('click', () => { try { localStorage.setItem('bb:profnudge', '1'); } catch {} root.querySelector('[data-profnudge]')?.remove(); });
+      wireInstall(root, { onHide: () => dismissSetup('install') });
+      root.querySelector('#profnot')?.addEventListener('click', () => { dismissSetup('profile'); root.querySelector('[data-profnudge]')?.remove(); });
       root.querySelectorAll('[data-fbask]').forEach((b) => b.addEventListener('click', () => askFeedback(b.getAttribute('data-fbask'))));
       root.querySelectorAll('[data-fblog]').forEach((b) => b.addEventListener('click', () => logFeedback(b.getAttribute('data-fblog'))));
       const q = root.querySelector('#q');
@@ -3964,6 +4239,7 @@ async function runCommand(s, focus) {
 
 const ROUTES = [
   [/^#?\/?$/, () => viewToday(), 'today'],
+  [/^#\/all$/, () => viewToday(true), 'today'],
   [/^#\/props$/, () => viewProps(), 'props'],
   [/^#\/p\/new$/, () => viewPropEdit(null), 'props'],
   [/^#\/p\/([^/]+)\/edit$/, (m) => viewPropEdit(m[1]), 'props'],
