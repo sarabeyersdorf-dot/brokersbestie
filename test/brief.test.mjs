@@ -215,3 +215,13 @@ test('heads-up tags: saved tags in a fixed order, Occupied left to its badge, no
   const fs = await import('node:fs');
   assert.match(fs.readFileSync(new URL('../db/023_heads_up.sql', import.meta.url), 'utf8'), /add column if not exists heads_up text\[\]/);
 });
+
+test('gate pin: directions go to the gate when one is pinned', async () => {
+  const fs = await import('node:fs');
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  assert.match(app, /function dirLink\(x\)/);
+  assert.match(app, /Pin the gate here/);
+  assert.match(app, /<b>Gate pinned<\/b> · Directions go to the gate/);
+  assert.equal((app.match(/mapLink\(/g) || []).length, 2); // only inside dirLink: every Directions button goes through it
+  assert.match(fs.readFileSync(new URL('../db/024_gate_pin.sql', import.meta.url), 'utf8'), /gate_lat double precision/);
+});

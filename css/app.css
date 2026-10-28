@@ -761,3 +761,7 @@ button.stat { cursor: pointer; }
 .chip.hu { justify-content: center; min-height: 48px; }
 .chip.hu.on { background: var(--ink); border-color: var(--ink); color: #fff; }
 .chip.hu.on.derived { background: var(--bg); color: var(--ink); border: 2px dashed var(--ink); }
+
+/* Gate pin, phase 9d (2026-10-28) */
+.gate-line { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 15px; }
+.getin-txt .btn { margin-top: 6px; }

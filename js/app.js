@@ -130,6 +130,29 @@ function wire(root) {
 // ---------- location ----------
 
 let lastFix = null;
+// Gate pin (2026-10-28, phase 9d): Directions go to the pinned gate when a
+// property (or a stop on one) has it, else to the address as before.
+function dirLink(x) {
+  const p = x && x.gate_lat != null ? x : x && x.property_id ? prop(x.property_id) : null;
+  return p && p.gate_lat != null ? mapLink({ lat: p.gate_lat, lng: p.gate_lng }) : mapLink(x || {});
+}
+// A fresh, high-accuracy fix for the pin (never the cached one).
+function fixNow() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition((pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy }), () => resolve(null), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  });
+}
+async function pinGate(id) {
+  toast('Finding where you are…');
+  const f = await fixNow();
+  if (!f) return toast('Could not get your location. Check that Bestie may use it.');
+  const was = prop(id);
+  store.save('properties', { id, gate_lat: f.lat, gate_lng: f.lng });
+  const ft = f.acc ? Math.round(f.acc * 3.28084) : null;
+  undoToast(`Gate pinned${ft ? ` (within about ${ft} ft)` : ''}`, () => store.save('properties', { id, gate_lat: was.gate_lat ?? null, gate_lng: was.gate_lng ?? null }));
+}
+
 function locate({ quiet } = {}) {
   return new Promise((resolve) => {
     if (!navigator.geolocation) return resolve(null);
@@ -822,7 +845,7 @@ function viewTodayField(focus) {
         ${drive ? html`<div class="small" style="white-space:pre-line">${drive}</div>` : ''}
         ${codes.length ? codeBoxes(codes.map((c) => ({ label: c.label, code: c.code, location_note: c.where }))) : html`<div class="small wait">No code saved for this stop.</div>`}
         <div class="btns">
-          <a class="btn teal" href="${mapLink(s)}" target="_blank" rel="noopener">${icon('pin', 18)}Directions</a>
+          <a class="btn teal" href="${dirLink(s)}" target="_blank" rel="noopener">${icon('pin', 18)}Directions</a>
           ${tour ? html`<a class="btn door-btn" href="#/door/${tour.id}/${i}">At the door</a>` : p ? html`<a class="btn" href="#/p/${p.id}">Open property</a>` : ''}
           <button class="btn" type="button" id="flate">${icon('clock', 18)}Running late</button>
         </div>
@@ -1253,7 +1276,7 @@ function viewHub(id) {
     <main class="wrap">
       ${offlineCard()}
       <div class="actions">
-        <a class="action teal" href="${mapLink(p)}" target="_blank" rel="noopener">${icon('pin', 22)}Directions</a>
+        <a class="action teal" href="${dirLink(p)}" target="_blank" rel="noopener">${icon('pin', 22)}Directions</a>
         ${main ? html`<a class="action" href="tel:${digits(main.phone)}">${icon('phone', 22)}Call ${main.role ? main.role.split(' ')[0].toLowerCase() : ''}</a>
         <a class="action" href="${smsLink(main.phone)}">${icon('text', 22)}Text</a>` : html`<a class="action" href="#/quick/contact/${id}">${icon('person', 22)}Add contact</a><a class="action" href="#/quick/note/${id}">${icon('mic', 22)}Note</a>`}
         <button class="action" type="button" id="share">${icon('share', 22)}Share</button>
@@ -1264,7 +1287,12 @@ function viewHub(id) {
         ${codes.length ? codeBoxes(codes) : html`<a class="card row" href="#/quick/lockbox/${id}"><span class="tile" style="border:0;padding:0"><span class="ic y">${icon('lockbox', 22)}</span></span><span class="grow"><span class="t">Add the lockbox or a code</span><span class="s">Gate, alarm, door keypad, hidden key</span></span></a>`}
         <div class="heads">${occBadge(p.occupancy)}${heads.map((h) => html`<span class="head-tag">${h}</span>`)}<button class="head-edit" type="button" id="headsup">${heads.length || p.occupancy ? 'Edit heads-up' : '+ Heads-up: dog, cattle guard…'}</button></div>
         ${p.showing_notes ? html`<div class="getin-txt"><div class="getin-k">How to get in</div><div style="white-space:pre-line">${p.showing_notes}</div></div>` : ''}
-        ${p.directions ? html`<div class="getin-txt"><div class="getin-k">Driving in</div><div style="white-space:pre-line">${p.directions}</div></div>` : ''}
+        <div class="getin-txt"><div class="getin-k">Driving in</div>
+          ${p.directions ? html`<div style="white-space:pre-line">${p.directions}</div>` : ''}
+          ${p.gate_lat != null ? html`<div class="gate-line">${icon('pin', 16)}<b>Gate pinned</b> · Directions go to the gate</div>
+            <div class="btns"><button class="btn" type="button" id="gatepin" style="min-height:40px">Move the pin here</button><button class="btn ghost" type="button" id="gateoff" style="min-height:40px">Remove</button></div>`
+            : html`<button class="btn" type="button" id="gatepin" style="min-height:40px">${icon('pin', 16)}Pin the gate here</button><div class="hint">Stand at the gate and tap it: Directions will take everyone there.</div>`}
+        </div>
       </section>
 
       <button class="card row nextup" type="button" id="nextup">
@@ -1306,6 +1334,12 @@ function viewHub(id) {
       root.querySelector('#nextup').addEventListener('click', () => datesSheet(id));
       root.querySelector('#statchip')?.addEventListener('click', () => statusSheet(p));
       root.querySelector('#headsup').addEventListener('click', () => headsUpSheet(id));
+      root.querySelector('#gatepin').addEventListener('click', () => pinGate(id));
+      root.querySelector('#gateoff')?.addEventListener('click', () => {
+        const was = prop(id);
+        store.save('properties', { id, gate_lat: null, gate_lng: null });
+        undoToast('Gate pin removed', () => store.save('properties', { id, gate_lat: was.gate_lat, gate_lng: was.gate_lng }));
+      });
       root.querySelector('#hubmore').addEventListener('click', () => hubMoreSheet(p));
       root.querySelectorAll('[data-access]').forEach((b) => b.addEventListener('click', () => accessSheet(store.get('access', b.getAttribute('data-access')))));
       root.querySelectorAll('[data-edit-person]').forEach((b) => b.addEventListener('click', () => personSheet(id, store.get('people', b.getAttribute('data-edit-person')))));
@@ -1905,7 +1939,7 @@ function viewSigns() {
         ${pick.has(a.id) ? html`<div class="wait small">${STATUS[prop(a.property_id)?.status]}: time to pick it up</div>` : ''}
         <div class="btns">
           ${a.status === 'office' ? html`<button class="btn" type="button" data-out="${a.id}">Put it back out</button>` : html`<button class="btn dark" type="button" data-got="${a.id}">${icon('check', 18)}Got it, back in the office</button>`}
-          <a class="btn" href="${mapLink(prop(a.property_id) || {})}" target="_blank" rel="noopener">${icon('pin', 18)}Directions</a>
+          <a class="btn" href="${dirLink(prop(a.property_id) || {})}" target="_blank" rel="noopener">${icon('pin', 18)}Directions</a>
         </div>
       </div>`) : html`<div class="card empty">${signTab === 'pickup' ? 'Nothing to pick up. When a listing closes or cancels, its sign and lockbox show up here.' : 'Nothing here.'}</div>`}</div>
       <a class="btn block" href="#/quick/sign">+ Log a sign or lockbox</a>
@@ -2370,7 +2404,7 @@ function viewTour(id) {
         ${s.requested_at && !s.confirmed ? html`<div class="small wait">Showing requested ${niceDate(s.requested_at.slice(0, 10))} · waiting to hear back</div>` : ''}
         <a class="btn door-btn block" href="#/door/${id}/${i}">${icon('key', 18)}At the door</a>
         <div class="btns">
-          <a class="btn" href="${mapLink(s)}" target="_blank" rel="noopener">Navigate</a>
+          <a class="btn" href="${dirLink(s)}" target="_blank" rel="noopener">Navigate</a>
           <button class="btn ${s.shown ? 'green' : 'dark'}" type="button" data-shown="${s.id}">${s.shown ? '✓ Shown' : 'Mark shown'}</button>
         </div>
         <div class="btns"><button class="btn ghost" type="button" data-editstop="${s.id}">${icon('edit', 16)}Edit stop</button><button class="btn ghost" type="button" data-confirm="${s.id}">${s.confirmed ? 'Undo confirmed' : 'Mark confirmed'}</button></div>
@@ -3002,7 +3036,7 @@ function viewDoor(tourId, i) {
           ${s.agent_phone ? html`<a class="door-btn2" href="tel:${digits(s.agent_phone)}">${icon('phone', 20)}Call agent</a>` : html`<button class="door-btn2" type="button" disabled>No agent phone</button>`}
         </div>
         ${next ? html`<a class="door-next" href="#/door/${tourId}/${i + 1}"><span class="l">Next stop${next.arrive != null ? ` · ${formatClock(next.arrive)}` : ''}</span><span class="a">${nextStopWords(next)} ›</span></a>
-          <a class="door-drive" href="${mapLink(next)}" target="_blank" rel="noopener">Directions to the next stop</a>`
+          <a class="door-drive" href="${dirLink(next)}" target="_blank" rel="noopener">Directions to the next stop</a>`
           : html`<a class="door-next" href="#/tour/${tourId}"><span class="l">Last stop</span><span class="a">Finish the tour ›</span></a>`}
       </div>
     </main>`,

@@ -794,3 +794,15 @@ tag, saved at once. **Occupied** switches the existing `occupancy` field
 dashed, "from your notes", and cannot be tapped off there. `headsUp()` merges
 saved tags with the ones from notes, in list order: shown as plain words on
 the property page, At the door, and Today's next-stop card.
+
+## Gate pin (2026-10-28, phase 9d)
+
+`properties.gate_lat` / `gate_lng` (db/024, applied). In Getting in → Driving
+in: **Pin the gate here** (`pinGate`: a fresh high-accuracy fix via
+`fixNow`, never the cached one; says "within about N ft"; Undo). Once set:
+"**Gate pinned** · Directions go to the gate", Move the pin here, Remove.
+`dirLink(x)` is the ONE way the app builds Directions: a property (or a tour
+stop on one) with a gate pin goes to the gate, else the address. A test
+fails if `mapLink(` is used anywhere but inside it. Not yet: the 24-hour share
+page and the reminders function still use the address pin (that needs the
+function redeployed).
