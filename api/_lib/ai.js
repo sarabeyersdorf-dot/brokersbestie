@@ -4,6 +4,8 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { env, caller, db } from './server.js';
+import { teamOf } from './crm.js';
+import { lapsedReason } from './billing-server.js';
 
 export const MODEL = 'claude-opus-5-5';
 
@@ -19,6 +21,10 @@ export async function refuse(req) {
   if (!env('SUPABASE_URL')) return null;
   const user = await caller(req);
   if (!user) return { status: 401, error: 'Sign in to use this' };
+  // A lapsed plan (once billing is switched on) stops the paid features.
+  const teamId = await teamOf(user.id).catch(() => null);
+  const lapsed = teamId ? await lapsedReason(teamId).catch(() => null) : null;
+  if (lapsed) return { status: 402, error: lapsed };
   const cap = dailyLimit();
   let used;
   try {

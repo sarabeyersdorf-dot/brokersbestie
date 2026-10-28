@@ -586,3 +586,39 @@ page (the app is at brokersbestie.vercel.app).
   A `@` 216.150.1.1, CNAME `www` → Vercel's own target. Supabase Site URL is
   https://brokersbestie.app (www and vercel.app in Redirect URLs); Dropbox
   Chooser domains include both. Vercel is on Pro (Sara confirmed).
+
+## Plans and billing — Stripe (2026-10-28)
+
+From Cowork's handoff (`20261028_CWtoCC_brokersbestie-stripe-billing.md`) and
+Sara's two choices: **per agent, one bill for the team** (Stripe quantity =
+people on the team, synced on every `GET /api/billing`), and **read-only** when
+a trial ends or payment stops (everything visible, nothing new saved; syncing,
+sheet reading and Tell Bestie stop; **safety check-ins and reminders never**).
+- Prices live in Stripe, found by lookup key: `bestie_founding_annual` $69/yr
+  (offered through Dec 31 2026 Pacific, `plansOffered`), `bestie_standard_annual`
+  $99/yr, `bestie_monthly` $12/mo. `js/billing.js` is the one rule
+  (`entitlement`, `planSentence`), shared by phone and server; the database
+  enforces the same rule as `bb_can_write(team)` (db/022) in the insert/update/
+  delete policies of the 16 team tables. **Change one, change the other.**
+- **The 14-day trial starts when the team is made, no card, no Stripe step.**
+  Choosing a plan during it carries the same end date into Stripe
+  (`trial_end`, `payment_method_collection: if_required`, cancel if no card),
+  so nothing is charged early. Differs from Cowork's spec on purpose.
+- `bb_config.billing_enforced` is the switch: **'false' until launch**, so
+  nothing locks yet. Sara and James's team is `comped`.
+- `api/billing.js`: GET status, POST `checkout` (hosted Checkout) / `portal`
+  (Customer Portal). `api/stripe-webhook.js` verifies `STRIPE_WEBHOOK_SECRET`
+  on the raw body and, for every event, re-reads the subscription and writes
+  the `billing` row (order and repeats cannot leave it wrong). Stripe by plain
+  fetch (`api/_lib/stripe.js`), no package. Server routes check
+  `lapsedReason()` (`api/_lib/billing-server.js`) because the service key
+  bypasses RLS.
+- Phone: `#/billing` (NOT `#/plan` — that is the tour planner), Settings →
+  Your plan, a Today banner only when something needs doing, and
+  `store.js` refuses writes while `readOnly` (toast explains; `checkins` exempt).
+- Sara's steps (never paste keys in chat): Vercel `STRIPE_SECRET_KEY` and
+  `STRIPE_WEBHOOK_SECRET`; Stripe webhook to
+  `https://brokersbestie.app/api/stripe-webhook` with the 7 events in
+  `HANDLED`; Customer Portal settings; the same product/prices in live mode
+  with the same lookup keys; at launch set `billing_enforced` to 'true'.
+Guarded by `test/billing.test.mjs`.

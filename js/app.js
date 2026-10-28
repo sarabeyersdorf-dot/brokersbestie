@@ -10,6 +10,7 @@ import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
 import { chooseFromDropbox, dropboxReady } from './dropbox.js';
 import { planShowings, ACTION_WORDS } from './showings.js';
+import { plansOffered, planSentence } from './billing.js';
 import { CONTACT_KINDS, parseContacts, planImport, contactsChoice, contactsMode } from './contacts.js';
 import { CRM_CHOICES } from './crmlist.js';
 import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText, feedbackRequestText } from './messages.js';
@@ -530,6 +531,7 @@ function viewToday() {
       extra: html`<label class="search">${icon('search', 18)}<input id="q" type="search" placeholder="Search everything: address, code, name…" value="${searchText}" aria-label="Search everything" autocomplete="off"></label>`
     })}
     <main class="wrap">
+      ${!searchText ? planBanner() : ''}
       ${searchText ? html`<section class="sec">
         <div class="sec-head"><div class="label accent">${results.length} found</div><button class="btn ghost" type="button" id="clearq" style="min-height:36px">Clear</button></div>
         <div class="card list">${results.length ? results.slice(0, 40).map((r) => html`<a class="row" href="${r.href || (r.propertyId ? '#/p/' + r.propertyId : '#/')}">
@@ -622,6 +624,7 @@ function viewToday() {
       wireFilter(root);
       wireDayRows(root.querySelector('.brief') || document.createElement('div'));
       autoCrmSync();
+      refreshBilling();
       root.querySelectorAll('[data-done]').forEach((b) => b.addEventListener('click', () => {
         // Split at the FIRST colon only: ids from a CRM contain colons themselves.
         const v = b.getAttribute('data-done');
@@ -2840,6 +2843,8 @@ function viewSettings() {
             <button class="btn ghost block" type="button" id="signout">Sign out</button>`}
       </section>
 
+      ${c.user ? html`<a class="card row sec" href="#/billing"><span class="grow"><span class="t">Your plan</span><span class="s">${s.billing ? planSentence(s.billing) : 'Plans and billing'}</span></span>${icon('chev', 18)}</a>` : ''}
+
       <section class="card pad sec" id="pushcard">
         <div class="label accent">Reminders on this phone</div>
         <div class="small">A tap on the shoulder when it is time to leave for each showing and appointment (from where you last were, else your home base, using the drive time), a 7:30 list of what is due today, and an “Are you OK?” when a safety check-in runs out.</div>
@@ -3329,6 +3334,87 @@ function readBriefing(button) {
 
 // ---------- CRM sync from the phone ----------
 
+// ---------- your plan (2026-10-28) ----------
+// The team's plan from /api/billing, cached in settings (billing, readOnly) so
+// the banner and the read-only guard work offline. Fetched once a session and
+// again after Stripe sends someone back (?billing=done).
+let billingChecked = false;
+async function refreshBilling(force = false) {
+  if ((billingChecked && !force) || !store.cloud.user || !navigator.onLine) return store.settings().billing || null;
+  billingChecked = true;
+  try {
+    const b = await api('/api/billing');
+    const was = store.settings().readOnly;
+    store.saveSettings({ billing: b, readOnly: !b.canWrite });
+    if (was !== !b.canWrite) render();
+    return b;
+  } catch { return store.settings().billing || null; }
+}
+let roToastAt = 0;
+store.onReadOnlyBlock(() => {
+  if (Date.now() - roToastAt < 4000) return;
+  roToastAt = Date.now();
+  toast('Your plan has ended, so changes are paused. Choose a plan under Settings → Your plan.');
+});
+
+// The banner at the top of Today: only when there is something to do.
+function planBanner() {
+  const b = store.settings().billing;
+  if (!b || !store.cloud.user) return '';
+  const urgent = b.state === 'lapsed' && b.enforced;
+  const soon = b.state === 'trial' && !b.subscribed && b.daysLeft <= 3;
+  if (!urgent && !soon && b.state !== 'past_due') return '';
+  return html`<a class="card pad sec plan-banner ${urgent || b.state === 'past_due' ? 'bad' : ''}" href="#/billing">
+    <div class="label">${urgent ? 'Read-only' : b.state === 'past_due' ? 'Payment problem' : 'Free trial'}</div>
+    <div>${planSentence(b)}</div><div class="small" style="font-weight:700">See plans →</div></a>`;
+}
+
+function viewBilling() {
+  const b = store.settings().billing;
+  const signedIn = !!store.cloud.user;
+  const done = /[?&]billing=done/.test(location.search);
+  const offer = (b && b.plans) || plansOffered();
+  return {
+    html: html`${header({ back: '#/settings', kicker: 'Brokers Bestie', title: 'Your plan' })}
+    <main class="wrap">
+      ${done ? html`<div class="card pad sec" style="border-color:var(--done)"><b>Thank you!</b> Your plan is being set up. It can take a minute to show here.</div>` : ''}
+      ${!signedIn ? html`<div class="card pad sec">Sign in first (Settings), then choose a plan for your team.</div>`
+        : html`<section class="card pad sec">
+          <div class="label accent">Right now</div>
+          <div id="plannow" style="font-size:18px;font-weight:600">${b ? planSentence(b) : 'Checking…'}</div>
+          ${b && b.seats ? html`<div class="small">${b.seats} agent${b.seats === 1 ? '' : 's'} on your team. You pay per agent; the count follows your team.</div>` : ''}
+          ${b && b.subscribed ? html`<button class="btn dark block" type="button" id="portal">Manage billing (card, plan, cancel)</button>` : ''}
+        </section>
+        ${b && (b.subscribed || b.state === 'comped') ? '' : html`<section class="sec">
+          <div class="label">Choose a plan</div>
+          <div class="small">Your first 14 days are free and need no card. Pick a plan now or any time before then: you are not charged until the trial ends.</div>
+          ${offer.map((p) => html`<button class="card pad plan-pick" type="button" data-plan="${p.id}" style="width:100%;text-align:left">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><b style="font-size:19px">${p.label}</b><span class="num" style="font-size:26px">${p.price}<span class="small"> / agent / ${p.per}</span></span></div>
+            ${p.note ? html`<div class="small">${p.note}</div>` : ''}</button>`)}
+          ${b && !b.payments ? html`<div class="small">Payments are not switched on yet.</div>` : ''}
+        </section>`}`}
+      <p class="small muted">Payments are handled by Stripe. Nothing is ever deleted if a plan ends: everything stays readable, and changes pause until a plan is active again. <a href="terms.html">Terms</a></p>
+    </main>`,
+    async mount(root) {
+      if (signedIn) {
+        const fresh = await refreshBilling(true);
+        if (done) history.replaceState(null, '', location.pathname + '#/billing');
+        if (fresh && JSON.stringify(fresh) !== JSON.stringify(b)) return render();
+      }
+      root.querySelectorAll('[data-plan]').forEach((el) => el.addEventListener('click', async () => {
+        el.disabled = true;
+        try { const r = await api('/api/billing', { method: 'POST', body: JSON.stringify({ op: 'checkout', plan: el.dataset.plan }) }); location.href = r.url; }
+        catch (e) { toast(e.message); el.disabled = false; }
+      }));
+      root.querySelector('#portal')?.addEventListener('click', async (e) => {
+        e.currentTarget.disabled = true;
+        try { const r = await api('/api/billing', { method: 'POST', body: JSON.stringify({ op: 'portal' }) }); location.href = r.url; }
+        catch (err) { toast(err.message); e.currentTarget.disabled = false; }
+      });
+    }
+  };
+}
+
 let crmChecked = false;
 // Once a session, when signed in: ask the server to pull the CRM if it has not
 // in the last hour, then fetch what it wrote.
@@ -3694,6 +3780,7 @@ const ROUTES = [
   [/^#\/tour\/([^/]+)$/, (m) => viewTour(m[1]), 'tours'],
   [/^#\/vendors$/, () => viewVendors(), 'today'],
   [/^#\/updates$/, () => viewSellerUpdates(), 'today'],
+  [/^#\/billing$/, () => viewBilling(), 'today'],
   [/^#\/contacts(?:\/(.+))?$/, (m) => viewContacts(m[1] ? decodeURIComponent(m[1]) : null), 'today'],
   [/^#\/showings$/, () => viewShowingsImport(), 'calendar'],
   [/^#\/taxes\/(\d{4})$/, (m) => viewTaxes(m[1]), 'today'],

@@ -94,9 +94,25 @@ export function crmLinked(r) {
 
 // { quiet: true }: saved and synced, but the screen is not redrawn (typing in
 // a tour stop's code or note box must not wipe the page).
+// Read-only when the team's plan has lapsed and billing is switched on
+// (settings.readOnly, set from /api/billing). The database refuses those
+// writes anyway (bb_can_write, db/022); stopping them here keeps the phone from
+// piling up changes that can never sync, and lets the screen say why.
+// Safety check-ins always save.
+const ALWAYS_WRITABLE = ['checkins'];
+const readOnlyListeners = new Set();
+export function onReadOnlyBlock(fn) { readOnlyListeners.add(fn); }
+export const isReadOnly = () => !!settings().readOnly;
+function blocked(table) {
+  if (!isReadOnly() || ALWAYS_WRITABLE.includes(table)) return false;
+  for (const fn of readOnlyListeners) fn();
+  return true;
+}
+
 export function save(table, row, { quiet = false } = {}) {
   const now = new Date().toISOString();
   const existing = row.id ? get(table, row.id) : null;
+  if (blocked(table)) return existing || { ...row };
   const next = { ...(existing || {}), ...row, id: row.id || uid(), updated_at: now, _dirty: true };
   // Changed on this phone -> send it to the CRM at the next sync (two-way sync).
   if ((table === 'dates' || table === 'events') && crmLinked(next) && !next.sample) {
@@ -116,6 +132,7 @@ export function save(table, row, { quiet = false } = {}) {
 // Many new rows at once (a contacts import): one write and one redraw, not
 // one per row. Returns the saved rows.
 export function saveMany(table, rows) {
+  if (blocked(table)) return [];
   const now = new Date().toISOString();
   const me = OWNED.includes(table) ? settings().myName : null;
   const made = rows.map((r) => ({ ...r, id: r.id || uid(), created_at: now, updated_at: now, _dirty: true, ...(me && !r.owner ? { owner: me } : {}) }));
@@ -127,6 +144,7 @@ export function saveMany(table, rows) {
 }
 
 export function remove(table, id) {
+  if (blocked(table)) return null;
   const gone = all(table).find((r) => r.id === id) || null;
   data[table] = all(table).filter((r) => r.id !== id);
   writeJson(KEY(table), data[table]);
@@ -293,6 +311,8 @@ export async function signOut() {
   await c.auth.signOut({ scope: 'local' }).catch(() => {});
   cloud.user = null;
   cloud.teamId = null;
+  // Billing belongs to the signed-in team; a signed-out phone is never read-only.
+  writeJson(SETTINGS, { ...settings(), readOnly: false, billing: null });
   emit();
 }
 

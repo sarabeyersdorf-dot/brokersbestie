@@ -11,6 +11,7 @@
 
 import { send, readBody, caller, db, env } from './_lib/server.js';
 import { teamOf, linkOf, runSync } from './_lib/crm.js';
+import { lapsedReason } from './_lib/billing-server.js';
 import { CRM_CHOICES, KEY_CRMS } from '../js/crmlist.js';
 import { CONTACT_KINDS, contactsChoice, contactsMode } from '../js/contacts.js';
 
@@ -31,6 +32,11 @@ export default async function handler(req, res) {
   if (req.method === 'GET') return send(res, 200, status(await linkOf(teamId)));
   if (req.method !== 'POST') return send(res, 405, { error: 'GET or POST' });
   const body = await readBody(req).catch(() => ({}));
+  // Disconnecting is always allowed; everything else needs a live plan.
+  if (body.op !== 'disconnect') {
+    const lapsed = await lapsedReason(teamId).catch(() => null);
+    if (lapsed) return send(res, 402, { error: lapsed });
+  }
   if (body.op === 'save' && KEY_CRMS.includes(body.provider)) {
     const crm = CRM_CHOICES.find((c) => c.id === body.provider);
     const key = String(body.key || '').trim();

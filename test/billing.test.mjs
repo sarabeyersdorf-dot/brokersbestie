@@ -1,0 +1,122 @@
+// Plans, the read-only rule and the Stripe plumbing (2026-10-28).
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { createHmac } from 'node:crypto';
+import { entitlement, plansOffered, planSentence, PLANS, TRIAL_DAYS } from '../js/billing.js';
+import { formEncode, verifyStripeSignature, billingFromSubscription } from '../api/_lib/stripe.js';
+import { subscriptionIdOf, applyEvent } from '../api/stripe-webhook.js';
+
+const NOW = new Date('2026-11-10T18:00:00Z');
+const daysAgo = (n) => new Date(NOW - n * 86400e3).toISOString();
+
+test('a new team is on a free trial for 14 days, then lapses', () => {
+  const fresh = entitlement(null, daysAgo(3), { enforced: true, now: NOW });
+  assert.equal(fresh.state, 'trial');
+  assert.equal(fresh.daysLeft, TRIAL_DAYS - 3);
+  assert.equal(fresh.canWrite, true);
+  const old = entitlement(null, daysAgo(15), { enforced: true, now: NOW });
+  assert.equal(old.state, 'lapsed');
+  assert.equal(old.canWrite, false);
+});
+
+test('nothing locks while the switch is off', () => {
+  assert.equal(entitlement(null, daysAgo(90), { enforced: false, now: NOW }).canWrite, true);
+});
+
+test('paying, past due and comped teams can write; cancelled cannot', () => {
+  for (const status of ['active', 'trialing', 'past_due']) assert.equal(entitlement({ status, stripe_subscription_id: 's' }, daysAgo(90), { enforced: true, now: NOW }).canWrite, true, status);
+  assert.equal(entitlement({ comped: true }, daysAgo(400), { enforced: true, now: NOW }).state, 'comped');
+  assert.equal(entitlement({ status: 'canceled', stripe_subscription_id: 's' }, daysAgo(90), { enforced: true, now: NOW }).canWrite, false);
+  assert.equal(entitlement({ status: 'unpaid' }, daysAgo(90), { enforced: true, now: NOW }).canWrite, false);
+});
+
+test('the SQL rule names the same paying statuses as the app', () => {
+  const sql = fs.readFileSync(new URL('../db/022_billing.sql', import.meta.url), 'utf8');
+  for (const s of ['trialing', 'active', 'past_due']) assert.match(sql, new RegExp(`'${s}'`));
+  assert.match(sql, /interval '14 days'/);
+  // Safety check-ins are never blocked by billing.
+  assert.doesNotMatch(sql, /'checkins'/);
+});
+
+test('founding price is offered through Dec 31 2026 Pacific, then gone', () => {
+  assert.ok(plansOffered(new Date('2027-01-01T07:59:00Z')).some((p) => p.id === 'founding')); // 11:59 pm Dec 31 PT
+  assert.ok(!plansOffered(new Date('2027-01-01T08:01:00Z')).some((p) => p.id === 'founding'));
+  assert.deepEqual(PLANS.map((p) => p.lookup), ['bestie_founding_annual', 'bestie_standard_annual', 'bestie_monthly']);
+});
+
+test('plain-words status', () => {
+  assert.match(planSentence(entitlement(null, daysAgo(13), { now: NOW })), /1 day left/);
+  assert.match(planSentence(entitlement(null, daysAgo(30), { enforced: true, now: NOW })), /still here to look at/);
+  const sub = entitlement({ status: 'active', stripe_subscription_id: 's', plan: 'bestie_standard_annual', current_period_end: '2027-11-10T00:00:00Z' }, daysAgo(30), { now: NOW });
+  assert.match(planSentence(sub), /Yearly plan \(\$99 per agent per year\)\. Renews/);
+});
+
+test('Stripe form encoding handles nested objects and arrays', () => {
+  const s = formEncode({ mode: 'subscription', line_items: [{ price: 'p1', quantity: 2 }], subscription_data: { metadata: { team_id: 't' } }, lookup_keys: ['a'], skip: null }).toString();
+  assert.equal(decodeURIComponent(s), 'mode=subscription&line_items[0][price]=p1&line_items[0][quantity]=2&subscription_data[metadata][team_id]=t&lookup_keys[0]=a');
+});
+
+test('webhook signature: good, forged, stale, missing', () => {
+  const raw = '{"id":"evt_1"}';
+  const t = Math.floor(NOW / 1000);
+  const sig = createHmac('sha256', 'whsec_x').update(`${t}.${raw}`).digest('hex');
+  assert.equal(verifyStripeSignature(raw, `t=${t},v1=${sig}`, 'whsec_x', { now: +NOW }), true);
+  assert.equal(verifyStripeSignature(raw + ' ', `t=${t},v1=${sig}`, 'whsec_x', { now: +NOW }), false);
+  assert.equal(verifyStripeSignature(raw, `t=${t},v1=${sig}`, 'whsec_other', { now: +NOW }), false);
+  assert.equal(verifyStripeSignature(raw, `t=${t},v1=${sig}`, 'whsec_x', { now: +NOW + 600e3 }), false);
+  assert.equal(verifyStripeSignature(raw, '', 'whsec_x', { now: +NOW }), false);
+  assert.equal(verifyStripeSignature(raw, `t=${t},v1=${sig}`, '', { now: +NOW }), false);
+});
+
+const SUB = {
+  id: 'sub_1', object: 'subscription', customer: 'cus_1', status: 'trialing', trial_end: 1794000000, cancel_at_period_end: false,
+  metadata: { team_id: 'team-1' },
+  items: { data: [{ id: 'si_1', quantity: 2, current_period_end: 1794000000, price: { lookup_key: 'bestie_monthly' } }] }
+};
+
+test('a subscription becomes one billing row', () => {
+  const r = billingFromSubscription(SUB);
+  assert.equal(r.stripe_item_id, 'si_1');
+  assert.equal(r.plan, 'bestie_monthly');
+  assert.equal(r.seats, 2);
+  assert.equal(r.current_period_end, new Date(1794000000 * 1000).toISOString());
+});
+
+test('the subscription is found on every event shape', () => {
+  assert.equal(subscriptionIdOf({ data: { object: SUB } }), 'sub_1');
+  assert.equal(subscriptionIdOf({ data: { object: { object: 'checkout.session', subscription: 'sub_2' } } }), 'sub_2');
+  assert.equal(subscriptionIdOf({ data: { object: { object: 'invoice', parent: { subscription_details: { subscription: 'sub_3' } } } } }), 'sub_3');
+  assert.equal(subscriptionIdOf({ data: { object: { object: 'invoice' } } }), null);
+});
+
+test('an event re-reads the subscription and writes the team row', async () => {
+  const writes = [];
+  const out = await applyEvent({ type: 'invoice.payment_failed', data: { object: { object: 'invoice', subscription: 'sub_1' } } }, {
+    stripeImpl: async (path) => { assert.equal(path, '/subscriptions/sub_1'); return { ...SUB, status: 'past_due' }; },
+    dbImpl: async (path, init) => { writes.push([path, init]); return []; }
+  });
+  assert.deepEqual(out, { team_id: 'team-1', status: 'past_due' });
+  assert.equal(writes[0][1].body.team_id, 'team-1');
+  assert.equal(writes[0][1].body.status, 'past_due');
+});
+
+test('a subscription with no team metadata is matched by its customer', async () => {
+  const out = await applyEvent({ type: 'customer.subscription.updated', data: { object: { ...SUB, metadata: {} } } }, {
+    stripeImpl: async () => ({ ...SUB, metadata: {} }),
+    dbImpl: async (path) => (path.startsWith('billing?stripe_customer_id') ? [{ team_id: 'team-9' }] : [])
+  });
+  assert.equal(out.team_id, 'team-9');
+});
+
+test('events we do not handle are ignored without calling Stripe', async () => {
+  const out = await applyEvent({ type: 'charge.refunded', data: { object: {} } }, { stripeImpl: async () => { throw new Error('should not call'); } });
+  assert.equal(out.ignored, true);
+});
+
+test('the billing screen is its own route, apart from the tour planner', () => {
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  assert.match(app, /\[\/\^#\\\/billing\$\/, \(\) => viewBilling\(\)/);
+  assert.equal((app.match(/^function viewPlan\(/gm) || []).length, 1);
+  assert.match(fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8'), /'\.\/js\/billing\.js'/);
+});
