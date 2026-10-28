@@ -80,10 +80,18 @@ function buddy(text, mood = 'wink') {
   return html`<div class="buddy-empty">${raw(face)}<span>${text}</span></div>`;
 }
 
+// Occupied or vacant on every tour stop (2026-10-28): no color of its own.
+// OCCUPIED is a solid badge with a small person; VACANT is an outline. Not
+// known shows nothing (a lone "?" read like an error, 2026-10-27).
+function occBadge(o, { big = false, extra = '' } = {}) {
+  if (o !== 'O' && o !== 'V') return '';
+  const word = o === 'O' ? 'Occupied' : 'Vacant';
+  return html`<span class="occb ${o === 'O' ? 'solid' : ''} ${big ? 'big' : ''}" title="${word}">${o === 'O' ? icon('person', big ? 22 : 12) : ''}${word}${extra ? ` · ${extra}` : ''}</span>`;
+}
+const occWord = (o) => (o === 'O' ? 'Occupied' : o === 'V' ? 'Vacant' : '');
+
 function badges(p, onDark) {
-  const occ = p.occupancy === 'O' ? html`<span class="occ O" title="Occupied: keep the booked time">O</span>`
-    : p.occupancy === 'V' ? html`<span class="occ V" title="Vacant">V</span>`
-    : ''; // unknown occupancy shows nothing: a lone "?" read like an error
+  const occ = occBadge(p.occupancy);
   return html`<span class="badges">${occ}${p.well ? html`<span class="dot w" title="Well">W</span>` : ''}${p.septic ? html`<span class="dot s" title="Septic">S</span>` : ''}${onDark ? '' : ''}</span>`;
 }
 
@@ -582,7 +590,7 @@ function viewToday() {
 
       ${tours.length ? html`<section class="sec">
         <div class="sec-head"><div class="label">Tours today · ${tours.length}</div><a class="small" style="color:var(--teal-text);font-weight:600" href="#/plan">Plan a tour →</a></div>
-        <div class="card list">${tours.map((t) => html`<a class="row" href="#/tour/${t.id}"><span class="num" style="font-size:20px;width:70px">${t.start_minutes != null ? formatClock(t.start_minutes) : ''}</span><span class="grow"><span class="t">${t.name || 'Tour'}</span><span class="s">${(t.stops || []).length} stops · ${(t.stops || []).filter((x) => x.confirmed).length} confirmed</span></span>${icon('chev', 18)}</a>`)}</div>
+        <div class="card list">${tours.map((t) => html`<a class="row" href="#/tour/${t.id}">${(t.stops || []).length ? '' : html`<span class="num" style="font-size:20px;width:70px">${t.start_minutes != null ? formatClock(t.start_minutes) : ''}</span>`}<span class="grow"><span class="t">${t.name || 'Tour'}</span><span class="s">${(t.stops || []).length} stops · ${(t.stops || []).filter((x) => x.confirmed).length} confirmed</span>${(t.stops || []).length ? html`<span class="tour-stops">${t.stops.map((x) => html`<span class="tour-stop ${x.shown ? 'done' : ''}">${x.arrive != null ? html`<span class="num">${formatClock(x.arrive)}</span>` : ''}<span class="a">${String(x.address || '').split(',')[0]}</span>${occBadge(x.occ)}</span>`)}</span>` : ''}</span>${icon('chev', 18)}</a>`)}</div>
       </section>` : ''}
       ${!searchText && (!todos.length || !tours.length) ? html`<section class="sec"><div class="btns">${!tours.length ? html`<a class="btn" href="#/plan">${icon('mic', 18)}Plan a tour</a>` : ''}${!todos.length && !empty ? html`<button class="btn" type="button" id="addtodo">${icon('plus', 18)}Add a to-do</button>` : ''}</div></section>` : ''}
 
@@ -1647,7 +1655,7 @@ function viewPlan() {
           <button class="drag" type="button" data-drag aria-label="Drag to move ${l.address}">${icon('grip', 22)}</button>
           <button type="button" data-leg="${l.id}" style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:0;padding:0;text-align:left;color:var(--ink);cursor:pointer">
             <span class="dot" style="background:var(--ink);width:30px;height:30px;font-family:var(--tall);font-size:15px;flex-shrink:0">${i + 1}</span>
-            <span class="grow"><span class="t">${l.address}${l.occ === 'O' ? html` <span class="occ O" style="font-size:16px" title="Owner-occupied">O</span>` : ''}</span>
+            <span class="grow"><span class="t">${l.address}${l.occ ? html` ${occBadge(l.occ)}` : ''}</span>
               <span class="s">${[l.at != null ? `Set time ${formatClock(l.at)}` : l.occ === 'O' ? 'Owner-occupied: tap to set the time' : '', l.property_id ? 'Codes on file' : '', l.lat != null ? (i === 0 ? `${Math.round(l.legMiles * 10) / 10} mi from the start` : `${Math.round(l.legMiles * 10) / 10} mi · ${l.legMinutes} min drive`) : 'Not found on the map: time unknown'].filter(Boolean).join(' · ')}</span>
               ${l.approximate ? html`<span class="s wait">Street not found: placed at the town center</span>` : ''}
               ${l.waitMinutes > 0 ? html`<span class="s ok">Early: wait ${l.waitMinutes} min</span>` : ''}${l.lateMinutes > 0 ? html`<span class="s wait">${l.lateMinutes} min late for the set time</span>` : ''}
@@ -1803,7 +1811,7 @@ function viewTour(id) {
   const setStop = (sid, patch, opts) => save({ stops: fresh().map((s) => (s.id === sid ? { ...s, ...patch } : s)) }, opts);
   const quietSave = (patch) => store.save('tours', { id, ...patch }, { quiet: true });
   // Occupancy in words: a bare "?" meant nothing to anyone (Cowork, 2026-10-23).
-  const occ = (o) => (o === 'O' ? html`<span class="occ O">O</span><span class="occ-word">Occupied</span>` : o === 'V' ? html`<span class="occ V">V</span><span class="occ-word">Vacant</span>` : '');
+  const occ = (o) => occBadge(o);
   return {
     html: html`${header({
       back: '#/tours', kicker: 'Tour mode', title: t.name,
@@ -1852,7 +1860,7 @@ function viewTour(id) {
         </div>
         <div class="btns"><button class="btn ghost" type="button" data-editstop="${s.id}">${icon('edit', 16)}Edit stop</button><button class="btn ghost" type="button" data-confirm="${s.id}">${s.confirmed ? 'Undo confirmed' : 'Mark confirmed'}</button></div>
       </div>
-      ${i < stops.length - 1 && stops[i + 1].leg_miles ? html`<div class="leg">↓ about ${stops[i + 1].leg_minutes} min · ${stops[i + 1].leg_miles} mi</div>` : ''}`)}
+      ${i < stops.length - 1 && stops[i + 1].leg_miles ? html`<div class="leg">↓ about ${stops[i + 1].leg_minutes} min · ${stops[i + 1].leg_miles} mi${occWord(stops[i + 1].occ) ? ` · next is ${occWord(stops[i + 1].occ).toLowerCase()}` : ''}</div>` : ''}`)}
       ${stops.some((s) => s.shown) ? html`<button class="btn big block" type="button" id="recap">${icon('text', 18)}${t.recap_sent_at ? 'Send the recap again' : `Send ${buyerOf(t) ? buyerOf(t).split(' ')[0] : 'your buyer'} the tour recap`}</button>` : ''}
       ${t.finished ? html`<div class="note-box">Tour finished. ${t.trip_id ? 'The miles are in your mileage log.' : ''}</div>` : html`<button class="btn dark big block" type="button" id="finish">Finish tour and log the miles</button>`}
       <button class="btn ghost block" type="button" id="deltour">${icon('trash', 16)}Delete this tour</button>
@@ -2361,6 +2369,11 @@ async function keepAwake(on) {
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && /^#\/door\//.test(location.hash)) keepAwake(true); });
 addEventListener('hashchange', () => { if (!/^#\/door\//.test(location.hash)) keepAwake(false); });
 
+// "305 Cedar Hollow Ln · 9 min · Vacant": the next stop in one line.
+function nextStopWords(n) {
+  return [String(n.address || '').split(',')[0], n.leg_minutes ? `${n.leg_minutes} min` : '', occWord(n.occ)].filter(Boolean).join(' · ');
+}
+
 function viewDoor(tourId, i) {
   const t = store.get('tours', tourId);
   const stops = (t && t.stops) || [];
@@ -2377,7 +2390,8 @@ function viewDoor(tourId, i) {
         <span class="door-n">Stop ${i + 1} of ${stops.length}</span>
       </div>
       <div class="door-addr">${String(s.address || '').split(',')[0]}</div>
-      <div class="door-tags">${s.occ === 'O' ? html`<span class="door-tag o">Occupied</span>` : s.occ === 'V' ? html`<span class="door-tag">Vacant</span>` : ''}${s.confirmed ? html`<span class="door-tag ok">✓ Confirmed</span>` : html`<span class="door-tag warn">Not confirmed</span>`}${s.arrive != null ? html`<span class="door-tag">${formatClock(s.arrive)}</span>` : ''}</div>
+      ${s.occ ? html`<div class="door-occ">${occBadge(s.occ, { big: true, extra: s.occ === 'O' ? 'knock first' : '' })}</div>` : ''}
+      <div class="door-tags">${s.confirmed ? html`<span class="door-tag ok">✓ Confirmed</span>` : html`<span class="door-tag warn">Not confirmed</span>`}${s.arrive != null ? html`<span class="door-tag">${formatClock(s.arrive)}</span>` : ''}</div>
       ${codes.length ? html`<div class="door-codes">${codes.map((c) => html`<button class="door-code" type="button" data-copy="${c.code}"><span class="k">${c.label}</span><span class="v">${c.code}</span>${c.where ? html`<span class="w">${c.where}</span>` : ''}</button>`)}</div>`
         : html`<div class="door-none">${s.code_pending ? 'Code still coming. Text the listing agent.' : 'No code saved for this stop.'}</div>`}
       ${how.length ? html`<div class="door-how">${how.map((x) => html`<p>${x}</p>`)}</div>` : ''}
@@ -2385,7 +2399,7 @@ function viewDoor(tourId, i) {
       <button class="door-shown ${s.shown ? 'on' : ''}" type="button" id="dshown">${s.shown ? '✓ Shown' : 'Mark shown'}</button>
       <div class="door-nav">
         ${i > 0 ? html`<a class="door-step" href="#/door/${tourId}/${i - 1}">‹ Stop ${i}</a>` : ''}
-        ${i < stops.length - 1 ? html`<a class="door-step next" href="#/door/${tourId}/${i + 1}">Stop ${i + 2} ›</a>` : html`<a class="door-step next" href="#/tour/${tourId}">Done ›</a>`}
+        ${i < stops.length - 1 ? html`<a class="door-step next" href="#/door/${tourId}/${i + 1}">${nextStopWords(stops[i + 1])} ›</a>` : html`<a class="door-step next" href="#/tour/${tourId}">Done ›</a>`}
       </div>
       ${i < stops.length - 1 ? html`<a class="door-drive" href="${mapLink(stops[i + 1])}" target="_blank" rel="noopener">Drive to ${String(stops[i + 1].address || '').split(',')[0]}${stops[i + 1].leg_minutes ? ` · about ${stops[i + 1].leg_minutes} min` : ''}</a>` : ''}
     </main>`,

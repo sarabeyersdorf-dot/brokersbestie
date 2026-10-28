@@ -120,3 +120,12 @@ test('the billing screen is its own route, apart from the tour planner', () => {
   assert.equal((app.match(/^function viewPlan\(/gm) || []).length, 1);
   assert.match(fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8'), /'\.\/js\/billing\.js'/);
 });
+
+test('occupied / vacant shows on every tour surface, with no color of its own', () => {
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../css/app.css', import.meta.url), 'utf8');
+  assert.match(app, /occBadge\(s\.occ, \{ big: true, extra: s\.occ === 'O' \? 'knock first'/); // at the door
+  assert.match(app, /nextStopWords\(stops\[i \+ 1\]\)/); // next stop button
+  assert.match(app, /tour-stop[\s\S]{0,200}occBadge\(x\.occ\)/); // Today's tour list
+  assert.doesNotMatch(css.slice(css.indexOf('Occupied / vacant (2026-10-28)')), /--occ-o|--occ-v|--alert/);
+});

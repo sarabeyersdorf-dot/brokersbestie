@@ -639,3 +639,13 @@ not red. Seller updates badge is teal, red only when one is past due
 (`sellerUpdatesPastDue`: last update 14+ days ago, or none and listed 14+
 days). Neutral word tags with no color meaning use `.tag`. American spelling
 in everything a person reads (Canceled, color).
+
+## Occupied / vacant on tours (2026-10-28, phase 2)
+
+`occBadge(o, { big, extra })` in app.js is the one badge: OCCUPIED solid with
+a small person, VACANT outline, no color of its own (the old red O / green V
+are gone, property header included). Unknown shows nothing. On Today's tour
+list (each stop, time + street + badge), the tour page, the planner, At the
+door (big, under the address, "OCCUPIED · knock first"), and the door's next
+stop button (`nextStopWords`: "305 Cedar Hollow Ln · 9 min · Vacant"). The
+next-stop card on Today arrives with phase 5.

@@ -628,3 +628,19 @@ html.hc .label.hd[data-hue="code"] > .hd-t, html.hc .label.hd[data-hue="showing"
 .tile.do .badge.late { background: var(--alert); }
 /* Safety check-in is not an error: its quick-add icon is dark, not red. */
 .tile .ic.r { background: var(--ink); color: #fff; }
+
+/* Occupied / vacant (2026-10-28): solid with a person vs outline, no color. */
+.occb { display: inline-flex; align-items: center; gap: 4px; border: 1.5px solid var(--ink); border-radius: 4px; padding: 1px 6px; background: none; color: var(--ink); font: 800 11px/1.4 var(--sans); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; vertical-align: middle; }
+.occb.solid { background: var(--ink); color: #fff; }
+.occb svg { flex-shrink: 0; }
+.top .occb, .door .occb { border-color: #fff; color: #fff; }
+.top .occb.solid, .door .occb.solid { background: #fff; color: #0e1012; }
+.occb.big { gap: 8px; border-width: 2.5px; border-radius: 10px; padding: 8px 14px; font-size: 22px; letter-spacing: .05em; }
+.door-occ { margin-top: -4px; }
+.stop-time .occb { margin-top: 6px; }
+.tour-stops { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.tour-stop { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink); }
+.tour-stop .num { font-size: 15px; min-width: 62px; }
+.tour-stop .a { flex: 1; min-width: 0; }
+.tour-stop.done { opacity: .55; }
+.door-step.next { font-size: 17px; line-height: 1.2; padding: 6px 10px; }
