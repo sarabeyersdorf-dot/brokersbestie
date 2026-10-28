@@ -17,7 +17,7 @@
   main { max-width: 560px; margin: 0 auto; padding: 18px 16px 40px; display: flex; flex-direction: column; gap: 14px; }
   .kicker { font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #cfd6d3; }
   h1 { margin: 0; font-size: 32px; line-height: 1.05; text-transform: uppercase; }
-  .tags span { display: inline-block; border: 2px solid #fff; border-radius: 8px; padding: 3px 10px; font-weight: 700; font-size: 15px; margin-right: 6px; }
+  .tags span { display: inline-block; border: 2px solid #fff; border-radius: 8px; padding: 3px 10px; font-weight: 700; font-size: 15px; margin: 0 6px 6px 0; }
   .code { background: #F5C93E; color: #0e1012; border: 0; border-radius: 14px; padding: 12px 16px; text-align: left; width: 100%; font: inherit; }
   .code .k { font: 700 14px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .06em; }
   .code .v { display: block; font-size: 52px; font-weight: 800; line-height: 1.05; letter-spacing: .03em; word-break: break-all; }
@@ -47,19 +47,23 @@
     const codes = (p.access || []).filter((a) => a.code);
     const spots = (p.access || []).filter((a) => !a.code && a.location_note);
     const ends = new Date(p.expires_at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-    const map = p.lat != null ? `https://maps.google.com/?q=${p.lat},${p.lng}` : `https://maps.google.com/?q=${encodeURIComponent([p.address, p.city].filter(Boolean).join(', '))}`;
+    // Directions go to the pinned gate when there is one (2026-10-28), else the address.
+    const gate = p.gate_lat != null && p.gate_lng != null;
+    const map = gate ? `https://www.google.com/maps/dir/?api=1&destination=${p.gate_lat},${p.gate_lng}`
+      : p.lat != null ? `https://maps.google.com/?q=${p.lat},${p.lng}` : `https://maps.google.com/?q=${encodeURIComponent([p.address, p.city].filter(Boolean).join(', '))}`;
+    const heads = (p.heads_up || []).filter((t) => t !== 'Occupied');
     document.title = `Showing info · ${p.address}`;
     m.innerHTML = `
       <div class="kicker">Showing info${p.agent && p.agent.full_name ? ' from ' + esc(p.agent.full_name) : ''}</div>
       <h1>${esc(String(p.address).split(',')[0])}</h1>
-      ${p.occupancy === 'O' ? '<div class="tags"><span>Occupied</span></div>' : p.occupancy === 'V' ? '<div class="tags"><span>Vacant</span></div>' : ''}
+      ${p.occupancy === 'O' || p.occupancy === 'V' || heads.length ? `<div class="tags">${p.occupancy === 'O' ? '<span>Occupied</span>' : p.occupancy === 'V' ? '<span>Vacant</span>' : ''}${heads.map((h) => `<span>${esc(h)}</span>`).join('')}</div>` : ''}
       ${codes.map((a) => `<button class="code" type="button" data-copy="${esc(a.code)}"><span class="k">${esc(a.label || LABEL[a.kind] || a.kind)} · tap to copy</span><span class="v">${esc(a.code)}</span>${a.location_note ? `<span class="w">${esc(a.location_note)}</span>` : ''}</button>`).join('')}
       ${p.showing_notes || p.directions || spots.length ? `<div class="box">
         ${p.showing_notes ? `<div class="lbl">Getting in</div><p>${esc(p.showing_notes)}</p>` : ''}
         ${spots.length ? `<div class="lbl">Where things are</div><p>${spots.map((a) => `${esc(a.label || LABEL[a.kind] || a.kind)}: ${esc(a.location_note)}`).join('\n')}</p>` : ''}
         ${p.directions ? `<div class="lbl">Driving in</div><p>${esc(p.directions)}</p>` : ''}
       </div>` : ''}
-      <a class="btn" href="${map}" target="_blank" rel="noopener">Directions</a>
+      <a class="btn" href="${map}" target="_blank" rel="noopener">${gate ? 'Directions to the gate' : 'Directions'}</a>
       ${p.agent && p.agent.phone ? `<a class="btn ghost" href="tel:${esc(String(p.agent.phone).replace(/[^\d+]/g, ''))}">Call ${esc((p.agent.full_name || 'the agent').split(' ')[0])}</a>` : ''}
       <div class="end">This link stops working ${esc(ends)}.</div>`;
     m.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', async () => { try { await navigator.clipboard.writeText(b.dataset.copy); b.querySelector('.k').textContent = 'Copied'; } catch {} }));

@@ -803,6 +803,9 @@ in: **Pin the gate here** (`pinGate`: a fresh high-accuracy fix via
 "**Gate pinned** · Directions go to the gate", Move the pin here, Remove.
 `dirLink(x)` is the ONE way the app builds Directions: a property (or a tour
 stop on one) with a gate pin goes to the gate, else the address. A test
-fails if `mapLink(` is used anywhere but inside it. Not yet: the 24-hour share
-page and the reminders function still use the address pin (that needs the
-function redeployed).
+fails if `mapLink(` is used anywhere but inside it. **The 24-hour share page
+too** (2026-10-28): the `reminders` function's `?op=share` now also sends
+`gate_lat`, `gate_lng`, `heads_up` (redeployed, version 5), and `share.html`
+reads "Directions to the gate" and shows the heads-up tags. (The function's
+leave-by reminders still time the drive to the property pin; a gate is close
+enough not to matter.)

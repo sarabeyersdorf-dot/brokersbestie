@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
     const { data: link } = /^[a-f0-9]{32,64}$/.test(t) ? await db.from('share_links').select('*').eq('token', t).maybeSingle() : { data: null };
     if (!link || link.revoked || new Date(link.expires_at) <= new Date()) return json({ error: 'This link has ended. Ask the agent for a new one.' }, 404);
     const [{ data: p }, { data: access }, { data: prof }] = await Promise.all([
-      db.from('properties').select('address, city, occupancy, showing_notes, directions, lat, lng').eq('id', link.property_id).maybeSingle(),
+      db.from('properties').select('address, city, occupancy, showing_notes, directions, lat, lng, gate_lat, gate_lng, heads_up').eq('id', link.property_id).maybeSingle(),
       db.from('access').select('kind, label, code, location_note').eq('property_id', link.property_id),
       db.from('profiles').select('full_name, phone, brokerage').eq('team_id', link.team_id).eq('owner', link.owner || '').maybeSingle()
     ]);

@@ -225,3 +225,12 @@ test('gate pin: directions go to the gate when one is pinned', async () => {
   assert.equal((app.match(/mapLink\(/g) || []).length, 2); // only inside dirLink: every Directions button goes through it
   assert.match(fs.readFileSync(new URL('../db/024_gate_pin.sql', import.meta.url), 'utf8'), /gate_lat double precision/);
 });
+
+test('the 24-hour share page goes to the gate too', async () => {
+  const fs = await import('node:fs');
+  const share = fs.readFileSync(new URL('../share.html', import.meta.url), 'utf8');
+  const fn = fs.readFileSync(new URL('../supabase/functions/reminders/index.ts', import.meta.url), 'utf8');
+  assert.match(fn, /select\('address, city, occupancy, showing_notes, directions, lat, lng, gate_lat, gate_lng, heads_up'\)/);
+  assert.match(share, /Directions to the gate/);
+  assert.match(share, /destination=\$\{p\.gate_lat\},\$\{p\.gate_lng\}/);
+});
