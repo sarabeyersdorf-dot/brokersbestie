@@ -733,3 +733,17 @@ button.stat { cursor: pointer; }
 .setup-step.now { border: 2px solid var(--ink); }
 .ios-share { font-size: 15px; }
 .ios-share .share-ic { display: inline-flex; vertical-align: -3px; padding: 2px 4px; border: 1.5px solid var(--ink); border-radius: 5px; }
+
+/* Your plan, phase 8 (2026-10-28) */
+.trial-days { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 18px; }
+.placeholder { border: 2px dashed var(--ink-2); border-radius: 8px; padding: 8px 10px; font-size: 14px; color: var(--ink-2); }
+.plan-list { display: flex; flex-direction: column; gap: 10px; }
+.plan-pick { display: flex; align-items: center; gap: 12px; margin: 0; width: 100%; text-align: left; font: inherit; color: var(--ink); border: 2px solid var(--line); }
+.plan-pick.on { border-color: var(--ink); }
+.pp-radio { width: 22px; height: 22px; flex-shrink: 0; border-radius: 50%; border: 2px solid var(--ink-2); }
+.plan-pick.on .pp-radio { border: 7px solid var(--ink); }
+.pp-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pp-name { font: 700 18px var(--sans); }
+.pp-badge { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 4px; background: var(--ink); color: #fff; font: 800 11px/1.6 var(--sans); letter-spacing: .08em; text-transform: uppercase; vertical-align: 2px; }
+.pp-price { font: 800 28px/1 var(--tall); white-space: nowrap; }
+.pp-price .small { font-family: var(--sans); font-weight: 600; }

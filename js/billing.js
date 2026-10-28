@@ -13,10 +13,21 @@ export const TRIAL_DAYS = 14;
 export const FOUNDING_UNTIL = '2026-12-31'; // last Pacific day a NEW founding sign-up is offered
 
 export const PLANS = [
-  { id: 'founding', lookup: 'bestie_founding_annual', label: 'Founding member', price: '$69', per: 'year', note: 'Locked in for as long as you stay subscribed. Open through Dec 31, 2026.' },
-  { id: 'annual', lookup: 'bestie_standard_annual', label: 'Yearly', price: '$99', per: 'year', note: '' },
-  { id: 'monthly', lookup: 'bestie_monthly', label: 'Monthly', price: '$12', per: 'month', note: '' }
+  { id: 'founding', lookup: 'bestie_founding_annual', label: 'Founding yearly', price: '$69', per: 'year', monthly: '$5.75', badge: 'Until Dec 31', note: 'Locked in for as long as you stay subscribed.' },
+  { id: 'annual', lookup: 'bestie_standard_annual', label: 'Yearly', price: '$99', per: 'year', monthly: '$8.25', note: '' },
+  { id: 'monthly', lookup: 'bestie_monthly', label: 'Monthly', price: '$12', per: 'month', monthly: '', note: '' }
 ];
+
+// What happens when the free trial ends: ONE sentence, shown on the plan
+// screen. Sara has not decided the wording yet (2026-10-28, phase 8), so it is
+// a clearly marked placeholder. (What the app does today: read-only, see
+// entitlement() and bb_can_write in db/022.) Replace the text and set
+// TRIAL_END_DECIDED to true once she has.
+export const TRIAL_END_DECIDED = false;
+export const TRIAL_END_TEXT = 'What happens when the trial ends: to be decided.';
+
+// The plan picked first on the screen: founding while it is offered.
+export const defaultPlan = (offered) => (offered.find((p) => p.id === 'founding') || offered.find((p) => p.id === 'annual') || offered[0] || null);
 
 // 'YYYY-MM-DD' in Pacific time.
 export function pacificDay(d = new Date()) {

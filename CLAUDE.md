@@ -747,3 +747,20 @@ property stays on `#/setup`. "Later, when you're ready": Connect your CRM
 (Settings), Invite your team / **I work alone** (`settings.worksAlone`).
 Settings links "Setup checklist · N of 4 done". `showWelcome` is gone, and
 the install card no longer carries the buddy.
+
+## Your plan screen (2026-10-28, phase 8)
+
+`viewBilling` (`#/billing`): in a trial with no plan the header reads **Free
+trial** / "No card on file. Nothing is charged unless you pick a plan.", then
+days left as a bar with the end date, then ONE sentence about what happens
+when the trial ends, which is a **clearly marked placeholder**
+(`TRIAL_END_TEXT`, `TRIAL_END_DECIDED = false` in billing.js) because Sara has
+not decided the wording; the app itself goes read-only (`entitlement`). Then
+the three plans as radio cards, each with a monthly cost (`PLANS[].monthly`:
+founding "Works out to $5.75 a month" + badge "Until Dec 31", yearly $8.25,
+monthly "Billed every month"), founding picked first (`defaultPlan`; yearly
+once founding is gone), and one **Choose <plan>** button. No countdowns.
+Small print: one plan covers the team and anyone on it can choose it here
+(there is no separate Team settings), plus the support email. Subscribed,
+complimentary, payment-problem and ended states keep `planSentence` and
+Manage billing. The server is asked at most every 30 s (`billingAskedAt`).

@@ -155,3 +155,17 @@ test('property page: status chip, four buttons, one Getting in, Next up, three t
   const more = app.slice(app.indexOf('function hubMoreSheet'), app.indexOf('function hubMoreSheet') + 2500);
   for (const k of ['Edit details', 'Snap MLS sheet', 'Quick add', 'Open house sign-in']) assert.match(more, new RegExp(k));
 });
+
+test('plan screen: monthly costs, founding first, one Choose button, trial-end placeholder', async () => {
+  const b = await import('../js/billing.js');
+  const byId = Object.fromEntries(b.PLANS.map((p) => [p.id, p]));
+  assert.equal(byId.founding.monthly, '$5.75'); assert.equal(byId.founding.badge, 'Until Dec 31');
+  assert.equal(byId.annual.monthly, '$8.25');
+  assert.equal(b.defaultPlan(b.plansOffered(new Date('2026-11-01T12:00:00Z'))).id, 'founding');
+  assert.equal(b.defaultPlan(b.plansOffered(new Date('2027-02-01T12:00:00Z'))).id, 'annual');
+  assert.equal(b.TRIAL_END_DECIDED, false); // Sara has not decided the sentence yet
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  const view = app.slice(app.indexOf('function viewBilling()'), app.indexOf('function viewBilling()') + 6000);
+  for (const k of ['No card on file. Nothing is charged unless you pick a plan.', "'s'} left</b>", 'Works out to', 'Choose ${pick ? pick.label', 'anyone on the team can choose it here', 'SUPPORT_EMAIL']) assert.ok(view.includes(k), k);
+  assert.doesNotMatch(view, /countdown|setInterval/);
+});

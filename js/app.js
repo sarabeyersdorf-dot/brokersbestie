@@ -10,7 +10,7 @@ import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
 import { chooseFromDropbox, dropboxReady } from './dropbox.js';
 import { planShowings, ACTION_WORDS } from './showings.js';
-import { plansOffered, planSentence } from './billing.js';
+import { plansOffered, planSentence, defaultPlan, TRIAL_END_TEXT, TRIAL_END_DECIDED } from './billing.js';
 import { CONTACT_KINDS, parseContacts, planImport, contactsChoice, contactsMode } from './contacts.js';
 import { CRM_CHOICES } from './crmlist.js';
 import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText, feedbackRequestText, lateText, lateBuyerText } from './messages.js';
@@ -4048,48 +4048,75 @@ function planBanner() {
     <div>${planSentence(b)}</div><div class="small" style="font-weight:700">See plans →</div></a>`;
 }
 
+// Your plan (2026-10-28, phase 8). A trial with no card says so plainly:
+// days left as a bar with the end date, the three plans each also as a
+// monthly cost, founding picked first, one "Choose" button. No countdowns.
+let billingPick = null;
+let billingAskedAt = 0;
 function viewBilling() {
   const b = store.settings().billing;
   const signedIn = !!store.cloud.user;
   const done = /[?&]billing=done/.test(location.search);
   const offer = (b && b.plans) || plansOffered();
+  if (!billingPick || !offer.some((p) => p.id === billingPick)) billingPick = defaultPlan(offer)?.id || null;
+  const pick = offer.find((p) => p.id === billingPick);
+  const choosing = signedIn && !(b && (b.subscribed || b.state === 'comped'));
+  const trial = b && b.state === 'trial' && !b.subscribed;
+  const title = !b ? 'Your plan' : b.state === 'comped' ? 'Complimentary plan' : b.subscribed ? 'Your plan' : b.state === 'past_due' ? 'Payment problem' : b.state === 'lapsed' ? 'Your trial has ended' : 'Free trial';
+  const endDay = b && b.trialEnd ? new Date(b.trialEnd).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : '';
+  const left = trial ? Math.max(0, Math.min(14, b.daysLeft)) : 0;
   return {
-    html: html`${header({ back: '#/settings', kicker: 'Brokers Bestie', title: 'Your plan' })}
+    form: true, // no Tell Bestie button over "Choose"
+    html: html`${header({ back: '#/settings', kicker: 'Brokers Bestie', title, sub: trial ? 'No card on file. Nothing is charged unless you pick a plan.' : '' })}
     <main class="wrap">
       ${done ? html`<div class="card pad sec" style="border-color:var(--done)"><b>Thank you!</b> Your plan is being set up. It can take a minute to show here.</div>` : ''}
-      ${!signedIn ? html`<div class="card pad sec">Sign in first (Settings), then choose a plan for your team.</div>`
-        : html`<section class="card pad sec">
-          <div class="label accent">Right now</div>
-          <div id="plannow" style="font-size:18px;font-weight:600">${b ? planSentence(b) : 'Checking…'}</div>
-          ${b && b.seats ? html`<div class="small">${b.seats} agent${b.seats === 1 ? '' : 's'} on your team. You pay per agent; the count follows your team.</div>` : ''}
-          ${b && b.subscribed ? html`<button class="btn dark block" type="button" id="portal">Manage billing (card, plan, cancel)</button>` : ''}
-        </section>
-        ${b && (b.subscribed || b.state === 'comped') ? '' : html`<section class="sec">
-          <div class="label">Choose a plan</div>
-          <div class="small">Your first 14 days are free and need no card. Pick a plan now or any time before then: you are not charged until the trial ends.</div>
-          ${offer.map((p) => html`<button class="card pad plan-pick" type="button" data-plan="${p.id}" style="width:100%;text-align:left">
-            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><b style="font-size:19px">${p.label}</b><span class="num" style="font-size:26px">${p.price}<span class="small"> / agent / ${p.per}</span></span></div>
-            ${p.note ? html`<div class="small">${p.note}</div>` : ''}</button>`)}
-          ${b && !b.payments ? html`<div class="small">Payments are not switched on yet.</div>` : ''}
-        </section>`}`}
-      <p class="small muted">Payments are handled by Stripe. Nothing is ever deleted if a plan ends: everything stays readable, and changes pause until a plan is active again. <a href="terms.html">Terms</a></p>
+      ${!signedIn ? html`<div class="card pad sec">Sign in first (Settings), then choose a plan for your team.</div>` : ''}
+      ${signedIn && trial ? html`<section class="card pad sec">
+        <div class="trial-days"><b>${left} day${left === 1 ? '' : 's'} left</b><span class="small">Ends ${endDay}</span></div>
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="14" aria-valuenow="${left}"><span style="width:${Math.round((left / 14) * 100)}%"></span></div>
+        <div class="${TRIAL_END_DECIDED ? 'small' : 'placeholder'}">${TRIAL_END_DECIDED ? '' : html`<b>Placeholder</b> · `}${TRIAL_END_TEXT}</div>
+      </section>` : ''}
+      ${signedIn && b && !trial ? html`<section class="card pad sec">
+        <div style="font-size:18px;font-weight:600">${planSentence(b)}</div>
+        ${b.seats ? html`<div class="small">${b.seats} agent${b.seats === 1 ? '' : 's'} on your team. You pay per agent; the count follows your team.</div>` : ''}
+        ${b.subscribed ? html`<button class="btn dark block" type="button" id="portal">Manage billing (card, plan, cancel)</button>` : ''}
+      </section>` : ''}
+      ${signedIn && !b ? html`<div class="small">Checking your plan…</div>` : ''}
+      ${choosing ? html`<section class="sec">
+        <div class="label">Pick a plan</div>
+        <div class="plan-list" role="radiogroup" aria-label="Plans">${offer.map((p) => html`<button class="card pad plan-pick ${p.id === billingPick ? 'on' : ''}" type="button" role="radio" aria-checked="${String(p.id === billingPick)}" data-plan="${p.id}">
+          <span class="pp-radio"></span>
+          <span class="pp-body"><span class="pp-name">${p.label}${p.badge ? html` <span class="pp-badge">${p.badge}</span>` : ''}</span>
+            ${p.monthly ? html`<span class="small">Works out to ${p.monthly} a month</span>` : html`<span class="small">Billed every month</span>`}
+            ${p.note ? html`<span class="small">${p.note}</span>` : ''}</span>
+          <span class="pp-price num">${p.price}<span class="small">/${p.per === 'year' ? 'yr' : 'mo'}</span></span>
+        </button>`)}</div>
+        <div class="small">Per agent. ${trial ? 'Picking one now still charges nothing until your trial ends.' : ''}</div>
+        <button class="btn dark big block" type="button" id="choose" ${pick ? '' : raw('disabled')}>Choose ${pick ? pick.label : 'a plan'}</button>
+        ${b && !b.payments ? html`<div class="small">Payments are not switched on yet.</div>` : ''}
+      </section>` : ''}
+      <p class="small muted">On a team, one plan covers everyone: anyone on the team can choose it here, and it bills per agent. Questions: <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>. Payments are handled by Stripe. <a href="terms.html">Terms</a></p>
     </main>`,
     async mount(root) {
-      if (signedIn) {
-        const fresh = await refreshBilling(true);
-        if (done) history.replaceState(null, '', location.pathname + '#/billing');
-        if (fresh && JSON.stringify(fresh) !== JSON.stringify(b)) return render();
-      }
-      root.querySelectorAll('[data-plan]').forEach((el) => el.addEventListener('click', async () => {
-        el.disabled = true;
-        try { const r = await api('/api/billing', { method: 'POST', body: JSON.stringify({ op: 'checkout', plan: el.dataset.plan }) }); location.href = r.url; }
-        catch (e) { toast(e.message); el.disabled = false; }
-      }));
+      root.querySelectorAll('[data-plan]').forEach((el) => el.addEventListener('click', () => { billingPick = el.dataset.plan; render(); }));
+      root.querySelector('#choose')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try { const r = await api('/api/billing', { method: 'POST', body: JSON.stringify({ op: 'checkout', plan: billingPick }) }); location.href = r.url; }
+        catch (err) { toast(err.message); btn.disabled = false; }
+      });
       root.querySelector('#portal')?.addEventListener('click', async (e) => {
         e.currentTarget.disabled = true;
         try { const r = await api('/api/billing', { method: 'POST', body: JSON.stringify({ op: 'portal' }) }); location.href = r.url; }
         catch (err) { toast(err.message); e.currentTarget.disabled = false; }
       });
+      // Ask the server at most every 30 seconds: a plan tap redraws the page.
+      if (signedIn && Date.now() - billingAskedAt > 30000) {
+        billingAskedAt = Date.now();
+        const fresh = await refreshBilling(true);
+        if (done) history.replaceState(null, '', location.pathname + '#/billing');
+        if (fresh && JSON.stringify(fresh) !== JSON.stringify(b) && location.hash === '#/billing') render();
+      }
     }
   };
 }
