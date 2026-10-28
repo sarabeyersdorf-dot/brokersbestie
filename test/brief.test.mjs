@@ -207,3 +207,11 @@ test('saved for no signal: a quiet line where codes show, a calm card offline', 
   const store = fs.readFileSync(new URL('../js/store.js', import.meta.url), 'utf8');
   assert.match(store, /export function pendingCount\(\)/);
 });
+
+import { HEADS_UP, headsUp as hu } from '../js/brief.js';
+test('heads-up tags: saved tags in a fixed order, Occupied left to its badge, notes still count', async () => {
+  assert.deepEqual(HEADS_UP, ['Dog', 'Cattle guard', 'Livestock', 'Low branches', 'Steep drive', 'No turnaround', 'Well head', 'Septic lid', 'Occupied', 'Alarm']);
+  assert.deepEqual(hu({}, { heads_up: ['Steep drive', 'Occupied', 'Cattle guard'], showing_notes: 'Big dog' }, []), ['Dog', 'Cattle guard', 'Steep drive']);
+  const fs = await import('node:fs');
+  assert.match(fs.readFileSync(new URL('../db/023_heads_up.sql', import.meta.url), 'utf8'), /add column if not exists heads_up text\[\]/);
+});

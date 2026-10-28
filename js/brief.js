@@ -284,12 +284,15 @@ export function doorCodes(stop, saved = [], kindLabel = (k) => k) {
 // Occupied is shown by its own badge, so it is not repeated here. Read from
 // what is already saved: a dog or an alarm named in the notes, an alarm code.
 // Phase 9c adds one-tap tags on the property; they join this list.
+// Phase 9c: the one-tap tags saved on the property (`heads_up`), in this
+// order. "Occupied" is the occupancy field and shows as its own badge.
+export const HEADS_UP = ['Dog', 'Cattle guard', 'Livestock', 'Low branches', 'Steep drive', 'No turnaround', 'Well head', 'Septic lid', 'Occupied', 'Alarm'];
 export function headsUp(stop, prop, codes = []) {
   const text = [stop && stop.access_note, stop && stop.notes, prop && prop.showing_notes, prop && prop.directions].join(' ');
-  const out = [];
-  if (/\bdogs?\b|\bpuppy\b/i.test(text)) out.push('Dog');
-  if (codes.some((c) => /alarm/i.test(c.label)) || /\balarm\b/i.test(text)) out.push('Alarm');
-  return out;
+  const set = new Set(((prop && prop.heads_up) || []).filter((t) => HEADS_UP.includes(t) && t !== 'Occupied'));
+  if (/\bdogs?\b|\bpuppy\b/i.test(text)) set.add('Dog');
+  if (codes.some((c) => /alarm/i.test(c.label)) || /\balarm\b/i.test(text)) set.add('Alarm');
+  return HEADS_UP.filter((t) => set.has(t));
 }
 
 // ---------- feedback from agents who showed MY listing (2026-10-27) ----------

@@ -17,7 +17,7 @@ import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visi
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink, shareWhere, shareLink, stopShareLinks } from './push.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, headsUp, todayMode, listenLength, feedbackDue, taxYear, taxCsv } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, headsUp, HEADS_UP, todayMode, listenLength, feedbackDue, taxYear, taxCsv } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -818,7 +818,7 @@ function viewTodayField(focus) {
       <section class="card pad sec nextcard">
         <div class="sec-head"><div class="label">${tour ? 'Next stop' : 'Up next'}</div>${leaveWords ? html`<span class="lead-time">${leaveWords}</span>` : ''}</div>
         <div class="nc-addr">${street(s.address)}</div>
-        <div class="heads">${occBadge(s.occ)}${s.arrive != null ? html`<span class="small"><b>${formatClock(s.arrive)}</b>${s.leg_minutes ? ` · ${s.leg_minutes} min drive` : ''}</span>` : ''}</div>
+        <div class="heads">${occBadge(s.occ)}${headsUp(s, p, codes).map((h) => html`<span class="head-tag">${h}</span>`)}${s.arrive != null ? html`<span class="small"><b>${formatClock(s.arrive)}</b>${s.leg_minutes ? ` · ${s.leg_minutes} min drive` : ''}</span>` : ''}</div>
         ${drive ? html`<div class="small" style="white-space:pre-line">${drive}</div>` : ''}
         ${codes.length ? codeBoxes(codes.map((c) => ({ label: c.label, code: c.code, location_note: c.where }))) : html`<div class="small wait">No code saved for this stop.</div>`}
         <div class="btns">
@@ -1262,7 +1262,7 @@ function viewHub(id) {
       <section class="sec getin">
         <div class="sec-head"><div class="label">Getting in</div><span class="saved-at">Saved on this phone · updated ${savedAtWords(p, access)}${pendingWords()}</span></div>
         ${codes.length ? codeBoxes(codes) : html`<a class="card row" href="#/quick/lockbox/${id}"><span class="tile" style="border:0;padding:0"><span class="ic y">${icon('lockbox', 22)}</span></span><span class="grow"><span class="t">Add the lockbox or a code</span><span class="s">Gate, alarm, door keypad, hidden key</span></span></a>`}
-        ${p.occupancy === 'O' || p.occupancy === 'V' || heads.length ? html`<div class="heads">${occBadge(p.occupancy)}${heads.map((h) => html`<span class="head-tag">${h}</span>`)}</div>` : ''}
+        <div class="heads">${occBadge(p.occupancy)}${heads.map((h) => html`<span class="head-tag">${h}</span>`)}<button class="head-edit" type="button" id="headsup">${heads.length || p.occupancy ? 'Edit heads-up' : '+ Heads-up: dog, cattle guard…'}</button></div>
         ${p.showing_notes ? html`<div class="getin-txt"><div class="getin-k">How to get in</div><div style="white-space:pre-line">${p.showing_notes}</div></div>` : ''}
         ${p.directions ? html`<div class="getin-txt"><div class="getin-k">Driving in</div><div style="white-space:pre-line">${p.directions}</div></div>` : ''}
       </section>
@@ -1305,6 +1305,7 @@ function viewHub(id) {
       root.querySelector('#share').addEventListener('click', () => shareSheet(p));
       root.querySelector('#nextup').addEventListener('click', () => datesSheet(id));
       root.querySelector('#statchip')?.addEventListener('click', () => statusSheet(p));
+      root.querySelector('#headsup').addEventListener('click', () => headsUpSheet(id));
       root.querySelector('#hubmore').addEventListener('click', () => hubMoreSheet(p));
       root.querySelectorAll('[data-access]').forEach((b) => b.addEventListener('click', () => accessSheet(store.get('access', b.getAttribute('data-access')))));
       root.querySelectorAll('[data-edit-person]').forEach((b) => b.addEventListener('click', () => personSheet(id, store.get('people', b.getAttribute('data-edit-person')))));
@@ -1352,6 +1353,46 @@ function savedAtWords(p, access) {
   if (!at) return 'just now';
   const d = new Date(at);
   return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : niceDate(at);
+}
+
+// Heads-up tags (2026-10-28, phase 9c): one tap each, saved at once.
+// "Occupied" switches the occupancy field (shown as its own badge).
+function headsUpSheet(id) {
+  const paint = (sh) => {
+    const p = prop(id);
+    const on = new Set(p.heads_up || []);
+    if (p.occupancy === 'O') on.add('Occupied');
+    // Dog / Alarm also come from the notes and codes: shown on, marked as such.
+    const fromNotes = new Set(headsUp({}, p, codesOf(id)).filter((t) => !on.has(t)));
+    sh.querySelectorAll('[data-hu]').forEach((b) => {
+      const k = b.getAttribute('data-hu');
+      b.classList.toggle('on', on.has(k) || fromNotes.has(k));
+      b.classList.toggle('derived', fromNotes.has(k));
+      b.textContent = fromNotes.has(k) ? `${k} · from your notes` : k;
+      b.setAttribute('aria-pressed', String(on.has(k) || fromNotes.has(k)));
+    });
+  };
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Heads-up</div>
+    <div class="small">Tap what applies. It shows on this property and at the door.</div>
+    <div class="hu-grid">${HEADS_UP.map((k) => html`<button class="chip hu" type="button" data-hu="${k}" aria-pressed="false">${k}</button>`)}</div>
+    <button class="btn dark block" type="button" id="hudone">Done</button>
+  </div>`, (sh) => {
+    paint(sh);
+    sh.querySelectorAll('[data-hu]').forEach((b) => b.addEventListener('click', () => {
+      const k = b.getAttribute('data-hu');
+      const p = prop(id);
+      if (b.classList.contains('derived')) return toast('That one comes from your notes or codes');
+      if (k === 'Occupied') store.save('properties', { id, occupancy: p.occupancy === 'O' ? '' : 'O' }, { quiet: true });
+      else {
+        const cur = new Set(p.heads_up || []);
+        if (cur.has(k)) cur.delete(k); else cur.add(k);
+        store.save('properties', { id, heads_up: HEADS_UP.filter((t) => cur.has(t)) }, { quiet: true });
+      }
+      paint(sh);
+    }));
+    sh.querySelector('#hudone').addEventListener('click', () => { closeSheet(); render(); });
+  });
 }
 
 // Tap the status chip in the header: pick one, saved with Undo.

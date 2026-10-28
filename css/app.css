@@ -754,3 +754,10 @@ button.stat { cursor: pointer; }
 .door-saved { text-align: center; color: #9aa4a1; font: 500 13px var(--sans); }
 .offline-card .buddy-empty { flex-direction: row; text-align: left; gap: 12px; padding: 10px 14px; }
 .offline-card .buddy-empty svg { width: 44px; flex-shrink: 0; }
+
+/* Heads-up tags, phase 9c (2026-10-28) */
+.head-edit { border: 0; background: none; padding: 2px 4px; font: 700 13px var(--sans); color: var(--teal-text); cursor: pointer; }
+.hu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.chip.hu { justify-content: center; min-height: 48px; }
+.chip.hu.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.chip.hu.on.derived { background: var(--bg); color: var(--ink); border: 2px dashed var(--ink); }

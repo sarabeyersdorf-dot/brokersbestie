@@ -782,3 +782,15 @@ card. 5 / 10 / 15 / 20+ min; the text to the listing agent reads "Hi <name>,
 it's <my name> with <brokerage>. Running about 10 minutes late to <address>,
 now arriving around <time>. Thank you!" (`lateText`); Open in Messages, and
 Also text buyer (`lateBuyerText`). Guarded in test/messages.test.mjs.
+
+## Heads-up tags (2026-10-28, phase 9c)
+
+`properties.heads_up text[]` (db/023, applied). `HEADS_UP` in brief.js is the
+one list and order: Dog, Cattle guard, Livestock, Low branches, Steep drive,
+No turnaround, Well head, Septic lid, Occupied, Alarm. The property page's
+Getting in has "+ Heads-up" / "Edit heads-up" → `headsUpSheet`: one tap per
+tag, saved at once. **Occupied** switches the existing `occupancy` field
+(its badge), never a tag. Dog / Alarm found in the notes or codes show as on,
+dashed, "from your notes", and cannot be tapped off there. `headsUp()` merges
+saved tags with the ones from notes, in list order: shown as plain words on
+the property page, At the door, and Today's next-stop card.
