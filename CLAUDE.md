@@ -774,3 +774,11 @@ With no signal, `offlineCard()` (a calm buddy row: "No signal. You're fine.
 All N codes and today's tour are saved on this phone.") sits at the top of
 every Today mode and the property page; the old orange "No signal" bar is
 always hidden now.
+
+## Running late (2026-10-28, phase 9b)
+
+Built in phases 3 and 5 (`lateSheet`): on At the door and Today's next-stop
+card. 5 / 10 / 15 / 20+ min; the text to the listing agent reads "Hi <name>,
+it's <my name> with <brokerage>. Running about 10 minutes late to <address>,
+now arriving around <time>. Thank you!" (`lateText`); Open in Messages, and
+Also text buyer (`lateBuyerText`). Guarded in test/messages.test.mjs.

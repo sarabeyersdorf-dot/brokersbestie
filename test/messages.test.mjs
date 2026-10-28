@@ -204,3 +204,15 @@ test('a home left off the buyer page stays off it', () => {
   const tours = [{ id: 't', buyer: 'Jo', date: '2026-10-28', stops: [{ id: 'a', address: '1 A St', shown: true, reaction: 'love' }, { id: 'b', address: '2 B St', shown: true, reaction: 'nope', hide_from_buyer: true }] }];
   assert.deepEqual(buyersOf(tours)[0].homes.map((h) => h.address), ['1 A St']);
 });
+
+test('running late sits on the door and the next-stop card, with Messages and the buyer', async () => {
+  const fs = await import('node:fs');
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  assert.match(app, /id="dlate"/); // At the door
+  assert.match(app, /id="flate"/); // Today's next-stop card
+  assert.match(app, /\[5, 10, 15, 20\]\.map\(\(m\) => html`<button class="chip/);
+  assert.match(app, /Open in Messages/);
+  assert.match(app, /Also text \$\{buyerOf\(tour\)/);
+  assert.equal(lateText({ agent: 'Pat Lee', me: 'Sara Cooper', brokerage: 'Legacy Properties', address: '305 Cedar Hollow Ln', minutes: 10, arriveAt: 625 }),
+    "Hi Pat, it's Sara Cooper with Legacy Properties. Running about 10 minutes late to 305 Cedar Hollow Ln, now arriving around 10:25 AM. Thank you!");
+});
