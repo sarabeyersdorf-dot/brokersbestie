@@ -572,7 +572,9 @@ page (the app is at brokersbestie.vercel.app).
 - **privacy.html / terms.html**: DRAFTS for a lawyer to review, plain words.
   Linked from Settings' footer, under the sign-in button ("By signing in you
   agree…") and on `oh.html` for open house visitors. Terms say plainly the
-  safety check-in is not an emergency service.
+  safety check-in is not an emergency service. The legal name is just
+  "Brokers Bestie" (Sara, 2026-10-28: not an LLC yet); update both pages if
+  that changes.
 - **Support address**: `SUPPORT_EMAIL` in js/config.js =
   support@brokersbestie.app (footer, legal pages). Send feedback goes there
   with Sara's Gmail cc'd (`FEEDBACK_CC` in js/install.js) until the GoDaddy
