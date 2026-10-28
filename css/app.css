@@ -644,3 +644,32 @@ html.hc .label.hd[data-hue="code"] > .hd-t, html.hc .label.hd[data-hue="showing"
 .tour-stop .a { flex: 1; min-width: 0; }
 .tour-stop.done { opacity: .55; }
 .door-step.next { font-size: 17px; line-height: 1.2; padding: 6px 10px; }
+
+/* At the door, phase 3 (2026-10-28): what you press sits in the bottom third.
+   Every button at least 56px tall. */
+.door { padding-bottom: 0; }
+.door-heads { display: flex; flex-wrap: wrap; gap: 8px; }
+.door-head { border: 2px solid #fff; border-radius: 8px; padding: 4px 12px; font: 800 18px var(--sans); letter-spacing: .03em; }
+.door-meta { color: #cfd6d3; font: 600 16px var(--sans); }
+.door-meta b { color: #fff; }
+.ok-on-dark { color: #3ddc97; font-weight: 700; }
+.door-copyhint { text-align: center; color: #cfd6d3; font: 600 14px var(--sans); margin-top: -6px; }
+.door-act { position: sticky; bottom: 0; margin: auto -16px 0; padding: 12px 16px calc(14px + env(safe-area-inset-bottom)); background: #0e1012; border-top: 1px solid #2a2f33; display: flex; flex-direction: column; gap: 10px; }
+.door-faces { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.door-face { min-height: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 6px 2px; border: 2px solid #2f3539; border-radius: 12px; background: #1d2124; color: #fff; font: 700 12px/1.1 var(--sans); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.door-face.on { border-color: var(--code); background: #2b2a1c; }
+.door-face .n { font: 800 26px/40px var(--tall); width: 40px; height: 40px; border-radius: 50%; background: #2f3539; text-align: center; }
+.door-shownline { text-align: center; color: #3ddc97; font: 700 15px var(--sans); }
+.door-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.door-btn2 { min-height: 56px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 2px solid #fff; border-radius: 12px; background: none; color: #fff; font: 700 17px var(--sans); cursor: pointer; }
+.door-btn2:disabled { opacity: .45; }
+.door-next { min-height: 72px; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 8px 16px; border-radius: 14px; background: var(--code); color: #0e1012; }
+.door-next .l { font: 700 13px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
+.door-next .a { font: 800 22px/1.1 var(--tall); text-transform: uppercase; }
+.door-act .door-drive { font-size: 15px; }
+.late-mins { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.late-mins .chip { justify-content: center; min-height: 48px; }
+/* On the door and the kiosk the buttons live at the bottom: Undo shows at the top. */
+body.kiosk .toast { top: calc(12px + env(safe-area-inset-top)); bottom: auto; }
+.door-face { min-height: 68px; }
+.door-next .a { font-size: 20px; }

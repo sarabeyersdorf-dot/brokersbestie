@@ -152,3 +152,21 @@ export function feedbackRequestText({ agent = '', address = '', date = '', today
   const sig = signOff(profile, me);
   return `${hi}thank you for showing ${street(address)} ${when}. How did your buyers like it? Any feedback on price, condition or anything else helps my sellers, and if they are interested I am happy to answer questions.${sig ? `\n${sig}` : ''}`;
 }
+
+// Running late (2026-10-28): one text to the listing agent, from the agent's
+// own phone. minutes is 5, 10, 15 or 20 ("20+" reads "20 minutes or more").
+export function lateText({ agent = '', me = '', brokerage = '', address = '', minutes = 10, arriveAt = null } = {}) {
+  const hi = first(agent) ? `Hi ${first(agent)}, ` : 'Hi, ';
+  const who = me ? `it's ${me.trim().split(/\s+/).map(cap).join(' ')}${brokerage ? ` with ${brokerage}` : ''}. ` : '';
+  const late = minutes >= 20 ? 'Running 20 minutes or more late' : `Running about ${minutes} minutes late`;
+  const when = arriveAt != null ? `, now arriving around ${formatClock(arriveAt)}` : '';
+  return `${hi}${who}${late} to ${street(address) || 'the showing'}${when}. Thank you!`;
+}
+
+// The same news for the buyer.
+export function lateBuyerText({ buyer = '', address = '', minutes = 10, arriveAt = null, me = '' } = {}) {
+  const hi = first(buyer) ? `Hi ${first(buyer)}, ` : 'Hi, ';
+  const late = minutes >= 20 ? 'running 20 minutes or more behind' : `running about ${minutes} minutes behind`;
+  const when = arriveAt != null ? ` See you around ${formatClock(arriveAt)}.` : '';
+  return `${hi}I'm ${late} for ${street(address) || 'our next home'}.${when}${sign(me)}`;
+}

@@ -13,11 +13,11 @@ import { planShowings, ACTION_WORDS } from './showings.js';
 import { plansOffered, planSentence } from './billing.js';
 import { CONTACT_KINDS, parseContacts, planImport, contactsChoice, contactsMode } from './contacts.js';
 import { CRM_CHOICES } from './crmlist.js';
-import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText, feedbackRequestText } from './messages.js';
+import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText, feedbackRequestText, lateText, lateBuyerText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink, shareWhere, shareLink, stopShareLinks } from './push.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, feedbackDue, taxYear, taxCsv } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, headsUp, feedbackDue, taxYear, taxCsv } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -2382,7 +2382,11 @@ function viewDoor(tourId, i) {
   const p = s.property_id ? prop(s.property_id) : null;
   const codes = doorCodes(s, p ? codesOf(p.id) : [], (k) => KINDS[k]?.label || k);
   const how = [s.access_note, s.notes, p && p.showing_notes].map((x) => String(x || '').trim()).filter(Boolean).filter((x, j, a) => a.indexOf(x) === j);
-  const setStop = (patch) => store.save('tours', { id: tourId, stops: (store.get('tours', tourId).stops || []).map((x) => (x.id === s.id ? { ...x, ...patch } : x)) });
+  const heads = headsUp(s, p, codes);
+  const next = stops[i + 1];
+  // Phase 3 (2026-10-28): codes huge at the top, everything you press in the
+  // bottom third: four quick faces + All 8, Running late and Call agent, then
+  // the next stop. Swipe left for the next stop, right for the one before.
   return {
     html: html`<main class="door">
       <div class="door-top">
@@ -2391,27 +2395,152 @@ function viewDoor(tourId, i) {
       </div>
       <div class="door-addr">${String(s.address || '').split(',')[0]}</div>
       ${s.occ ? html`<div class="door-occ">${occBadge(s.occ, { big: true, extra: s.occ === 'O' ? 'knock first' : '' })}</div>` : ''}
-      <div class="door-tags">${s.confirmed ? html`<span class="door-tag ok">✓ Confirmed</span>` : html`<span class="door-tag warn">Not confirmed</span>`}${s.arrive != null ? html`<span class="door-tag">${formatClock(s.arrive)}</span>` : ''}</div>
-      ${codes.length ? html`<div class="door-codes">${codes.map((c) => html`<button class="door-code" type="button" data-copy="${c.code}"><span class="k">${c.label}</span><span class="v">${c.code}</span>${c.where ? html`<span class="w">${c.where}</span>` : ''}</button>`)}</div>`
+      ${heads.length ? html`<div class="door-heads">${heads.map((h) => html`<span class="door-head">${h}</span>`)}</div>` : ''}
+      <div class="door-meta">${s.arrive != null ? html`<b>${formatClock(s.arrive)}</b> · ` : ''}${s.confirmed ? html`<span class="ok-on-dark">✓ Confirmed</span>` : 'Not confirmed yet'}</div>
+      ${codes.length ? html`<div class="door-codes">${codes.map((c) => html`<button class="door-code" type="button" data-copy="${c.code}"><span class="k">${c.label}</span><span class="v">${c.code}</span>${c.where ? html`<span class="w">${c.where}</span>` : ''}</button>`)}</div>
+        <div class="door-copyhint">Tap a code to copy it</div>`
         : html`<div class="door-none">${s.code_pending ? 'Code still coming. Text the listing agent.' : 'No code saved for this stop.'}</div>`}
       ${how.length ? html`<div class="door-how">${how.map((x) => html`<p>${x}</p>`)}</div>` : ''}
-      ${s.agent_phone ? html`<div class="door-agent"><span>${s.agent || 'Listing agent'}</span><a class="door-call" href="tel:${digits(s.agent_phone)}">${icon('phone', 20)}Call</a><a class="door-call" href="${smsLink(s.agent_phone)}">${icon('text', 20)}Text</a></div>` : ''}
-      <button class="door-shown ${s.shown ? 'on' : ''}" type="button" id="dshown">${s.shown ? '✓ Shown' : 'Mark shown'}</button>
-      <div class="door-nav">
-        ${i > 0 ? html`<a class="door-step" href="#/door/${tourId}/${i - 1}">‹ Stop ${i}</a>` : ''}
-        ${i < stops.length - 1 ? html`<a class="door-step next" href="#/door/${tourId}/${i + 1}">${nextStopWords(stops[i + 1])} ›</a>` : html`<a class="door-step next" href="#/tour/${tourId}">Done ›</a>`}
+      <div class="door-act">
+        <div class="door-faces" role="group" aria-label="How did they like it?">
+          ${DOOR_FACES.map((k) => html`<button class="door-face ${s.reaction === k ? 'on' : ''}" type="button" data-quick="${k}" aria-pressed="${String(s.reaction === k)}">${raw(reactionFace(k, { size: 40, label: '' }))}<span>${reactionLabel(k)}</span></button>`)}
+          <button class="door-face all ${s.reaction && !DOOR_FACES.includes(s.reaction) ? 'on' : ''}" type="button" id="dall">${s.reaction && !DOOR_FACES.includes(s.reaction) ? raw(reactionFace(s.reaction, { size: 40, label: '' })) : html`<span class="n">8</span>`}<span>${s.reaction && !DOOR_FACES.includes(s.reaction) ? reactionLabel(s.reaction) : 'All 8'}</span></button>
+        </div>
+        ${s.shown ? html`<div class="door-shownline">✓ Shown${s.reaction ? ` · ${reactionLabel(s.reaction)}` : ''}${s.feedback_sent_at ? ' · feedback sent' : ''}</div>` : ''}
+        <div class="door-two">
+          <button class="door-btn2" type="button" id="dlate">${icon('clock', 20)}Running late</button>
+          ${s.agent_phone ? html`<a class="door-btn2" href="tel:${digits(s.agent_phone)}">${icon('phone', 20)}Call agent</a>` : html`<button class="door-btn2" type="button" disabled>No agent phone</button>`}
+        </div>
+        ${next ? html`<a class="door-next" href="#/door/${tourId}/${i + 1}"><span class="l">Next stop${next.arrive != null ? ` · ${formatClock(next.arrive)}` : ''}</span><span class="a">${nextStopWords(next)} ›</span></a>
+          <a class="door-drive" href="${mapLink(next)}" target="_blank" rel="noopener">Directions to the next stop</a>`
+          : html`<a class="door-next" href="#/tour/${tourId}"><span class="l">Last stop</span><span class="a">Finish the tour ›</span></a>`}
       </div>
-      ${i < stops.length - 1 ? html`<a class="door-drive" href="${mapLink(stops[i + 1])}" target="_blank" rel="noopener">Drive to ${String(stops[i + 1].address || '').split(',')[0]}${stops[i + 1].leg_minutes ? ` · about ${stops[i + 1].leg_minutes} min` : ''}</a>` : ''}
     </main>`,
     mount(root) {
       keepAwake(true);
-      root.querySelector('#dshown').addEventListener('click', () => {
-        const was = !!s.shown;
-        setStop({ shown: !was });
-        if (!was) setTimeout(() => reactionPicker({ ...s, shown: true }), 250);
-      });
+      root.querySelectorAll('[data-quick]').forEach((b) => b.addEventListener('click', () => {
+        const k = b.getAttribute('data-quick');
+        const before = s;
+        const r = saveReaction(s.id, k, s.reaction_note || '');
+        undoToast(`Shown · ${reactionLabel(k)}`, () => undoReaction(before, r));
+      }));
+      root.querySelector('#dall').addEventListener('click', () => allFacesSheet(tourId, i));
+      root.querySelector('#dlate').addEventListener('click', () => lateSheet(t, s));
+      // Swipe left: next stop. Swipe right: the stop before.
+      const door = root.querySelector('.door');
+      let x0 = null, y0 = null;
+      door.addEventListener('touchstart', (e) => { const p0 = e.touches[0]; x0 = p0.clientX; y0 = p0.clientY; }, { passive: true });
+      door.addEventListener('touchend', (e) => {
+        if (x0 == null) return;
+        const p1 = e.changedTouches[0];
+        const dx = p1.clientX - x0, dy = p1.clientY - y0;
+        x0 = null;
+        if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+        if (dx < 0 && next) location.hash = `#/door/${tourId}/${i + 1}`;
+        if (dx > 0 && i > 0) location.hash = `#/door/${tourId}/${i - 1}`;
+      }, { passive: true });
     }
   };
+}
+
+// The four faces on the door; the other four are under "All 8".
+const DOOR_FACES = ['love', 'maybe', 'nope', 'again'];
+
+// One face on one stop: marks it shown and files "Showing feedback" on the
+// property. Returns what Undo needs.
+function saveReaction(stopId, pick, note = '', extra = {}) {
+  const tour = store.all('tours').find((t) => (t.stops || []).some((x) => x.id === stopId));
+  if (!tour) return null;
+  const was = tour.stops.find((x) => x.id === stopId);
+  store.save('tours', { id: tour.id, stops: tour.stops.map((x) => (x.id === stopId ? { ...x, shown: true, reaction: pick, reaction_note: note, reaction_at: new Date().toISOString(), ...extra } : x)) });
+  const n = was.property_id && (pick !== was.reaction || note !== (was.reaction_note || '')) ? store.save('notes', { property_id: was.property_id, text: `Showing feedback: ${reactionLabel(pick)}${note ? ' · ' + note : ''}` }) : null;
+  return { tourId: tour.id, stop: store.get('tours', tour.id).stops.find((x) => x.id === stopId), noteId: n ? n.id : null };
+}
+function undoReaction(before, r) {
+  if (!r) return;
+  const tour = store.get('tours', r.tourId);
+  if (tour) store.save('tours', { id: tour.id, stops: tour.stops.map((x) => (x.id === before.id ? before : x)) });
+  if (r.noteId) store.remove('notes', r.noteId);
+}
+
+// All 8 faces, a note you can say, and two boxes that start ticked: text the
+// listing agent, add it to the buyer's page. "Done · next stop" does it all
+// and moves on: two taps (face, Done). The text opens in Messages; you send.
+function allFacesSheet(tourId, i) {
+  const tour = store.get('tours', tourId);
+  const s = tour.stops[i];
+  const next = tour.stops[i + 1];
+  const buyer = buyerOf(tour);
+  let pick = s.reaction || null;
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">How did they like it?</div>
+    <div class="small">${s.address}</div>
+    <div class="react-grid" role="group" aria-label="Their reaction">${REACTIONS.map(([k, label]) => html`<button class="react" type="button" data-k="${k}" aria-pressed="${String(pick === k)}">${raw(reactionFace(k, { size: 48, label: '' }))}<span>${label}</span></button>`)}</div>
+    ${fieldHtml({ name: 'rnote', label: 'Note (optional, private)', type: 'textarea', placeholder: 'Loved the yard, kitchen too small', mic: true }, s.reaction_note)}
+    ${s.agent_phone ? html`<label class="switch"><input type="checkbox" id="fbtext" ${s.feedback_sent_at ? '' : raw('checked')}>Text feedback to ${s.agent || 'the listing agent'}</label>` : ''}
+    ${buyer ? html`<label class="switch"><input type="checkbox" id="fbbuyer" ${s.hide_from_buyer ? '' : raw('checked')}>Add to ${buyer.split(' ')[0]}'s buyer page</label>` : ''}
+    <button class="btn dark big block" type="button" id="fdone" ${pick ? '' : raw('disabled')}>${pick ? `Done · ${next ? 'next stop' : 'finish the tour'}` : 'Pick a face'}</button>
+  </div>`, (sh) => {
+    const btn = sh.querySelector('#fdone');
+    sh.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => {
+      pick = b.getAttribute('data-k');
+      sh.querySelectorAll('[data-k]').forEach((x) => { x.setAttribute('aria-pressed', String(x === b)); x.classList.remove('bb-on'); });
+      void b.offsetWidth;
+      b.classList.add('bb-on');
+      btn.disabled = false;
+      btn.textContent = `Done · ${next ? 'next stop' : 'finish the tour'}`;
+    }));
+    btn.addEventListener('click', () => {
+      if (!pick) return;
+      const note = sh.querySelector('[name=rnote]').value.trim();
+      const toBuyer = sh.querySelector('#fbbuyer');
+      const r = saveReaction(s.id, pick, note, toBuyer ? { hide_from_buyer: !toBuyer.checked } : {});
+      const textIt = sh.querySelector('#fbtext')?.checked;
+      closeSheet();
+      location.hash = next ? `#/door/${tourId}/${i + 1}` : `#/tour/${tourId}`;
+      if (textIt && r && r.stop.agent_phone) {
+        const body = feedbackText(r.stop, { me: store.settings().myName, date: tour.date, today: todayIso() });
+        const fresh = store.get('tours', tourId);
+        store.save('tours', { id: tourId, stops: fresh.stops.map((x) => (x.id === s.id ? { ...x, feedback_sent_at: new Date().toISOString() } : x)) });
+        setTimeout(() => { location.href = smsLink(r.stop.agent_phone, body); }, 350);
+      }
+    });
+  });
+}
+
+// Running late (2026-10-28): pick the minutes, Bestie writes the text to the
+// listing agent; Open in Messages, and Also text buyer.
+function lateSheet(tour, s) {
+  const prof = myProfile();
+  const me = (prof && prof.name) || store.settings().myName || '';
+  const now = new Date();
+  const base = s.arrive != null ? s.arrive : now.getHours() * 60 + now.getMinutes();
+  let mins = 10;
+  const words = () => lateText({ agent: s.agent, me, brokerage: prof && prof.brokerage, address: s.address, minutes: mins, arriveAt: base + mins });
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Running late</div>
+    <div class="small">${String(s.address || '').split(',')[0]}${s.agent ? ` · ${s.agent}` : ''}</div>
+    <div class="late-mins" role="group" aria-label="How late">${[5, 10, 15, 20].map((m) => html`<button class="chip ${m === mins ? 'on' : ''}" type="button" data-m="${m}">${m === 20 ? '20+' : m} min</button>`)}</div>
+    <label class="field"><span>The text (you can change it)</span><textarea id="latetext" rows="4"></textarea></label>
+    ${s.agent_phone ? html`<button class="btn dark big block" type="button" id="latego">${icon('text', 18)}Open in Messages</button>` : html`<div class="warn-box">No phone saved for the listing agent. Add it with Edit stop on the tour.</div>`}
+    <label class="field"><span>Buyer's phone</span><input id="latebuyer" type="tel" inputmode="tel" value="${tour.buyer_phone || ''}" placeholder="For the buyer's text"></label>
+    <button class="btn block" type="button" id="latebuy">${icon('text', 18)}Also text ${buyerOf(tour) ? buyerOf(tour).split(' ')[0] : 'buyer'}</button>
+  </div>`, (sh) => {
+    const box = sh.querySelector('#latetext');
+    box.value = words();
+    sh.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => {
+      mins = Number(b.getAttribute('data-m'));
+      sh.querySelectorAll('[data-m]').forEach((x) => x.classList.toggle('on', x === b));
+      box.value = words();
+    }));
+    sh.querySelector('#latego')?.addEventListener('click', () => { location.href = smsLink(s.agent_phone, box.value); });
+    sh.querySelector('#latebuy').addEventListener('click', () => {
+      const ph = sh.querySelector('#latebuyer').value.trim();
+      if (!ph.replace(/\D/g, '')) return toast("Add the buyer's phone first");
+      if (ph !== (tour.buyer_phone || '')) store.save('tours', { id: tour.id, buyer_phone: ph }, { quiet: true });
+      location.href = smsLink(ph, lateBuyerText({ buyer: buyerOf(tour), address: s.address, minutes: mins, arriveAt: base + mins, me: store.settings().myName }));
+    });
+  });
 }
 
 function reactionPicker(s) {
@@ -2435,15 +2564,12 @@ function reactionPicker(s) {
     }));
     btn.addEventListener('click', () => {
       if (!pick) return;
-      const note = sh.querySelector('[name=rnote]').value.trim();
-      const tour = store.all('tours').find((t) => (t.stops || []).some((x) => x.id === s.id));
-      if (tour) store.save('tours', { id: tour.id, stops: tour.stops.map((x) => (x.id === s.id ? { ...x, reaction: pick, reaction_note: note, reaction_at: new Date().toISOString() } : x)) });
-      if (s.property_id && (pick !== s.reaction || note !== (s.reaction_note || ''))) store.save('notes', { property_id: s.property_id, text: `Showing feedback: ${reactionLabel(pick)}${note ? ' · ' + note : ''}` });
+      const r = saveReaction(s.id, pick, sh.querySelector('[name=rnote]').value.trim());
       closeSheet();
       toast(`Saved: ${reactionLabel(pick)}`);
       render();
       // Listing agents always ask: offer the text straight away.
-      const saved = tour && store.get('tours', tour.id).stops.find((x) => x.id === s.id);
+      const saved = r && r.stop;
       if (saved && saved.agent_phone && !saved.feedback_sent_at) setTimeout(() => feedbackSheet(saved), 350);
     });
   });

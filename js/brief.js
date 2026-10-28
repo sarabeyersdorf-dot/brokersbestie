@@ -197,6 +197,7 @@ export function buyers(tours) {
     if (String(t.date) > b.last) { b.last = String(t.date); b.name = name; }
     for (const s of t.stops || []) {
       if (!s.shown && !s.reaction) continue;
+      if (s.hide_from_buyer) continue; // unticked "Add to <buyer>'s buyer page"
       const hk = s.property_id || buyerKey(s.address);
       const seen = { address: s.address, property_id: s.property_id || null, date: t.date, tour_id: t.id, stop_id: s.id, reaction: s.reaction || null, note: s.reaction_note || '', at: s.reaction_at || '', mls_url: s.mls_url || '' };
       const prev = b.homes.get(hk);
@@ -276,6 +277,18 @@ export function doorCodes(stop, saved = [], kindLabel = (k) => k) {
   };
   if (stop) add(stop.code_label && stop.code_label !== 'Code' ? stop.code_label : 'Code', stop.code);
   for (const a of saved) add(a.label || kindLabel(a.kind), a.code, a.location_note || '');
+  return out;
+}
+
+// Heads-up words for the door (2026-10-28): plain words under the address.
+// Occupied is shown by its own badge, so it is not repeated here. Read from
+// what is already saved: a dog or an alarm named in the notes, an alarm code.
+// Phase 9c adds one-tap tags on the property; they join this list.
+export function headsUp(stop, prop, codes = []) {
+  const text = [stop && stop.access_note, stop && stop.notes, prop && prop.showing_notes, prop && prop.directions].join(' ');
+  const out = [];
+  if (/\bdogs?\b|\bpuppy\b/i.test(text)) out.push('Dog');
+  if (codes.some((c) => /alarm/i.test(c.label)) || /\balarm\b/i.test(text)) out.push('Alarm');
   return out;
 }
 

@@ -649,3 +649,23 @@ list (each stop, time + street + badge), the tour page, the planner, At the
 door (big, under the address, "OCCUPIED · knock first"), and the door's next
 stop button (`nextStopWords`: "305 Cedar Hollow Ln · 9 min · Vacant"). The
 next-stop card on Today arrives with phase 5.
+
+## At the door and Mark shown (2026-10-28, phase 3) — supersedes "At the door" above
+
+Codes huge at the top ("Tap a code to copy it"); heads-up words under the
+address (`headsUp` in brief.js: Dog / Alarm from the notes and codes; phase 9c
+tags join it). Everything you press is in a sticky bottom panel (`.door-act`,
+every button 56px+): four quick faces (`DOOR_FACES`: love, maybe, nope,
+again) plus **All 8**, then **Running late** and **Call agent**, then a big
+yellow **Next stop** (time, `nextStopWords`). Swipe left = next stop, right =
+the one before. A quick face marks the stop shown (`saveReaction`, with Undo
+via `undoReaction`, which also removes the property note it filed). **All 8**
+(`allFacesSheet`): 8 faces, a private note you can say, "Text feedback to
+<agent>" and "Add to <buyer>'s buyer page" both ticked, and **Done · next
+stop**: saves, moves to the next stop, then opens Messages with
+`feedbackText` (the agent presses Send). Unticked buyer box sets
+`stop.hide_from_buyer`, which `buyers()` skips. **Running late**
+(`lateSheet`, `lateText` / `lateBuyerText` in messages.js): 5 / 10 / 15 /
+20+ min, editable text to the listing agent with name + brokerage from the
+profile and the new arrival time, Open in Messages, Also text buyer (phone kept
+on the tour). Undo toasts sit at the top on kiosk screens.

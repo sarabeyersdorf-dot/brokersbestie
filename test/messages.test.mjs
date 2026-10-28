@@ -187,3 +187,20 @@ test('the status is called "Other agent\'s" and American spelling is used', asyn
   assert.match(app, /tour: "Other agent's"/);
   assert.doesNotMatch(app, /'Showing \/ other agent'|Brand colour|'Cancelled'/);
 });
+
+import { lateText, lateBuyerText } from '../js/messages.js';
+import { headsUp, buyers as buyersOf } from '../js/brief.js';
+test('running late: one plain text with the new arrival time', () => {
+  assert.equal(lateText({ agent: 'Pat Lee', me: 'sara cooper', brokerage: 'Legacy Properties', address: '305 Cedar Hollow Ln, Murphys, CA', minutes: 10, arriveAt: 625 }),
+    "Hi Pat, it's Sara Cooper with Legacy Properties. Running about 10 minutes late to 305 Cedar Hollow Ln, now arriving around 10:25 AM. Thank you!");
+  assert.match(lateText({ minutes: 20 }), /^Hi, Running 20 minutes or more late to the showing\. Thank you!$/);
+  assert.match(lateBuyerText({ buyer: 'Jo Smith', address: '1 A St, X', minutes: 5, arriveAt: 600 }), /^Hi Jo, I'm running about 5 minutes behind for 1 A St\. See you around 10:00 AM\.$/);
+});
+test('heads-up words come from the notes and the codes', () => {
+  assert.deepEqual(headsUp({ notes: 'Friendly dog in the side yard' }, { showing_notes: '' }, [{ label: 'Alarm', code: '1' }]), ['Dog', 'Alarm']);
+  assert.deepEqual(headsUp({}, { showing_notes: 'Go direct' }, []), []);
+});
+test('a home left off the buyer page stays off it', () => {
+  const tours = [{ id: 't', buyer: 'Jo', date: '2026-10-28', stops: [{ id: 'a', address: '1 A St', shown: true, reaction: 'love' }, { id: 'b', address: '2 B St', shown: true, reaction: 'nope', hide_from_buyer: true }] }];
+  assert.deepEqual(buyersOf(tours)[0].homes.map((h) => h.address), ['1 A St']);
+});
