@@ -576,6 +576,13 @@ page (the app is at brokersbestie.vercel.app).
   "Brokers Bestie" (Sara, 2026-10-28: not an LLC yet); update both pages if
   that changes.
 - **Support address**: `SUPPORT_EMAIL` in js/config.js =
-  support@brokersbestie.app (footer, legal pages). Send feedback goes there
-  with Sara's Gmail cc'd (`FEEDBACK_CC` in js/install.js) until the GoDaddy
-  forwarding is confirmed working; then set `FEEDBACK_CC` to ''.
+  support@brokersbestie.app (footer, legal pages, Send feedback). It forwards
+  to Sara's Gmail through ImprovMX (MX mx1/mx2.improvmx.com + SPF TXT at `@`
+  in GoDaddy, Cowork 2026-10-28); it lands in Gmail spam, so Sara has a rule
+  moving it to the inbox. `FEEDBACK_CC` is '' now.
+- **brokersbestie.app is live** (Cowork, 2026-10-28): Vercel project
+  brokersbestie, `brokersbestie.app` main, `www` redirects to it,
+  brokersbestie.vercel.app still works for old home-screen installs. GoDaddy:
+  A `@` 216.150.1.1, CNAME `www` → Vercel's own target. Supabase Site URL is
+  https://brokersbestie.app (www and vercel.app in Redirect URLs); Dropbox
+  Chooser domains include both. Vercel is on Pro (Sara confirmed).

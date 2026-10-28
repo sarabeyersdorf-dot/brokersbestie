@@ -17,7 +17,7 @@ export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // GoDaddy email forwarding for brokersbestie.app to reach a real inbox.
 export const SUPPORT_EMAIL = 'support@brokersbestie.app';
 
-export const APP_VERSION = 'bb-v56';
+export const APP_VERSION = 'bb-v57';
 
 // Dropbox Chooser app key (public by design; the domains it may be used on are
 // set in the Dropbox App Console). Empty: "From Dropbox" explains the Files app

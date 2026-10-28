@@ -38,7 +38,7 @@ export function installSteps(p) {
       p.browser === 'safari' ? 'Tap the Share button (the square with an arrow). On newer iPhones tap ••• at the bottom first, then Share.' : 'Tap the Share button (the square with an arrow, at the top right).',
       'Scroll down and tap “Add to Home Screen”. If it is not there, tap “View More” or “Edit Actions”.',
       'Leave “Open as Web App” on, then tap Add.',
-      'If it still is not offered, open brokersbestie.vercel.app in Safari and try there.'
+      'If it still is not offered, open brokersbestie.app in Safari and try there.'
     ];
   }
   if (p.os === 'android') {
@@ -46,7 +46,7 @@ export function installSteps(p) {
     if (p.browser === 'samsung') return ['Tap the ≡ menu at the bottom.', 'Tap “Add page to”, then “Home screen”.'];
     return ['Tap the ⋮ menu at the top right of Chrome.', 'Tap “Add to home screen” or “Install app”, then Install.'];
   }
-  return ['Open this page on your phone: brokersbestie.vercel.app', 'iPhone: Safari → Share → Add to Home Screen. Android: Chrome ⋮ → Install app.'];
+  return ['Open this page on your phone: brokersbestie.app', 'iPhone: Safari → Share → Add to Home Screen. Android: Chrome ⋮ → Install app.'];
 }
 
 export function installCard({ dismissable = false, slim = false } = {}) {
@@ -92,11 +92,10 @@ export function wireInstall(root, { onHide } = {}) {
 // "Send feedback" (Sara, 2026-10-24, for the first outside testers): opens the
 // tester's own mail app addressed to Sara, with what kind of phone and browser
 // they are on filled in, so a bug report says where it happened.
-// Sent to the support address, with Sara's own inbox copied until the
-// support address is confirmed to forward (2026-10-28): a tester's report must
-// never bounce into nowhere.
+// Sent to the support address, which forwards to Sara's Gmail (ImprovMX,
+// confirmed by Cowork 2026-10-28). FEEDBACK_CC copied her Gmail until then.
 export const FEEDBACK_TO = SUPPORT_EMAIL;
-export const FEEDBACK_CC = 'sarasellscalifornia@gmail.com';
+export const FEEDBACK_CC = '';
 export function feedbackLink({ where = '', signedIn = false, version = '' } = {}, p = platform(), ua = navigator.userAgent) {
   const os = (ua.match(/(?:iPhone OS|CPU OS|Android) ([\d_.]+)/) || [])[1];
   const lines = [
