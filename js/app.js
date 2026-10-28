@@ -2,7 +2,7 @@
 // back button, bookmarks and a home-screen launch all land where expected.
 
 import * as store from './store.js';
-import { APP_VERSION } from './config.js';
+import { APP_VERSION, SUPPORT_EMAIL } from './config.js';
 import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLink, mapLink, todayIso, daysFrom, niceDate, whenText, toast, undoToast, copy } from './ui.js';
 import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMiles, roadMiles, driveMinutes } from './route.js';
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech } from './parse.js';
@@ -481,6 +481,34 @@ function openHousePicker() {
     <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Which open house?</div>
     <div class="card list">${list.map((p) => html`<a class="row" href="#/openhouse/${p.id}"><span class="grow"><span class="t">${p.address}</span><span class="s">${p.city || ''}</span></span>${icon('chev', 18)}</a>`)}</div>
   </div>`, (sh) => sh.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => closeSheet())));
+}
+
+// Delete my account (2026-10-28). Says first whether the team's shared data
+// goes too (alone on the team) or stays with the teammates.
+async function deleteAccountSheet() {
+  let mates = 0;
+  try { mates = (await api('/api/account')).teammates || 0; } catch (e) { return toast(e.message); }
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Delete my account</div>
+    ${mates ? html`<p>You share a team with ${mates} other ${mates === 1 ? 'person' : 'people'}. Your sign-in and your profile are deleted; the properties, codes and tours you shared <b>stay with your team</b>.</p>`
+      : html`<p>Everything is deleted: every property, code, note, tour, contact, photo and MLS sheet, your CRM connection and your sign-in. <b>This cannot be undone.</b></p>`}
+    <label class="field"><span>Type DELETE to confirm</span><input id="delok" autocomplete="off" autocapitalize="characters"></label>
+    <button class="btn dark block" type="button" id="delgo" style="background:var(--alert);border-color:var(--alert)">Delete my account</button>
+    <button class="btn ghost block" type="button" id="delno">Keep my account</button>
+  </div>`, (sh) => {
+    sh.querySelector('#delno').addEventListener('click', closeSheet);
+    sh.querySelector('#delgo').addEventListener('click', async (e) => {
+      if (sh.querySelector('#delok').value.trim().toUpperCase() !== 'DELETE') return toast('Type DELETE to confirm');
+      e.currentTarget.disabled = true;
+      e.currentTarget.textContent = 'Deleting…';
+      try {
+        await api('/api/account', { method: 'POST', body: JSON.stringify({ op: 'delete', confirm: 'DELETE', profile_id: store.settings().profileId || '' }) });
+        await store.wipeLocal();
+        alert('Your account is deleted.');
+        location.replace('#/'); location.reload();
+      } catch (err) { toast(err.message); e.currentTarget.disabled = false; e.currentTarget.textContent = 'Delete my account'; }
+    });
+  });
 }
 
 function viewToday() {
@@ -2798,6 +2826,7 @@ function viewSettings() {
             <label class="field"><span>Email</span><input id="email" type="email" autocomplete="email" placeholder="you@brokerage.com" value="${s.pendingEmail || ''}"></label>
             <label class="field"><span>Invite code from your team (if you have one)</span><input id="precode" autocomplete="off" autocapitalize="characters" placeholder="ABC123" value="${s.pendingInvite || ''}"></label>
             <button class="btn dark block" type="button" id="signin">Email me a sign-in code</button>
+            <div class="hint">By signing in you agree to the <a href="terms.html">terms</a> and <a href="privacy.html">privacy policy</a>.</div>
             <div id="codebox" ${s.pendingEmail ? '' : raw('hidden')} class="sec">
               <label class="field"><span>Code from the email</span><input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456" class="codein"></label>
               <button class="btn teal big block" type="button" id="verify">Sign in</button>
@@ -2891,7 +2920,16 @@ function viewSettings() {
         <div class="small">Your data is yours: this file has every property, code, person, note, tour, drive and expense.</div>
       </section>
 
+      <section class="card pad sec">
+        <div class="label">Delete my account</div>
+        ${c.user ? html`<div class="small" id="delwho">Removes your sign-in and your data from Brokers Bestie. This cannot be undone, so download the backup above first if you might want it.</div>
+          <button class="btn ghost block" type="button" id="delacct" style="color:var(--alert)">Delete my account</button>`
+          : html`<div class="small">You're not signed in, so everything is only on this phone.</div>
+          <button class="btn ghost block" type="button" id="wipephone" style="color:var(--alert)">Erase everything on this phone</button>`}
+      </section>
+
       ${installCard()}
+      <div class="small" style="text-align:center;color:var(--muted, #7a8582)"><a href="privacy.html" style="color:inherit">Privacy</a> · <a href="terms.html" style="color:inherit">Terms</a> · <a href="mailto:${SUPPORT_EMAIL}" style="color:inherit">${SUPPORT_EMAIL}</a></div>
       <div class="small" style="text-align:center;color:var(--muted, #7a8582)">Version ${APP_VERSION}</div>
     </main>`,
     mount(root) {
@@ -3035,6 +3073,12 @@ function viewSettings() {
         root.querySelector('#crmoff').addEventListener('click', (e) => { if (confirm('Stop syncing from this CRM? What already came in stays.')) call({ op: 'disconnect' }, e.currentTarget); });
       }
       root.querySelector('#rewelcome')?.addEventListener('click', () => showWelcome());
+      root.querySelector('#delacct')?.addEventListener('click', () => deleteAccountSheet());
+      root.querySelector('#wipephone')?.addEventListener('click', async () => {
+        if (!confirm('Erase every property, code, note, tour and photo on this phone? This cannot be undone.')) return;
+        await store.wipeLocal();
+        location.replace('#/'); location.reload();
+      });
       root.querySelectorAll('[data-setdbx]').forEach((b) => b.addEventListener('click', async () => {
         const prof = myProfile();
         if (!prof) { location.hash = '#/profile'; return; }

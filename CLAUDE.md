@@ -546,3 +546,34 @@ planner), At a property (the old "Where am I?" button), Open house
 as "Your day". **Seller updates are their own screen** (`#/updates`,
 `viewSellerUpdates`: due this week, then sent in the last week); the Today
 card and its "Next week" snooze are gone.
+
+## Before launch: AI limit, delete account, privacy & terms, support (2026-10-28)
+
+Sara asked "is this ready to launch aside from Stripe and Twilio?", then "do
+1-4". She is on Supabase Pro. brokersbestie.app was still GoDaddy's parked
+page (the app is at brokersbestie.vercel.app).
+- **Daily AI limit**: `refuse()` in `api/_lib/ai.js` counts every reading /
+  Tell Bestie / showing-confirmation call per agent per Pacific day with
+  `bb_ai_take` (db/021 `ai_usage`, RLS on, no policies, service role only;
+  one statement so two calls cannot both pass the cap). Default 50
+  (`DAILY_LIMIT`), `AI_DAILY_LIMIT` in Vercel overrides. At the cap: 429 in
+  plain words. A database error lets the call through (logged), so a hiccup
+  never switches the features off. `test/ai-limit.test.mjs`.
+- **Delete my account** (Settings, last card; `api/account.js`): typed
+  DELETE. Alone on the team → the team's photos/sheets in storage, then the
+  team row (every table cascades from `teams`), then the auth user. With
+  teammates → only their membership, their own profile (`profile_id` from the
+  phone) and the auth user; the team keeps what was shared. `checkins.user_id`
+  and `team_invites.created_by` are nulled first (no cascade on them).
+  Re-running after a failure carries on. The phone then runs
+  `store.wipeLocal()` (localStorage `bb*` / `sb-*`, the `bb-photos` IndexedDB,
+  local sign-out). Signed out, the card offers "Erase everything on this
+  phone". `test/account-delete.test.mjs`.
+- **privacy.html / terms.html**: DRAFTS for a lawyer to review, plain words.
+  Linked from Settings' footer, under the sign-in button ("By signing in you
+  agree…") and on `oh.html` for open house visitors. Terms say plainly the
+  safety check-in is not an emergency service.
+- **Support address**: `SUPPORT_EMAIL` in js/config.js =
+  support@brokersbestie.app (footer, legal pages). Send feedback goes there
+  with Sara's Gmail cc'd (`FEEDBACK_CC` in js/install.js) until the GoDaddy
+  forwarding is confirmed working; then set `FEEDBACK_CC` to ''.

@@ -3,15 +3,32 @@
 // Answers are forced into a JSON shape, so the screen never has to guess.
 
 import Anthropic from '@anthropic-ai/sdk';
-import { env, caller } from './server.js';
+import { env, caller, db } from './server.js';
 
 export const MODEL = 'claude-opus-5-5';
 
 // Each call costs money, so once accounts exist only a signed-in agent may
-// make one. Returns an error message, or null when the request may go ahead.
+// make one, and only DAILY_LIMIT a day (2026-10-28, before launch: anyone can
+// sign up, and every use is billed to Sara's Anthropic account). The count is
+// one row per agent per Pacific day (db/021, bb_ai_take). Returns an error
+// message, or null when the request may go ahead.
+export const DAILY_LIMIT = 50;
+export const dailyLimit = () => { const n = parseInt(env('AI_DAILY_LIMIT'), 10); return Number.isFinite(n) && n >= 0 ? n : DAILY_LIMIT; };
 export async function refuse(req) {
   if (!env('ANTHROPIC_API_KEY')) return { status: 503, error: 'Reading and voice commands are not switched on yet (ANTHROPIC_API_KEY).' };
-  if (env('SUPABASE_URL') && !(await caller(req))) return { status: 401, error: 'Sign in to use this' };
+  if (!env('SUPABASE_URL')) return null;
+  const user = await caller(req);
+  if (!user) return { status: 401, error: 'Sign in to use this' };
+  const cap = dailyLimit();
+  let used;
+  try {
+    used = await db('rpc/bb_ai_take', { method: 'POST', body: { who: user.id, cap } });
+  } catch (e) {
+    // A database hiccup should not switch the feature off for everyone.
+    console.error('ai_usage count failed; letting this one through', e.message);
+    return null;
+  }
+  if (used == null) return { status: 429, error: `You've used Bestie's reading and voice help ${cap} times today, the daily limit. It starts again at midnight. Typing it in still works.` };
   return null;
 }
 

@@ -1,3 +1,4 @@
+import { SUPPORT_EMAIL } from './config.js';
 // "Put it on your home screen" (Sara, 2026-10-24: "the add to homescreen
 // doesn't work"). Android Chrome can install with one button once the browser
 // offers it (beforeinstallprompt); iPhone has no button an app can press, so
@@ -91,7 +92,11 @@ export function wireInstall(root, { onHide } = {}) {
 // "Send feedback" (Sara, 2026-10-24, for the first outside testers): opens the
 // tester's own mail app addressed to Sara, with what kind of phone and browser
 // they are on filled in, so a bug report says where it happened.
-export const FEEDBACK_TO = 'sarasellscalifornia@gmail.com';
+// Sent to the support address, with Sara's own inbox copied until the
+// support address is confirmed to forward (2026-10-28): a tester's report must
+// never bounce into nowhere.
+export const FEEDBACK_TO = SUPPORT_EMAIL;
+export const FEEDBACK_CC = 'sarasellscalifornia@gmail.com';
 export function feedbackLink({ where = '', signedIn = false, version = '' } = {}, p = platform(), ua = navigator.userAgent) {
   const os = (ua.match(/(?:iPhone OS|CPU OS|Android) ([\d_.]+)/) || [])[1];
   const lines = [
@@ -102,5 +107,5 @@ export function feedbackLink({ where = '', signedIn = false, version = '' } = {}
     `Signed in: ${signedIn ? 'yes' : 'no'} · Screen: ${where || '-'}${version ? ' · Version ' + version : ''}`,
     `Sent: ${new Date().toLocaleString()}`
   ];
-  return `mailto:${FEEDBACK_TO}?subject=${encodeURIComponent('Brokers Bestie feedback')}&body=${encodeURIComponent(lines.join('\n'))}`;
+  return `mailto:${FEEDBACK_TO}?${FEEDBACK_CC ? `cc=${encodeURIComponent(FEEDBACK_CC)}&` : ''}subject=${encodeURIComponent('Brokers Bestie feedback')}&body=${encodeURIComponent(lines.join('\n'))}`;
 }

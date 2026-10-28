@@ -37,6 +37,15 @@ function writeJson(key, value) {
 // block every save, so it is dropped here.
 for (const t of TABLES) data[t] = readJson(KEY(t), []).filter((r) => r && r.id !== 'crm');
 
+// Everything this app keeps on the phone: the tables, settings, the photos
+// database, and the sign-in. Used after "Delete my account" and by "Erase
+// everything on this phone".
+export async function wipeLocal() {
+  try { if (cloud.client) await cloud.client.auth.signOut({ scope: 'local' }); } catch {}
+  try { Object.keys(localStorage).filter((k) => k.startsWith('bb') || k.startsWith('sb-')).forEach((k) => localStorage.removeItem(k)); } catch {}
+  await new Promise((done) => { try { const r = indexedDB.deleteDatabase('bb-photos'); r.onsuccess = r.onerror = r.onblocked = () => done(); } catch { done(); } });
+}
+
 export function uid() {
   return (crypto.randomUUID && crypto.randomUUID()) || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
