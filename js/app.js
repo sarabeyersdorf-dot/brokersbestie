@@ -17,7 +17,7 @@ import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visi
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink, shareWhere, shareLink, stopShareLinks } from './push.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, doorCodes, feedbackDue, taxYear, taxCsv } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, feedbackDue, taxYear, taxCsv } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -26,7 +26,7 @@ const $fab = document.getElementById('fab');
 // ---------- vocabulary ----------
 
 const STATUS = {
-  listing: 'My listing', prep: 'Coming soon', escrow: 'In escrow', tour: 'Showing / other agent', closed: 'Closed', cancelled: 'Cancelled'
+  listing: 'My listing', prep: 'Coming soon', escrow: 'In escrow', tour: "Other agent's", closed: 'Closed', cancelled: 'Canceled'
 };
 const LIVE = ['listing', 'prep', 'escrow', 'tour'];
 
@@ -441,6 +441,7 @@ function viewSellerUpdates() {
   };
 }
 const sellerDueCount = () => sellerUpdatesDue(props(), todayIso(), firstName(store.settings().myName) || null).length;
+const sellerPastDueCount = () => sellerUpdatesPastDue(props(), todayIso(), firstName(store.settings().myName) || null).length;
 
 // The weekly update for one listing, to its seller.
 function sellerUpdateSheet(pid) {
@@ -463,12 +464,13 @@ const installHidden = () => { try { return localStorage.getItem('bb:installhide'
 function doTiles(tours) {
   const tour = tours[0];
   const due = sellerDueCount();
+  const late = due ? sellerPastDueCount() : 0;
   const tile = (attrs, ic, label, cls = '') => html`<${raw(attrs.href ? 'a' : 'button')} class="tile do" ${raw(attrs.href ? `href="${attrs.href}"` : `type="button" id="${attrs.id}"`)}><span class="ic ${cls}">${icon(ic, 26)}</span>${label}</${raw(attrs.href ? 'a' : 'button')}>`;
   return html`<section class="sec"><div class="tiles three do-tiles">
     ${tile({ href: tour ? `#/tour/${tour.id}` : '#/plan' }, 'route', tour ? "Today's tour" : 'Show homes', 't')}
     ${tile({ id: 'findme' }, 'pin', 'At a property', 'y')}
     ${tile({ id: 'ohpick' }, 'person', 'Open house')}
-    ${tile({ href: '#/updates' }, 'text', html`Seller updates${due ? html` <span class="badge">${due}</span>` : ''}`)}
+    ${tile({ href: '#/updates' }, 'text', html`Seller updates${due ? html` <span class="badge ${late ? 'late' : ''}" title="${late ? `${late} past due` : `${due} due this week`}">${due}</span>` : ''}`)}
     ${tile({ href: '#/p/new' }, 'plus', 'Add a property')}
     ${tile({ href: '#/miles' }, 'miles', 'Log a drive')}
   </div></section>`;
@@ -535,7 +537,7 @@ function viewToday() {
       ${searchText ? html`<section class="sec">
         <div class="sec-head"><div class="label accent">${results.length} found</div><button class="btn ghost" type="button" id="clearq" style="min-height:36px">Clear</button></div>
         <div class="card list">${results.length ? results.slice(0, 40).map((r) => html`<a class="row" href="${r.href || (r.propertyId ? '#/p/' + r.propertyId : '#/')}">
-          <span class="pill tour" style="min-width:64px;text-align:center">${r.kind}</span>
+          <span class="tag" style="min-width:64px;text-align:center">${r.kind}</span>
           <span class="grow"><span class="t">${r.title}</span><span class="s">${r.sub}</span></span></a>`) : html`<div class="empty">Nothing matches “${searchText}”.</div>`}</div>
       </section>` : ''}
 
@@ -678,7 +680,7 @@ function viewProps() {
     html: html`${header({ kicker: 'Properties', title: `${props().filter(groups.live).length} active`, right: html`<a class="btn teal" href="#/p/new" style="min-height:40px">+ Add</a>` })}
     <main class="wrap">
       <a class="card row" href="#/sheet"><span class="tile" style="border:0;padding:0"><span class="ic t">${icon('sheet', 22)}</span></span><span class="grow"><span class="t">Snap an MLS sheet</span><span class="s">Bestie reads it and fills in the property card</span></span>${icon('chev', 18)}</a>
-      <div class="tabs">${tab('live', 'Active')}${tab('escrow', 'In escrow')}${tab('tour', 'Showing')}${tab('done', 'Closed')}</div>
+      <div class="tabs">${tab('live', 'Active')}${tab('escrow', 'In escrow')}${tab('tour', "Other agent's")}${tab('done', 'Closed')}</div>
       ${whoChips()}
       <label class="sortby">Sort<select id="propsort">${PROP_SORTS.map(([k, l]) => html`<option value="${k}" ${k === sortBy ? raw('selected') : ''}>${l}</option>`)}</select></label>
       <div class="card list">${list.length ? list.map(propRow) : buddy('Nothing here yet. Add a listing or a home you are showing.')}</div>
@@ -2077,7 +2079,7 @@ function viewProfile() {
       ${PROFILE_FIELDS.map((f) => fieldHtml(f, p[f.name]))}
       <div class="card pad sec">
         <div class="label accent">Your look</div>
-        <label class="field"><span>Brand colour</span><input id="pcolor" type="color" value="${/^#[0-9a-f]{6}$/i.test(p.color || '') ? p.color : BRAND_DEFAULT}" style="height:48px;padding:4px"></label>
+        <label class="field"><span>Brand color</span><input id="pcolor" type="color" value="${/^#[0-9a-f]{6}$/i.test(p.color || '') ? p.color : BRAND_DEFAULT}" style="height:48px;padding:4px"></label>
         <div class="btns">
           <label class="btn">${icon('photo', 18)}${p.logo_id ? 'Change logo' : 'Add your logo'}<input type="file" accept="image/*" data-img="logo_id" hidden></label>
           <label class="btn">${icon('person', 18)}${p.headshot_id ? 'Change headshot' : 'Add a headshot'}<input type="file" accept="image/*" data-img="headshot_id" hidden></label>
@@ -2228,7 +2230,7 @@ function viewVisitors(pid) {
       <a class="btn dark big block" href="#/openhouse/${pid}">${icon('person', 18)}Open the sign-in sheet</a>
       ${days.map((d) => html`<section class="sec"><div class="label accent">${niceDate(d)}</div>
         <div class="card list">${list.filter((v) => v.oh_date === d).map((v) => html`<div class="row" style="align-items:flex-start">
-          <span class="grow"><span class="t">${[v.first_name, v.last_name].filter(Boolean).join(' ')}${v.has_agent ? html` <span class="pill tour" style="font-size:11px">Has an agent</span>` : ''}${v.also_selling ? html` <span class="pill prep" style="font-size:11px">Selling too</span>` : ''}</span>
+          <span class="grow"><span class="t">${[v.first_name, v.last_name].filter(Boolean).join(' ')}${v.has_agent ? html` <span class="tag">Has an agent</span>` : ''}${v.also_selling ? html` <span class="tag">Selling too</span>` : ''}</span>
             <span class="s">${[v.phone ? prettyPhone(v.phone) : '', v.email, v.timeframe].filter(Boolean).join(' · ')}</span>
             <span class="s ${v.followed_up_at ? 'ok' : v.consent ? '' : 'wait'}">${v.followed_up_at ? `✓ Followed up ${niceDate(v.followed_up_at.slice(0, 10))}` : v.consent ? 'OK to contact' : 'Did not tick “OK to contact”'}</span></span>
           <div style="display:flex;gap:6px;flex-shrink:0">${v.phone ? html`<a class="icon-btn" href="tel:${digits(v.phone)}" aria-label="Call">${icon('phone', 18)}</a>` : ''}<button class="icon-btn" type="button" data-fu="${v.id}" aria-label="Thank-you text">${icon('text', 18)}</button></div>
@@ -2549,8 +2551,8 @@ function viewTaxes(year) {
 // ---------- showing confirmations (2026-10-27) ----------
 // Paste ShowingTime / BrokerBay / an agent's text, or add a screenshot; Bestie
 // reads it (api/read-showings.js), shows what it found, and adds the ticked
-// ones: the showing on the calendar, the home (new ones as "Showing / other
-// agent"), the lockbox or gate code, and the listing agent.
+// ones: the showing on the calendar, the home (new ones as "Other agent's"
+// ), the lockbox or gate code, and the listing agent.
 const showState = { text: '', files: [], step: 'paste', plan: [], error: '' };
 function viewShowingsImport() {
   const st = showState;
@@ -2895,7 +2897,7 @@ function viewSettings() {
         ${myProfile() ? html`${brandBand(myProfile())}<a class="btn block" href="#/profile">${icon('edit', 18)}Edit profile, logo & license #s</a>
           <div class="btns"><button class="btn" type="button" data-setdbx="logo_id">${icon('photo', 18)}Logo from Dropbox</button><button class="btn" type="button" data-setdbx="headshot_id">${icon('person', 18)}Headshot from Dropbox</button></div>
           <div class="hint">Opens your own Dropbox: pick the file and it goes on your sign-in sheet and branding.</div>`
-          : html`<div class="small">Add your name, brokerage, license numbers, logo and colour. They go on your open house sign-in and the texts Bestie writes for you.</div><a class="btn dark block" href="#/profile">Set up my profile</a>`}
+          : html`<div class="small">Add your name, brokerage, license numbers, logo and color. They go on your open house sign-in and the texts Bestie writes for you.</div><a class="btn dark block" href="#/profile">Set up my profile</a>`}
         <label class="field"><span>First name for “Mine” and your morning greeting</span><input id="myname" autocomplete="given-name" placeholder="Sara" value="${s.myName ? s.myName[0].toUpperCase() + s.myName.slice(1) : ''}"></label>
       </section>
 
@@ -3825,8 +3827,16 @@ function colorHeaders(root) {
   root.querySelectorAll('.sec-head > .label, section > .label:first-child, .card > .label:first-child, .sec > .label:first-child, .status-pick .label').forEach((el) => {
     if (el.closest('.brief')) return; // the greeting keeps its own look
     el.classList.add('hd');
-    el.dataset.hue = headerHue(el.textContent);
+    const hue = headerHue(el.textContent);
+    el.dataset.hue = hue;
+    // A short tab the width of the words, on a thin line of the same color
+    // (2026-10-28). The line runs under the whole header row.
+    if (!el.querySelector(':scope > .hd-t')) { const t = document.createElement('span'); t.className = 'hd-t'; t.append(...el.childNodes); el.append(t); }
+    const row = el.parentElement;
+    if (row && row.classList.contains('sec-head')) { row.classList.add('hd-row'); row.dataset.hue = hue; }
   });
+  // Only the most urgent thing on a screen is filled in: the first late item.
+  root.querySelector('.ktag.c-late')?.classList.add('urgent');
 }
 
 function render() {

@@ -622,3 +622,20 @@ sheet reading and Tell Bestie stop; **safety check-ins and reminders never**).
   `HANDLED`; Customer Portal settings; the same product/prices in live mode
   with the same lookup keys; at launch set `billing_enforced` to 'true'.
 Guarded by `test/billing.test.mjs`.
+
+## Calm pass (2026-10-28) — supersedes the colors above
+
+Sara's Claude Design review, phase 1 of 9 (one phase per commit, she checks
+each on her phone). New colors: Showing `#9d7ae0` (dark text on it), Coming
+soon `#9a6a14`, In escrow `#6e5f55`, Done/confirmed and Closing `#1f6e33`.
+The status `tour` reads **"Other agent's"** (id unchanged). Kinds and
+statuses are a small dot plus the word (`.ktag`, `.pill.<status>`), never a
+filled chip or a colored card edge; only the FIRST late item on a screen is
+filled red (`colorHeaders` marks it `.urgent`). Section headers are a short
+tab on a thin line of the same color (`colorHeaders` wraps the words in
+`.hd-t` and gives a `.sec-head` row `hd-row` + `data-hue`); "Getting in"
+stays one full yellow band. Safety headers and the check-in tile are dark,
+not red. Seller updates badge is teal, red only when one is past due
+(`sellerUpdatesPastDue`: last update 14+ days ago, or none and listed 14+
+days). Neutral word tags with no color meaning use `.tag`. American spelling
+in everything a person reads (Canceled, color).

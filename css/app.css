@@ -521,27 +521,27 @@ details.status-pick[open] > summary .chg { visibility: hidden; }
    palette (headerHue in app.js). White words on a solid band, so they read
    at a glance and in the sun. */
 .label.hd { display: inline-block; width: fit-content; align-self: flex-start; padding: 5px 10px 4px; border-radius: 6px; color: #fff; background: var(--hd, #353b3e); letter-spacing: .12em; line-height: 1.2; }
-.label.hd[data-hue="code"] { --hd: #F5C93E; color: #1f2326; }
-.label.hd[data-hue="showing"] { --hd: var(--k-showing); }
-.label.hd[data-hue="deadline"] { --hd: var(--k-deadline); }
-.label.hd[data-hue="closing"] { --hd: var(--k-closing); }
-.label.hd[data-hue="todo"] { --hd: var(--k-todo); }
-.label.hd[data-hue="appt"] { --hd: var(--k-appt); }
-.label.hd[data-hue="listing"] { --hd: var(--s-listing); }
-.label.hd[data-hue="escrow"] { --hd: var(--s-escrow); }
-.label.hd[data-hue="status"] { --hd: var(--s-tour); }
-.label.hd[data-hue="safety"] { --hd: #c8262e; }
-.label.hd[data-hue="people"] { --hd: #1f5f8b; }
-.label.hd[data-hue="notes"] { --hd: #3f6b2a; }
-.label.hd[data-hue="remind"] { --hd: #4b3fa6; }
-.label.hd[data-hue="indigo"] { --hd: #3d3a9e; }
-.label.hd[data-hue="plum"] { --hd: #7a2d6b; }
-.label.hd[data-hue="ocean"] { --hd: #0e6b8a; }
-.label.hd[data-hue="forest"] { --hd: #2e6b45; }
-.label.hd[data-hue="rust"] { --hd: #9c3d1c; }
-.label.hd[data-hue="teal"] { --hd: #0b7a6e; }
-.label.hd[data-hue="berry"] { --hd: #a3285a; }
-.label.hd[data-hue="olive"] { --hd: #5e6420; }
+[data-hue="code"] { --hd: var(--code); }
+[data-hue="showing"] { --hd: var(--k-showing); }
+[data-hue="deadline"] { --hd: var(--k-deadline); }
+[data-hue="closing"] { --hd: var(--k-closing); }
+[data-hue="todo"] { --hd: var(--k-todo); }
+[data-hue="appt"] { --hd: var(--k-appt); }
+[data-hue="listing"] { --hd: var(--s-listing); }
+[data-hue="escrow"] { --hd: var(--s-escrow); }
+[data-hue="status"] { --hd: var(--s-tour); }
+[data-hue="safety"] { --hd: #2f3a40; }
+[data-hue="people"] { --hd: #1f5f8b; }
+[data-hue="notes"] { --hd: #3f6b2a; }
+[data-hue="remind"] { --hd: #4b3fa6; }
+[data-hue="indigo"] { --hd: #3d3a9e; }
+[data-hue="plum"] { --hd: #7a2d6b; }
+[data-hue="ocean"] { --hd: #0e6b8a; }
+[data-hue="forest"] { --hd: #2e6b45; }
+[data-hue="rust"] { --hd: #9c3d1c; }
+[data-hue="teal"] { --hd: #0b7a6e; }
+[data-hue="berry"] { --hd: #a3285a; }
+[data-hue="olive"] { --hd: #5e6420; }
 .sec-head { align-items: center; }
 html.hc .label.hd { color: #fff; }
 html.hc .label.hd[data-hue="code"] { color: #000; }
@@ -557,3 +557,74 @@ html.hc .label.hd[data-hue="code"] { color: #000; }
 .plan-banner.bad { border-left-color: var(--late, #c0392b); }
 .plan-pick { display: block; margin-top: 10px; cursor: pointer; }
 .plan-pick:active { transform: scale(.99); }
+
+/* ---------- Calm pass (Sara, 2026-10-28) ----------
+   New colors, and less of them: cards stay white; a kind or a status is a
+   small dot plus its word (no filled chips, no colored card edges); section
+   headers are short tabs on a thin line of the same color, except "Getting
+   in", which stays one full yellow band. Only the most urgent item on a screen
+   is filled in (the first late one, red). */
+:root {
+  --k-showing: #9d7ae0;
+  --s-prep: #9a6a14;
+  --s-escrow: #6e5f55;
+  --done: #1f6e33;
+  --k-closing: #1f6e33;
+  --s-closed-dot: #8d979a;
+}
+
+/* Kinds: dot + word */
+.ktag { background: none; color: var(--ink-2); padding: 0; border-radius: 0; margin-right: 8px; font: 700 11px/1.5 var(--sans); }
+.ktag::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--k); margin-right: 5px; vertical-align: 0; }
+.ktag.c-late { color: var(--k-late); }
+.ktag.urgent { background: var(--k-late); color: #fff; padding: 1px 7px; border-radius: 3px; }
+.ktag.urgent::before { background: #fff; }
+.row[class*="c-"], .row[class*="st-"] { box-shadow: none; }
+
+/* Statuses: dot + word */
+.pill.listing { --s: var(--s-listing); }
+.pill.prep { --s: var(--s-prep); }
+.pill.escrow { --s: var(--s-escrow); }
+.pill.tour { --s: var(--s-tour); }
+.pill.closed, .pill.cancelled { --s: var(--s-closed-dot); }
+.pill.listing, .pill.prep, .pill.escrow, .pill.tour, .pill.closed, .pill.cancelled {
+  background: none; color: var(--ink); padding: 0; border-radius: 0; display: inline-flex; align-items: center; gap: 5px;
+}
+.pill.listing::before, .pill.prep::before, .pill.escrow::before, .pill.tour::before, .pill.closed::before, .pill.cancelled::before {
+  content: ''; width: 9px; height: 9px; border-radius: 50%; background: var(--s); flex-shrink: 0;
+}
+.top .pill { color: #fff; }
+.pill.sm { padding: 0; margin-right: 8px; }
+details.status-pick > summary .pill { padding: 0; font-size: 13px; }
+.stat-opt.st-listing { --s: var(--s-listing); } .stat-opt.st-prep { --s: var(--s-prep); } .stat-opt.st-escrow { --s: var(--s-escrow); }
+.stat-opt.st-tour { --s: var(--s-tour); } .stat-opt.st-closed, .stat-opt.st-cancelled { --s: var(--s-closed-dot); }
+.stat-opt { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.stat-opt::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: var(--s); }
+.stat-opt.on, .chip.st.on, .chip.st.st-listing.on, .chip.st.st-prep.on, .chip.st.st-escrow.on, .chip.st.st-tour.on,
+.stat-opt.st-listing.on, .stat-opt.st-prep.on, .stat-opt.st-escrow.on, .stat-opt.st-tour.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+/* A plain word tag with no color meaning ("Has an agent", search kinds) */
+.tag { display: inline-block; padding: 1px 6px; border: 1px solid var(--line); border-radius: 3px; background: none; color: var(--ink-2); font: 700 11px/1.5 var(--sans); letter-spacing: .04em; text-transform: uppercase; }
+
+/* Section headers: a short tab on a thin line */
+.label.hd { display: block; align-self: stretch; width: auto; background: none; padding: 0; border-radius: 0; color: inherit; border-bottom: 2px solid var(--hd, #353b3e); line-height: 1; }
+.label.hd > .hd-t { display: inline-block; padding: 5px 10px 4px; border-radius: 6px 6px 0 0; background: var(--hd, #353b3e); color: #fff; letter-spacing: .12em; line-height: 1.2; }
+.label.hd[data-hue="showing"] > .hd-t { color: var(--ink); }
+.sec-head.hd-row { border-bottom: 2px solid var(--hd); align-items: flex-end; gap: 10px; }
+.sec-head.hd-row > .label.hd { border-bottom: 0; flex: 1; }
+.sec-head.hd-row > :not(.label) { padding-bottom: 4px; }
+.status-pick .label.hd { display: inline-block; border-bottom: 0; flex: none; }
+.status-pick .label.hd > .hd-t { border-radius: 6px; }
+/* "Getting in" stays one full yellow band */
+.label.hd[data-hue="code"] { border-bottom: 0; }
+.label.hd[data-hue="code"] > .hd-t { display: block; border-radius: 6px; color: var(--ink); }
+.sec-head.hd-row[data-hue="code"] { border-bottom: 0; background: var(--code); border-radius: 6px; padding-right: 10px; }
+.sec-head.hd-row[data-hue="code"] > .label.hd > .hd-t { background: none; }
+html.hc .label.hd > .hd-t { color: #fff; }
+html.hc .label.hd[data-hue="code"] > .hd-t, html.hc .label.hd[data-hue="showing"] > .hd-t { color: #000; }
+
+/* Seller updates count: teal, red only when one is past due */
+.tile.do .badge { background: var(--teal-text); }
+.tile.do .badge.late { background: var(--alert); }
+/* Safety check-in is not an error: its quick-add icon is dark, not red. */
+.tile .ic.r { background: var(--ink); color: #fff; }

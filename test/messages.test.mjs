@@ -164,3 +164,26 @@ test('feedback from the agents who showed my listing: ask, then log, then gone',
   assert.deepEqual(r.map((x) => [x.event.id, x.stage]), [['b', 'log'], ['a', 'ask']]);
   assert.match(feedbackRequestText({ agent: 'Pat Lee', address: '433 E Highway 4, Murphys', date: '2026-10-26', today: '2026-10-27', me: 'sara' }), /^Hi Pat, thank you for showing 433 E Highway 4 on Monday\. How did your buyers like it\?/);
 });
+
+// Seller updates past due (2026-10-28): 14+ days since the last one, or none
+// ever sent on a listing live 14+ days. A new listing is due, not past due.
+import { sellerUpdatesPastDue } from '../js/brief.js';
+test('seller updates: past due only after a full extra week', () => {
+  const today = '2026-10-28';
+  const props = [
+    { id: 'recent', status: 'listing', seller_update_at: '2026-10-25T10:00:00Z' },
+    { id: 'due', status: 'listing', seller_update_at: '2026-10-19T10:00:00Z' },
+    { id: 'late', status: 'listing', seller_update_at: '2026-10-10T10:00:00Z' },
+    { id: 'newlist', status: 'listing', list_date: '2026-10-24' },
+    { id: 'oldlist', status: 'listing', list_date: '2026-10-01' },
+    { id: 'nodate', status: 'listing' }
+  ];
+  assert.deepEqual(sellerUpdatesPastDue(props, today).map((p) => p.id), ['late', 'oldlist']);
+});
+
+test('the status is called "Other agent\'s" and American spelling is used', async () => {
+  const fs = await import('node:fs');
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  assert.match(app, /tour: "Other agent's"/);
+  assert.doesNotMatch(app, /'Showing \/ other agent'|Brand colour|'Cancelled'/);
+});

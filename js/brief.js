@@ -254,6 +254,14 @@ export function sellerUpdatesDue(props, today, who = null) {
   return (props || []).filter((p) => p.status === 'listing' && isWhose(p.owner, who) && (!p.seller_update_at || dayOf(p.seller_update_at) < cut));
 }
 
+// Past due (2026-10-28): due for a full extra week, i.e. the last update was
+// 14+ days ago, or none was ever sent and the listing went live 14+ days ago.
+// A new listing with no update yet is due, never past due.
+export function sellerUpdatesPastDue(props, today, who = null) {
+  const cut = addDays(today, -13);
+  return sellerUpdatesDue(props, today, who).filter((p) => (p.seller_update_at ? dayOf(p.seller_update_at) < cut : !!p.list_date && dayOf(p.list_date) < cut));
+}
+
 // ---------- at the door (2026-10-27) ----------
 // Every code for one tour stop, biggest first: the code typed on the stop,
 // then the property's saved codes (gate, lockbox, alarm...), each once.

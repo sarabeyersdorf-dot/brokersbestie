@@ -1,7 +1,7 @@
 // Showing confirmations -> what to add (2026-10-27). Pure, tested in
 // test/showings.test.mjs. The reading is api/read-showings.js; this decides,
 // for each showing found, which property it is (an exact street match, else
-// a new "Showing / other agent" property), whether it is new, a change to one
+// a new "Other agent's" property), whether it is new, a change to one
 // already on the calendar, or a cancellation, and which codes are new.
 import { matchProperty } from './parse.js';
 
@@ -32,4 +32,4 @@ export function planShowings(found, data) {
   });
 }
 
-export const ACTION_WORDS = { add: 'New', move: 'Time changed', cancel: 'Cancelled', same: 'Already on your calendar', skip: 'Cancelled (not on your calendar)' };
+export const ACTION_WORDS = { add: 'New', move: 'Time changed', cancel: 'Canceled', same: 'Already on your calendar', skip: 'Canceled (not on your calendar)' };
