@@ -673,3 +673,25 @@ html.hc .label.hd[data-hue="code"] > .hd-t, html.hc .label.hd[data-hue="showing"
 body.kiosk .toast { top: calc(12px + env(safe-area-inset-top)); bottom: auto; }
 .door-face { min-height: 68px; }
 .door-next .a { font-size: 20px; }
+
+/* Property page order, phase 4 (2026-10-28) */
+.action.teal { background: var(--teal); border-color: var(--teal); color: var(--ink); }
+.stat-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; border: 1.5px solid rgba(255,255,255,.45); border-radius: 20px; background: none; color: #fff; font: inherit; cursor: pointer; }
+span.stat-chip { cursor: default; border-style: dashed; }
+.stat-chip .pill { font-size: 12px; }
+.stat-chip .chg { font-size: 12px; opacity: .8; }
+.getin .sec-head { flex-wrap: wrap; }
+.saved-at { font: 600 12px var(--sans); color: var(--ink); padding-bottom: 4px; }
+.heads { display: flex; flex-wrap: wrap; gap: 6px; }
+.head-tag { display: inline-block; border: 1.5px solid var(--ink); border-radius: 4px; padding: 1px 8px; font: 700 13px/1.5 var(--sans); }
+.getin-txt { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.getin-k { font: 700 12px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 4px; }
+.nextup { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.pbar { position: fixed; left: 0; right: 0; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom)); z-index: 18; display: flex; gap: 8px; max-width: 560px; margin: 0 auto; padding: 8px 16px; background: var(--bg); border-top: 1px solid var(--line); }
+.pbar .btn { flex: 1; min-height: 48px; }
+.pbar .btn:not(.dark) { flex: 0 0 auto; padding: 0 22px; }
+.pbar .btn.block:not(.dark) { flex: 1; }
+body:has(.pbar) .fab { bottom: calc(var(--nav-h) + 78px + env(safe-area-inset-bottom)); }
+body:has(.pbar) .toast { bottom: calc(var(--nav-h) + 140px + env(safe-area-inset-bottom)); }
+body.kiosk .pbar { display: none; }
+.top .pill::before { box-shadow: 0 0 0 2px rgba(255,255,255,.9); }

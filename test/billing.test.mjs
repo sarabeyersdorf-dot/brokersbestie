@@ -144,3 +144,14 @@ test('at the door: four quick faces + All 8, late and call, next stop; buttons 5
     assert.ok(m && Number(m[1]) >= 56, sel);
   }
 });
+
+test('property page: status chip, four buttons, one Getting in, Next up, three tabs, bottom bar', () => {
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  const hub = app.slice(app.indexOf('function viewHub(id)'), app.indexOf('function savedAtWords'));
+  const order = ['id="statchip"', 'class="action teal"', 'id="share"', '>Getting in<', 'Saved on this phone', 'How to get in', 'Driving in', 'id="nextup"', "tab('people'", "tab('where', `Gear & signs", "tab('notes', `Notes & files", 'class="pbar"', 'Send seller update', 'id="hubmore"'];
+  let at = -1;
+  for (const k of order) { const i = hub.indexOf(k); assert.ok(i > at, `${k} in order`); at = i; }
+  assert.doesNotMatch(hub, /'overview'/);
+  const more = app.slice(app.indexOf('function hubMoreSheet'), app.indexOf('function hubMoreSheet') + 2500);
+  for (const k of ['Edit details', 'Snap MLS sheet', 'Quick add', 'Open house sign-in']) assert.match(more, new RegExp(k));
+});

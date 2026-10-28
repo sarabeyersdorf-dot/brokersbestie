@@ -669,3 +669,18 @@ stop**: saves, moves to the next stop, then opens Messages with
 20+ min, editable text to the listing agent with name + brokerage from the
 profile and the new arrival time, Open in Messages, Also text buyer (phone kept
 on the tour). Undo toasts sit at the top on kiosk screens.
+
+## Property page order (2026-10-28, phase 4)
+
+`viewHub`: status is a tap-to-change chip in the header (`statusSheet`; a CRM
+property's chip is read-only), then Directions (teal) · Call · Text · Share,
+then ONE "Getting in" (full yellow band, right side "Saved on this phone ·
+<time>" from `savedAtWords`): code cards, heads-up (occupancy badge +
+`headsUp`), How to get in, Driving in. Then a one-line **Next up** (next
+undone key date + to-do count) that opens `datesSheet` (all dates and
+to-dos, add/tick there). Three tabs: People (default) · Gear & signs ·
+Notes & files (MLS listing and disclosure links live there). The Overview
+tab is gone. A bottom bar above the nav (`.pbar`): Send seller update
+(listings and escrows) + **More** (`hubMoreSheet`: Edit details, Snap MLS
+sheet / MLS sheet, Quick add, Open house sign-in, Visitors). Tell Bestie and
+Undo sit above the bar on this page.

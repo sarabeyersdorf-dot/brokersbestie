@@ -811,12 +811,13 @@ function viewPropEdit(id) {
   };
 }
 
-let hubTab = 'overview';
+let hubTab = 'people';
 let hubFor = null;
 function viewHub(id) {
   const p = prop(id);
   if (!p) return notFound();
-  if (hubFor !== id) { hubFor = id; hubTab = 'overview'; }
+  if (hubFor !== id) { hubFor = id; hubTab = 'people'; }
+  if (!['people', 'where', 'notes'].includes(hubTab)) hubTab = 'people';
   const access = store.where('access', 'property_id', id);
   const codes = codesOf(id);
   const spots = access.filter((a) => !CODE_KINDS.includes(a.kind) || !a.code);
@@ -824,57 +825,49 @@ function viewHub(id) {
   const notes = store.where('notes', 'property_id', id).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
   const dates = store.where('dates', 'property_id', id).sort((a, b) => String(a.due).localeCompare(String(b.due)));
   const tasks = store.where('tasks', 'property_id', id).filter((t) => !t.done);
-  const sheetNote = notes.find((n) => n.source === 'mls_sheet');
+  const nextDate = dates.find((d) => !d.done);
   const main = people.find((m) => /tenant|occupant|seller|owner|showing/i.test(m.role || '') && m.phone) || people.find((m) => m.phone);
   const coe = p.coe_date ? daysFrom(p.coe_date) : null;
+  const heads = headsUp({}, p, codes);
   const tab = (k, l) => html`<button class="tab ${hubTab === k ? 'on' : ''}" type="button" data-tab="${k}">${l}</button>`;
+  const crm = p.source === 'crm';
+  const sellerUpd = p.status === 'listing' || p.status === 'escrow';
 
+  // Phase 4 (2026-10-28): status chip in the header, four buttons, one
+  // "Getting in" (codes, heads-up, how to get in, driving in), a one-line
+  // "Next up", three tabs, and a bottom bar (seller update + More).
   return {
     html: html`${header({
       back: '#/props',
-      right: html`<span class="pill ${p.status}">${STATUS[p.status] || p.status}</span>`,
+      right: crm ? html`<span class="stat-chip" title="Set by your CRM"><span class="pill ${p.status}">${STATUS[p.status] || p.status}</span></span>`
+        : html`<button class="stat-chip" type="button" id="statchip" aria-label="Status: ${STATUS[p.status] || 'not set'}. Tap to change"><span class="pill ${p.status}">${STATUS[p.status] || 'Set status'}</span><span class="chg">▾</span></button>`,
       title: p.address,
       sub: html`${p.city || ''}${p.price ? html` · <b class="num" style="font-size:18px">${fullMoney(p.price)}</b>` : ''}${p.mls ? html` · MLS <b>${p.mls}</b>` : ''}`,
       extra: html`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${badges(p, true)}<span class="sub">${[p.hoa && `HOA ${p.hoa}`, p.solar && `Solar ${p.solar}`, coe != null && p.status === 'escrow' ? `Closes ${niceDate(p.coe_date)} (${coe >= 0 ? coe + ' days' : 'passed'})` : ''].filter(Boolean).join(' · ')}</span></div>`
     })}
     <main class="wrap">
       <div class="actions">
-        <a class="action" href="${mapLink(p)}" target="_blank" rel="noopener">${icon('pin', 22)}Directions</a>
+        <a class="action teal" href="${mapLink(p)}" target="_blank" rel="noopener">${icon('pin', 22)}Directions</a>
         ${main ? html`<a class="action" href="tel:${digits(main.phone)}">${icon('phone', 22)}Call ${main.role ? main.role.split(' ')[0].toLowerCase() : ''}</a>
         <a class="action" href="${smsLink(main.phone)}">${icon('text', 22)}Text</a>` : html`<a class="action" href="#/quick/contact/${id}">${icon('person', 22)}Add contact</a><a class="action" href="#/quick/note/${id}">${icon('mic', 22)}Note</a>`}
-        <button class="action dark" type="button" id="share">${icon('share', 22)}Share</button>
+        <button class="action" type="button" id="share">${icon('share', 22)}Share</button>
       </div>
 
-      ${codes.length ? html`<section class="sec"><div class="label accent">Getting in</div>${codeBoxes(codes)}</section>` : html`<a class="card row" href="#/quick/lockbox/${id}"><span class="tile" style="border:0;padding:0"><span class="ic y">${icon('lockbox', 22)}</span></span><span class="grow"><span class="t">Add the lockbox or a code</span><span class="s">Gate, alarm, door keypad, hidden key</span></span></a>`}
-      ${p.showing_notes ? html`<div class="card pad"><div class="label" style="margin-bottom:6px">Showing instructions</div><div style="white-space:pre-line">${p.showing_notes}</div></div>` : ''}
+      <section class="sec getin">
+        <div class="sec-head"><div class="label">Getting in</div><span class="saved-at">Saved on this phone · ${savedAtWords(p, access)}</span></div>
+        ${codes.length ? codeBoxes(codes) : html`<a class="card row" href="#/quick/lockbox/${id}"><span class="tile" style="border:0;padding:0"><span class="ic y">${icon('lockbox', 22)}</span></span><span class="grow"><span class="t">Add the lockbox or a code</span><span class="s">Gate, alarm, door keypad, hidden key</span></span></a>`}
+        ${p.occupancy === 'O' || p.occupancy === 'V' || heads.length ? html`<div class="heads">${occBadge(p.occupancy)}${heads.map((h) => html`<span class="head-tag">${h}</span>`)}</div>` : ''}
+        ${p.showing_notes ? html`<div class="getin-txt"><div class="getin-k">How to get in</div><div style="white-space:pre-line">${p.showing_notes}</div></div>` : ''}
+        ${p.directions ? html`<div class="getin-txt"><div class="getin-k">Driving in</div><div style="white-space:pre-line">${p.directions}</div></div>` : ''}
+      </section>
 
-      ${p.source === 'crm' ? html`<section class="sec status-strip"><div class="status-pick"><span class="label">Status</span> <span class="pill ${p.status}">${STATUS[p.status] || p.status}</span> <span class="small">set by your CRM</span></div></section>`
-        : html`<details class="sec status-pick"><summary><span class="label">Status</span><span class="pill ${p.status}">${STATUS[p.status] || 'Not set'}</span><span class="chg">Change</span></summary>
-        <div class="stat-opts">${['prep', 'listing', 'escrow', 'tour', 'closed', 'cancelled'].map((k) => html`<button type="button" class="stat-opt st-${k} ${p.status === k ? 'on' : ''}" data-status="${k}">${STATUS[k]}</button>`)}</div></details>`}
-      <div class="tabs">${tab('overview', 'Overview')}${tab('where', `Where things are · ${spots.length}`)}${tab('people', `People · ${people.length}`)}${tab('notes', `Notes · ${notes.length}`)}</div>
+      <button class="card row nextup" type="button" id="nextup">
+        <span class="grow"><span class="t">${nextDate ? html`Next up: ${nextDate.label}` : 'No key dates yet'}</span>
+        <span class="s">${[nextDate ? `${niceDate(nextDate.due)} · ${whenText(nextDate.due)}` : 'Add contingencies, inspections, close of escrow', `${tasks.length} to-do${tasks.length === 1 ? '' : 's'}`].join(' · ')}</span></span>
+        <span class="small" style="color:var(--teal-text);font-weight:700">All dates ›</span>
+      </button>
 
-      ${hubTab === 'overview' ? html`
-        <section class="sec">
-          <div class="sec-head"><div class="label">Key dates</div><button class="btn ghost" type="button" id="adddate" style="min-height:36px">+ Add</button></div>
-          <div class="card list">${dates.length ? dates.map((d) => html`<button class="row" type="button" data-date="${d.id}">
-            <span class="check ${d.done ? 'on' : ''}">${d.done ? '✓' : ''}</span>
-            <span class="grow"><span class="t ${d.done ? 'done-text' : ''}">${d.label}</span><span class="s">${niceDate(d.due)} · ${whenText(d.due)}</span></span></button>`) : html`<div class="empty">No dates yet. Add contingencies, inspections, close of escrow.</div>`}</div>
-        </section>
-        <section class="sec">
-          <div class="sec-head"><div class="label">To do · ${tasks.length}</div><button class="btn ghost" type="button" id="addtask" style="min-height:36px">+ Add</button></div>
-          ${tasks.length ? html`<div class="card list">${tasks.map((t) => html`<button class="row" type="button" data-done="${t.id}"><span class="check"></span><span class="grow"><span class="t">${t.text}</span><span class="s">${t.due ? whenText(t.due) : ''}</span></span></button>`)}</div>` : ''}
-        </section>
-        ${p.directions ? html`<div class="card pad"><div class="label" style="margin-bottom:6px">Driving in</div><div style="white-space:pre-line">${p.directions}</div></div>` : ''}
-        <div class="btns">
-          ${p.disclosure_url ? html`<a class="btn" href="${safeUrl(p.disclosure_url)}" target="_blank" rel="noopener">Disclosures</a>` : ''}
-          ${p.mls_url ? html`<a class="btn" href="${safeUrl(p.mls_url)}" target="_blank" rel="noopener">MLS listing</a>` : ''}
-          <a class="btn" href="#/p/${id}/edit">${icon('edit', 18)}Edit details</a>
-          ${sheetNote ? html`<button class="btn" type="button" data-tab="notes">${icon('sheet', 18)}MLS sheet</button>` : html`<a class="btn" href="#/sheet/${id}">${icon('sheet', 18)}Snap MLS sheet</a>`}
-          <a class="btn" href="#/quick">${icon('plus', 18)}Quick add</a>
-          ${p.status === 'listing' || p.status === 'escrow' ? html`<button class="btn" type="button" id="sellerupd">${icon('text', 18)}${p.seller_update_at ? 'Seller update' : 'Send seller update'}</button>` : ''}
-          <a class="btn" href="#/openhouse/${id}">${icon('person', 18)}Open house sign-in</a>
-          ${store.all('visitors').some((v) => v.property_id === id) ? html`<a class="btn" href="#/visitors/${id}">Visitors · ${store.all('visitors').filter((v) => v.property_id === id).length}</a>` : ''}
-        </div>` : ''}
+      <div class="tabs">${tab('people', `People · ${people.length}`)}${tab('where', `Gear & signs · ${spots.length}`)}${tab('notes', `Notes & files · ${notes.length}`)}</div>
 
       ${hubTab === 'where' ? html`<section class="sec">
         <div class="card list">${access.length ? access.map((a) => html`<button class="row" type="button" data-access="${a.id}">
@@ -892,33 +885,26 @@ function viewHub(id) {
       ${hubTab === 'notes' ? html`<section class="sec">
         <label class="field"><span>New note</span><textarea id="newnote" placeholder="Buyer wants the shed gone"></textarea></label>
         <div class="btns"><button class="btn" type="button" data-mic="newnote">${icon('mic', 18)}Talk</button><button class="btn dark" type="button" id="savenote">Save note</button><a class="btn" href="#/sheet/${id}">${icon('sheet', 18)}MLS sheet</a></div>
+        ${p.mls_url || p.disclosure_url ? html`<div class="btns">${p.mls_url ? html`<a class="btn" href="${safeUrl(p.mls_url)}" target="_blank" rel="noopener">MLS listing</a>` : ''}${p.disclosure_url ? html`<a class="btn" href="${safeUrl(p.disclosure_url)}" target="_blank" rel="noopener">Disclosures</a>` : ''}</div>` : ''}
         <div class="card list">${notes.length ? notes.map((n) => html`<div class="row" style="align-items:flex-start"><span class="grow"><span class="s">${niceDate(n.created_at)}</span><span style="white-space:pre-line">${n.text}</span>${(n.files || []).length ? html`<span class="fitems" data-notefiles="${n.id}">${n.files.map(fileItem)}</span>` : ''}</span><button class="icon-btn" type="button" data-delnote="${n.id}" aria-label="Delete note">${icon('trash', 16)}</button></div>`) : html`<div class="empty">No notes yet.</div>`}</div>
       </section>` : ''}
-    </main>`,
+    </main>
+    <div class="pbar">
+      ${sellerUpd ? html`<button class="btn dark" type="button" id="sellerupd">${icon('text', 18)}Send seller update</button>` : ''}
+      <button class="btn ${sellerUpd ? '' : 'block'}" type="button" id="hubmore">More</button>
+    </div>`,
     mount(root) {
       wireMics(root);
       root.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { hubTab = b.getAttribute('data-tab'); render(); }));
       root.querySelector('#share').addEventListener('click', () => shareSheet(p));
-      root.querySelector('#adddate')?.addEventListener('click', () => dateSheet(id));
-      root.querySelector('#addtask')?.addEventListener('click', () => addTaskSheet(id));
-      root.querySelectorAll('[data-date]').forEach((b) => b.addEventListener('click', () => dateSheet(id, store.get('dates', b.getAttribute('data-date')))));
-      root.querySelectorAll('[data-done]').forEach((b) => b.addEventListener('click', () => {
-        const tid = b.getAttribute('data-done');
-        store.save('tasks', { id: tid, done: true, done_at: new Date().toISOString() });
-        undoToast('Done', () => store.save('tasks', { id: tid, done: false, done_at: null }));
-      }));
+      root.querySelector('#nextup').addEventListener('click', () => datesSheet(id));
+      root.querySelector('#statchip')?.addEventListener('click', () => statusSheet(p));
+      root.querySelector('#hubmore').addEventListener('click', () => hubMoreSheet(p));
       root.querySelectorAll('[data-access]').forEach((b) => b.addEventListener('click', () => accessSheet(store.get('access', b.getAttribute('data-access')))));
       root.querySelectorAll('[data-edit-person]').forEach((b) => b.addEventListener('click', () => personSheet(id, store.get('people', b.getAttribute('data-edit-person')))));
       root.querySelector('#sellerupd')?.addEventListener('click', () => sellerUpdateSheet(id));
       root.querySelector('#fromvendors')?.addEventListener('click', () => vendorPicker(id));
       root.querySelector('#fromcontacts')?.addEventListener('click', () => contactPicker(id));
-      root.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', () => {
-        const next = b.getAttribute('data-status');
-        if (next === p.status) return;
-        const was = p.status;
-        store.save('properties', { id, status: next });
-        undoToast(`Now ${STATUS[next]}`, () => store.save('properties', { id, status: was }));
-      }));
       root.querySelector('#savenote')?.addEventListener('click', () => {
         const t = root.querySelector('#newnote').value.trim();
         if (!t) return;
@@ -938,6 +924,75 @@ function viewHub(id) {
       loadPhotos(root);
     }
   };
+}
+
+// "Saved on this phone · 2:15 PM": the latest change to the property or its
+// codes, as a time today or a date before that.
+function savedAtWords(p, access) {
+  const at = [p, ...access].map((r) => r.updated_at || r.created_at || '').sort().pop();
+  if (!at) return 'just now';
+  const d = new Date(at);
+  return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : niceDate(at);
+}
+
+// Tap the status chip in the header: pick one, saved with Undo.
+function statusSheet(p) {
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Status</div>
+    <div class="stat-opts">${['prep', 'listing', 'escrow', 'tour', 'closed', 'cancelled'].map((k) => html`<button type="button" class="stat-opt st-${k} ${p.status === k ? 'on' : ''}" data-status="${k}">${STATUS[k]}</button>`)}</div>
+  </div>`, (sh) => sh.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', () => {
+    const next = b.getAttribute('data-status');
+    closeSheet();
+    if (next === p.status) return;
+    const was = p.status;
+    store.save('properties', { id: p.id, status: next });
+    undoToast(`Now ${STATUS[next]}`, () => store.save('properties', { id: p.id, status: was }));
+  })));
+}
+
+// Every key date and to-do for a property ("Next up" → All dates).
+function datesSheet(id) {
+  const dates = store.where('dates', 'property_id', id).sort((a, b) => String(a.due).localeCompare(String(b.due)));
+  const tasks = store.where('tasks', 'property_id', id).filter((t) => !t.done);
+  openSheet(html`<div class="sec">
+    <div class="sec-head"><div class="label">Key dates</div><button class="btn ghost" type="button" id="adddate" style="min-height:36px">+ Add</button></div>
+    <div class="card list">${dates.length ? dates.map((d) => html`<button class="row" type="button" data-date="${d.id}">
+      <span class="check ${d.done ? 'on' : ''}">${d.done ? '✓' : ''}</span>
+      <span class="grow"><span class="t ${d.done ? 'done-text' : ''}">${d.label}</span><span class="s">${niceDate(d.due)} · ${whenText(d.due)}</span></span></button>`) : html`<div class="empty">No dates yet. Add contingencies, inspections, close of escrow.</div>`}</div>
+    <div class="sec-head"><div class="label">To do · ${tasks.length}</div><button class="btn ghost" type="button" id="addtask" style="min-height:36px">+ Add</button></div>
+    ${tasks.length ? html`<div class="card list">${tasks.map((t) => html`<button class="row" type="button" data-done="${t.id}"><span class="check"></span><span class="grow"><span class="t">${t.text}</span><span class="s">${t.due ? whenText(t.due) : ''}</span></span></button>`)}</div>` : html`<div class="empty">Nothing to do here.</div>`}
+  </div>`, (sh) => {
+    colorHeaders(sh);
+    sh.querySelector('#adddate').addEventListener('click', () => { closeSheet(); dateSheet(id); });
+    sh.querySelector('#addtask').addEventListener('click', () => { closeSheet(); addTaskSheet(id); });
+    sh.querySelectorAll('[data-date]').forEach((b) => b.addEventListener('click', () => { closeSheet(); dateSheet(id, store.get('dates', b.getAttribute('data-date'))); }));
+    sh.querySelectorAll('[data-done]').forEach((b) => b.addEventListener('click', () => {
+      const tid = b.getAttribute('data-done');
+      store.save('tasks', { id: tid, done: true, done_at: new Date().toISOString() });
+      b.remove();
+      undoToast('Done', () => store.save('tasks', { id: tid, done: false, done_at: null }));
+    }));
+  });
+}
+
+// The property page's "More": everything that is not used every visit.
+function hubMoreSheet(p) {
+  const id = p.id;
+  const sheetNote = store.where('notes', 'property_id', id).some((n) => n.source === 'mls_sheet');
+  const visitors = store.all('visitors').filter((v) => v.property_id === id).length;
+  openSheet(html`<div class="sec">
+    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">More</div>
+    <div class="card list">
+      <a class="row" href="#/p/${id}/edit">${icon('edit', 20)}<span class="grow"><span class="t">Edit details</span></span>${icon('chev', 18)}</a>
+      ${sheetNote ? html`<button class="row" type="button" id="moresheet">${icon('sheet', 20)}<span class="grow"><span class="t">MLS sheet</span><span class="s">In Notes & files</span></span>${icon('chev', 18)}</button>` : html`<a class="row" href="#/sheet/${id}">${icon('sheet', 20)}<span class="grow"><span class="t">Snap MLS sheet</span></span>${icon('chev', 18)}</a>`}
+      <a class="row" href="#/quick">${icon('plus', 20)}<span class="grow"><span class="t">Quick add</span></span>${icon('chev', 18)}</a>
+      <a class="row" href="#/openhouse/${id}">${icon('person', 20)}<span class="grow"><span class="t">Open house sign-in</span></span>${icon('chev', 18)}</a>
+      ${visitors ? html`<a class="row" href="#/visitors/${id}">${icon('list', 20)}<span class="grow"><span class="t">Visitors · ${visitors}</span></span>${icon('chev', 18)}</a>` : ''}
+    </div>
+  </div>`, (sh) => {
+    sh.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeSheet));
+    sh.querySelector('#moresheet')?.addEventListener('click', () => { closeSheet(); hubTab = 'notes'; render(); });
+  });
 }
 
 function safeUrl(u) {
@@ -3787,7 +3842,7 @@ function viewSheet(pid) {
         extras.people.forEach((m, i) => { if (picked.has('p:' + i)) store.save('people', { property_id: to, name: m.name, role: m.role || '', phone: m.phone || '', email: m.email || '' }); });
         await fileSheet(to, root.querySelector('[name=note]').value.trim());
         resetSheet();
-        hubFor = to; hubTab = 'overview';
+        hubFor = to; hubTab = 'people';
         toast(`Saved to ${addr(to)}`);
         location.hash = `#/p/${to}`;
       });
