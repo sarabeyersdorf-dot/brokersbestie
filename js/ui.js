@@ -166,7 +166,8 @@ const P = {
   sheet: 'M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M9 16h7',
   cal: 'M4 6h16v15H4zM4 10h16M8 3v5M16 3v5',
   clock: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 7v5l3 2',
-  speak: 'M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11'
+  speak: 'M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11',
+  play: 'M7 5l12 7-12 7z',
 };
 export function icon(name, size = 22, extra = '') {
   return raw(`<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}><path d="${P[name] || P.plus}"></path></svg>`);

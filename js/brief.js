@@ -384,5 +384,5 @@ export function todayMode(data, today, nowMin) {
 export function listenLength(text) {
   const words = String(text || '').split(/\s+/).filter(Boolean).length;
   const secs = Math.max(10, Math.round(words / 2.6 / 5) * 5);
-  return secs < 60 ? `about ${secs} sec` : `about ${Math.round(secs / 60)} min`;
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 }

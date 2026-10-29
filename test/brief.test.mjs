@@ -166,8 +166,8 @@ test('Today mode: plan, field around a tour or showing, wrap after', () => {
   assert.equal(todayMode(showing, day, 700).mode, 'plan');
 });
 test('briefing length in words people use', () => {
-  assert.equal(listenLength('word '.repeat(100)), 'about 40 sec');
-  assert.equal(listenLength('word '.repeat(400)), 'about 3 min');
+  assert.equal(listenLength('word '.repeat(100)), '0:40');
+  assert.equal(listenLength('word '.repeat(400)), '2:35');
 });
 
 test('Today picks its screen by mode, and "Show everything" keeps the full page', async () => {

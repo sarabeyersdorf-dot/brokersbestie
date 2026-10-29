@@ -769,3 +769,45 @@ button.stat { cursor: pointer; }
 /* Demo link banner (2026-10-29) */
 .demo-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 16px; background: var(--teal); color: var(--ink); font-size: 14px; }
 .demo-bar button { flex-shrink: 0; min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--ink); color: #fff; font: 700 14px var(--sans); cursor: pointer; }
+
+/* Today, the mock-up's look (2026-10-29): dark "Up next" / next-stop card,
+   a huge leave-by time, yellow stop times, codes on the dark card. */
+.title-split { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.title-aside { flex-shrink: 0; font-size: 15px; letter-spacing: .06em; color: var(--teal-on-dark); }
+.search.light { background: var(--card); border: 1px solid var(--line); }
+.search.light input { color: var(--ink); }
+.search.light input::placeholder { color: var(--mute); }
+.search.light svg { color: var(--ink-2); }
+.dark-card { background: var(--ink); color: #fff; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.dark-card .un-kick { font: 700 12px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--teal-on-dark); }
+.dark-card .un-lead { font: 800 44px/.95 var(--tall); text-transform: uppercase; color: #fff; }
+.dark-card .un-facts { font: 500 15px/1.35 var(--sans); color: #cfd6d3; white-space: pre-line; }
+.dark-card .tour-stops { gap: 0; margin: 2px 0; border-top: 1px solid #343b3f; }
+.dark-card .tour-stop { color: #fff; font-size: 16px; font-weight: 600; padding: 9px 0; border-bottom: 1px solid #343b3f; }
+.dark-card .tour-stop .num { color: var(--code); font: 800 19px var(--tall); min-width: 64px; }
+.dark-card .occb { border-color: #fff; color: #fff; }
+.dark-card .occb.solid { background: #fff; color: #0e1012; }
+.dark-card .un-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.dark-card .un-btns .btn { min-height: 52px; font-weight: 800; font-size: 16px; text-transform: uppercase; letter-spacing: .03em; border-radius: 12px; }
+.dark-card .un-btns .btn:only-child { grid-column: 1 / -1; }
+.btn.ghost-dark { background: none; border: 2px solid #fff; color: #fff; }
+.dark-card .un-link { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; padding: 6px 0; color: var(--teal-on-dark); font: 700 15px var(--sans); cursor: pointer; }
+.dark-card .card.list { color: var(--ink); }
+.nextcard .nc-addr { font: 800 30px/1.05 var(--tall); text-transform: uppercase; color: #fff; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.nextcard .nc-addr .occb { font-size: 12px; }
+.dark-card .head-tag { border-color: #fff; color: #fff; }
+.dark-card .codes { margin-top: 2px; }
+.due-row .grow { display: flex; flex-direction: column; gap: 1px; }
+.due-row .kw .ktag { margin: 0; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; }
+.due-row .t { font-weight: 600; }
+.due-row .on-route { flex-shrink: 0; color: var(--teal-text); font: 700 13px var(--sans); }
+.safety-bar { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-left: 0; background: var(--ink); color: #fff; border-color: var(--ink); }
+.safety-bar .grow { display: flex; flex-direction: column; color: #fff; }
+.safety-bar .t { font-weight: 700; }
+.safety-bar .s { font-size: 13px; color: #cfd6d3; }
+.safety-bar .btn.dark { background: var(--teal); color: var(--ink); border-color: var(--teal); font-weight: 800; text-transform: uppercase; flex-shrink: 0; }
+html.hc .dark-card, html.hc .safety-bar { background: #000; }
+.card.safety-bar { flex-direction: row; text-align: left; align-items: center; }
+.safety-bar > svg { flex-shrink: 0; }
+.dark-card .un-btns .btn { white-space: nowrap; padding: 0 10px; }
+.dark-card .un-btns #readbrief { font-size: 14px; text-transform: none; letter-spacing: 0; }

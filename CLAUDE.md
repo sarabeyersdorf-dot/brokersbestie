@@ -828,3 +828,22 @@ with heads-up tags and a gate pin, an escrow with dates, showings and an
 inspection on the calendar, open house sign-ins, vendors, contacts. Tell
 Bestie, MLS-sheet reading and sync need sign-in, so they do not work in the
 demo.
+
+## Today in the mock-up's look (2026-10-29)
+
+Sara, comparing the demo with Claude Design's "Today 7:00 AM / 2:00 PM"
+mock-ups: the phase 5 logic was there but not the look. Now, in plan and field
+modes:
+- The kicker is short date, time and mode ("Thu Oct 29 · 7:02 AM · Plan your
+  day", "9:40 AM · Between showings"). In field mode the title row carries
+  "Stop 2 of 3" (`todayHeader(..., { aside })`).
+- Search sits under the header on the light page (`searchBox(true)`).
+- **Up next** and the **next stop** are a dark card (`.dark-card`): teal
+  kicker, a huge white "Leave by 8:48 AM" / "Leave in 11 min", yellow
+  condensed stop times, Start tour (teal) and "▶ Your day · 0:15"
+  (`briefButton`; `listenLength` now gives m:ss). Codes sit on that card.
+- Due today rows show the kind word above the title, "On your route" on the
+  right, and a "N seller updates ready to send · Review" row.
+- The safety check-in on Today is one dark row with the "You OK?" face and an
+  **I'm OK** button (`endCheckin(c, 'ok')`). Its words say "Texts …" only
+  when the server alert is on, else "Opens a text to …".

@@ -704,14 +704,21 @@ function viewToday(all = false) {
   return viewTodayPlan();
 }
 
-function todayHeader(title, sub) {
+function todayHeader(title, sub, opt = {}) {
   return header({
     right: html`<span style="display:flex;gap:10px;align-items:center">${modeBadge()}<a href="#/settings" aria-label="Settings" style="color:#fff;display:flex;padding:8px">${icon('gear', 22)}</a></span>`,
-    kicker: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
-    title, sub,
-    extra: html`<label class="search">${icon('search', 18)}<input id="q" type="search" placeholder="Search everything: address, code, name…" value="${searchText}" aria-label="Search everything" autocomplete="off"></label>`
+    kicker: opt.kicker || new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+    title: opt.aside ? html`<span class="title-split"><span>${title}</span><span class="title-aside">${opt.aside}</span></span>` : title,
+    sub,
+    extra: opt.noSearch ? '' : searchBox()
   });
 }
+const searchBox = (light) => html`<label class="search${light ? ' light' : ''}">${icon('search', 18)}<input id="q" type="search" placeholder="Search everything: address, code, name…" value="${searchText}" aria-label="Search everything" autocomplete="off"></label>`;
+// "Wed Oct 28 · 7:02 AM · Plan your day" (the mock-up's kicker).
+const clockNow = () => new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+const shortDate = () => new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).replace(',', '');
+const agoWords = (iso) => { const m = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60000)); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${hrMin(Math.round(m))} ago`; };
+const hrMin = (m) => (m >= 60 ? `${Math.floor(m / 60)} hr${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`);
 const everythingLink = () => html`<a class="all-link" href="#/all">Show everything on Today ›</a>`;
 function setupCards() {
   if (store.settings().demo) return ''; // the demo shows the work, not the chores
@@ -724,10 +731,10 @@ function doRow(tours) {
   const due = sellerDueCount();
   const late = due ? sellerPastDueCount() : 0;
   return html`<div class="chips do-row">
-    <a class="chip" href="${tour ? `#/tour/${tour.id}` : '#/plan'}">${icon('route', 16)}${tour ? "Today's tour" : 'Show homes'}</a>
     <button class="chip" type="button" id="findme">${icon('pin', 16)}At a property</button>
-    <button class="chip" type="button" id="ohpick">${icon('person', 16)}Open house</button>
+    <a class="chip" href="${tour ? `#/tour/${tour.id}` : '#/plan'}">${icon('route', 16)}${tour ? "Today's tour" : 'Show homes'}</a>
     <a class="chip" href="#/updates">${icon('text', 16)}Seller updates${due ? html` <span class="badge ${late ? 'late' : ''}">${due}</span>` : ''}</a>
+    <button class="chip" type="button" id="ohpick">${icon('person', 16)}Open house</button>
     <a class="chip" href="#/p/new">${icon('plus', 16)}Add a property</a>
     <a class="chip" href="#/miles">${icon('miles', 16)}Log a drive</a>
   </div>`;
@@ -744,18 +751,20 @@ function hereCard() {
     </a>
   </section>`;
 }
-function briefLine() {
+// "▶ Your day · 1:40": the spoken briefing as one button.
+function briefButton() {
   const data = store.snapshot();
   const text = briefingText(briefing(data, todayIso(), { pickups: pickups().length }), data, { hello: 'Good morning', name: myName() || '' });
-  return html`<div class="brief-line"><span class="grow"><b>Your day</b> · ${listenLength(text)}</span><button class="btn" type="button" id="readbrief" style="min-height:40px">${icon('speak', 18)}Listen</button></div>`;
+  return html`<button class="btn ghost-dark" type="button" id="readbrief">${icon('play', 16)}Your day · ${listenLength(text)}</button>`;
 }
-// One to-do line: dot + word, "On your route" when a pickup is on today's tour.
+// One to-do line: the kind word above the title, "On your route" on the right
+// when a pickup is on today's tour.
 function todoLine(t, routePids) {
   const onRoute = t.pickup && routePids.has(t.pid);
-  const inner = html`<span class="grow"><span class="t">${t.text}</span><span class="s">${ktag(t.ck, t.late)}${onRoute ? html`<span class="tag">On your route</span> ` : ''}${t.sub}</span></span>`;
-  if (t.pickup) return html`<a class="row" href="#/signs"><span class="check" style="border-color:var(--pending)"></span>${inner}${icon('chev', 18)}</a>`;
-  if (t.tour) return html`<a class="row" href="#/tour/${t.tour}"><span class="check" style="border-color:var(--pending)"></span>${inner}${icon('chev', 18)}</a>`;
-  return html`<button class="row" type="button" data-done="${t.table}:${t.id}"><span class="check"></span>${inner}</button>`;
+  const inner = html`<span class="grow"><span class="kw">${ktag(t.ck, t.late)}</span><span class="t">${t.text}</span>${t.sub ? html`<span class="s">${t.sub}</span>` : ''}</span>${onRoute ? html`<span class="on-route">On your route</span>` : ''}`;
+  if (t.pickup) return html`<a class="row due-row" href="#/signs">${inner}${icon('chev', 18)}</a>`;
+  if (t.tour) return html`<a class="row due-row" href="#/tour/${t.tour}">${inner}${icon('chev', 18)}</a>`;
+  return html`<button class="row due-row" type="button" data-done="${t.table}:${t.id}"><span class="check"></span>${inner}</button>`;
 }
 const todaysTours = () => store.all('tours').filter((x) => x.date === todayIso() && !x.finished);
 const routePidsOf = (tours) => new Set(tours.flatMap((t) => (t.stops || []).map((s) => s.property_id).filter(Boolean)));
@@ -778,33 +787,38 @@ function viewTodayPlan() {
     const i0 = Math.max(0, st.findIndex((x) => !x.shown));
     const first = st[i0];
     const leave = first && first.arrive != null && i0 === 0 ? first.arrive - (first.leg_minutes || 0) - 5 : null;
-    upnext = html`<section class="card pad sec upnext">
-      <div class="label">Up next</div>
-      ${leave != null ? html`<div class="un-lead">Leave by ${formatClock(leave)}</div>` : ''}
-      <div class="un-title">${tour.name || 'Showing tour'}</div>
-      <div class="tour-stops">${st.map((x) => html`<span class="tour-stop ${x.shown ? 'done' : ''}">${x.arrive != null ? html`<span class="num">${formatClock(x.arrive)}</span>` : ''}<span class="a">${street(x.address)}</span>${occBadge(x.occ)}</span>`)}</div>
-      <div class="btns"><a class="btn dark" href="#/door/${tour.id}/${i0}">Start tour</a><a class="btn" href="#/tour/${tour.id}">Tour page</a></div>
-      ${briefLine()}
+    const last = st[st.length - 1];
+    const span = first && first.arrive != null && last.arrive != null ? last.arrive + (last.minutes || 20) - first.arrive : null;
+    const facts = [first && first.arrive != null ? `First stop ${formatClock(first.arrive)}` : '', `${st.length} home${st.length === 1 ? '' : 's'}`, span > 0 ? hrMin(span) : ''].filter(Boolean).join(' · ');
+    upnext = html`<section class="sec upnext dark-card">
+      <div class="un-kick">Up next · ${tour.name || 'Showing tour'}</div>
+      ${leave != null ? html`<div class="un-lead">Leave by ${formatClock(leave)}</div>` : html`<div class="un-lead">${tour.name || 'Showing tour'}</div>`}
+      <div class="un-facts">${facts}</div>
+      <div class="tour-stops">${st.map((x) => html`<span class="tour-stop ${x.shown ? 'done' : ''}"><span class="num">${x.arrive != null ? formatClock(x.arrive) : ''}</span><span class="a">${street(x.address)}</span>${occBadge(x.occ)}</span>`)}</div>
+      <div class="un-btns"><a class="btn teal" href="#/door/${tour.id}/${i0}">Start tour</a>${briefButton()}</div>
+      <a class="un-link" href="#/tour/${tour.id}">Tour page ›</a>
     </section>`;
   } else {
-    upnext = html`<section class="card pad sec upnext">
-      <div class="label">Up next</div>
-      ${nextEvent ? html`<div class="card list">${dayItemRow(nextEvent)}</div>` : html`<div class="un-title">Nothing booked today</div><div class="btns"><a class="btn dark" href="#/plan">${icon('mic', 18)}Plan a tour</a></div>`}
-      ${briefLine()}
+    upnext = html`<section class="sec upnext dark-card">
+      <div class="un-kick">Up next</div>
+      ${nextEvent ? html`<div class="un-lead">${nextEvent.start != null ? formatClock(nextEvent.start) : 'Today'}</div><div class="card list">${dayItemRow(nextEvent)}</div>` : html`<div class="un-lead">Nothing booked today</div><div class="un-btns"><a class="btn teal" href="#/plan">${icon('mic', 18)}Plan a tour</a></div>`}
+      <div class="un-btns">${briefButton()}</div>
     </section>`;
   }
+  const sellerDue = sellerDueCount();
   return {
-    html: html`${todayHeader(`${greet()}${myName() ? ', ' + cap1(myName()) : ''}`, summary)}
+    html: html`${todayHeader(`${greet()}${myName() ? ', ' + cap1(myName()) : ''}`, summary, { kicker: `${shortDate()} · ${clockNow()} · Plan your day`, noSearch: true })}
     <main class="wrap">
       ${offlineCard()}
       ${planBanner()}
+      ${searchBox(true)}
       ${doRow(tours)}
       ${hereCard()}
       ${upnext}
       ${todos.length ? html`<section class="sec">
         <div class="sec-head"><div class="label">Due today · ${todos.length}</div>${todos.length > 3 ? html`<a class="small" href="#/all" style="color:var(--teal-text);font-weight:600">See all ›</a>` : ''}</div>
-        <div class="card list">${todos.slice(0, 3).map((t) => todoLine(t, routePidsOf(tours)))}</div>
-      </section>` : ''}
+        <div class="card list">${todos.slice(0, 3).map((t) => todoLine(t, routePidsOf(tours)))}${sellerDue ? html`<a class="row due-row" href="#/updates"><span class="grow"><span class="kw"><span class="ktag" style="--k:var(--s-listing)">Seller updates</span></span><span class="t">${sellerDue} seller update${sellerDue === 1 ? '' : 's'} ready to send</span></span><span class="on-route">Review</span></a>` : ''}</div>
+      </section>` : sellerDue ? html`<section class="sec"><div class="label">Due today</div><div class="card list"><a class="row due-row" href="#/updates"><span class="grow"><span class="kw"><span class="ktag" style="--k:var(--s-listing)">Seller updates</span></span><span class="t">${sellerDue} seller update${sellerDue === 1 ? '' : 's'} ready to send</span></span><span class="on-route">Review</span></a></div></section>` : ''}
       ${setupCards()}
       ${everythingLink()}
     </main>`,
@@ -835,30 +849,31 @@ function viewTodayField(focus) {
   const askPrev = prev && !prev.reaction;
   const pid = s.property_id || '';
   return {
-    html: html`${todayHeader(tour ? tour.name || 'Showing tour' : ev.title || 'Showing', tour ? `Stop ${i + 1} of ${n}` : `${formatClock(ev.start_minutes)}${ev.location ? ' · ' + ev.location : ''}`)}
+    html: html`${todayHeader(tour ? tour.name || 'Showing tour' : ev.title || 'Showing', tour ? '' : `${formatClock(ev.start_minutes)}${ev.location ? ' · ' + ev.location : ''}`, { kicker: `${clockNow()} · ${prev && prev.shown ? 'Between showings' : 'Showing day'}`, aside: tour ? `Stop ${i + 1} of ${n}` : '', noSearch: true })}
     <main class="wrap">
       ${offlineCard()}
       ${planBanner()}
-      <section class="card pad sec nextcard">
-        <div class="sec-head"><div class="label">${tour ? 'Next stop' : 'Up next'}</div>${leaveWords ? html`<span class="lead-time">${leaveWords}</span>` : ''}</div>
-        <div class="nc-addr">${street(s.address)}</div>
-        <div class="heads">${occBadge(s.occ)}${headsUp(s, p, codes).map((h) => html`<span class="head-tag">${h}</span>`)}${s.arrive != null ? html`<span class="small"><b>${formatClock(s.arrive)}</b>${s.leg_minutes ? ` · ${s.leg_minutes} min drive` : ''}</span>` : ''}</div>
-        ${drive ? html`<div class="small" style="white-space:pre-line">${drive}</div>` : ''}
-        ${codes.length ? codeBoxes(codes.map((c) => ({ label: c.label, code: c.code, location_note: c.where }))) : html`<div class="small wait">No code saved for this stop.</div>`}
-        <div class="btns">
+      <section class="sec nextcard dark-card">
+        <div class="un-kick">${tour ? 'Next' : 'Up next'}${s.arrive != null ? ` · ${formatClock(s.arrive)} showing` : ''}</div>
+        ${leaveWords ? html`<div class="un-lead">${leaveWords}</div>` : ''}
+        <div class="nc-addr">${street(s.address)} ${occBadge(s.occ)}</div>
+        <div class="un-facts">${[s.leg_minutes ? `${s.leg_minutes} min drive` : '', s.leg_miles ? `${Math.round(s.leg_miles * 10) / 10} mi` : '', drive].filter(Boolean).join(' · ')}</div>
+        ${headsUp(s, p, codes).length ? html`<div class="heads">${headsUp(s, p, codes).map((h) => html`<span class="head-tag">${h}</span>`)}</div>` : ''}
+        ${codes.length ? codeBoxes(codes.map((c) => ({ label: c.label, code: c.code, location_note: c.where }))) : html`<div class="un-facts">No code saved for this stop.</div>`}
+        <div class="un-btns">
           <a class="btn teal" href="${dirLink(s)}" target="_blank" rel="noopener">${icon('pin', 18)}Directions</a>
-          ${tour ? html`<a class="btn door-btn" href="#/door/${tour.id}/${i}">At the door</a>` : p ? html`<a class="btn" href="#/p/${p.id}">Open property</a>` : ''}
-          <button class="btn" type="button" id="flate">${icon('clock', 18)}Running late</button>
+          ${tour ? html`<a class="btn ghost-dark" href="#/door/${tour.id}/${i}">At the door</a>` : p ? html`<a class="btn ghost-dark" href="#/p/${p.id}">Open property</a>` : ''}
         </div>
+        <button class="un-link" type="button" id="flate">${icon('clock', 16)}Running late</button>
       </section>
       ${askPrev ? html`<section class="card pad sec">
-        <div class="label">How did ${street(prev.address)} go?</div>
-        <div class="door-faces light">${DOOR_FACES.map((k) => html`<button class="door-face" type="button" data-pquick="${k}">${raw(reactionFace(k, { size: 36, label: '' }))}<span>${reactionLabel(k)}</span></button>`)}<button class="door-face all" type="button" id="pmore"><span class="n">8</span><span>more</span></button></div>
+        <div class="sec-head"><div class="label">How did ${street(prev.address)} go?</div>${prev.shown_at ? html`<span class="small">left ${agoWords(prev.shown_at)}</span>` : ''}</div>
+        <div class="door-faces light">${DOOR_FACES.map((k) => html`<button class="door-face" type="button" data-pquick="${k}">${raw(reactionFace(k, { size: 36, label: '' }))}<span>${reactionLabel(k)}</span></button>`)}<button class="door-face all" type="button" id="pmore"><span class="n">4</span><span>more</span></button></div>
       </section>` : ''}
       <section class="sec">
         <div class="tiles">${['gate', 'photo', 'note', 'receipt'].map((k) => html`<a class="tile" href="#/quick/${k}${pid ? '/' + pid : ''}"><span class="ic ${KINDS[k].y ? 'y' : ''}">${icon(KINDS[k].icon, 22)}</span>${KINDS[k].short || KINDS[k].label}</a>`)}</div>
       </section>
-      ${chk ? html`<a class="card row safety-bar" href="#/safety">${icon('shield', 20)}<span class="grow"><span class="t">Safety check-in is on</span><span class="s">Check in by ${new Date(chk.due_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span></span>${icon('chev', 18)}</a>` : ''}
+      ${chk ? html`<section class="card sec safety-bar">${raw(okFace({ size: 40, label: '' }))}<a class="grow" href="#/safety"><span class="t">Safety check-in on · ${Math.max(0, Math.round((new Date(chk.due_at) - Date.now()) / 60000))} min left</span><span class="s">${safetyAuto() ? `Texts ${chk.contact_name || 'your contact'} if you don't check in` : `Opens a text to ${chk.contact_name || 'your contact'} if you don't check in`}</span></a><button class="btn dark" type="button" id="imok">I'm OK</button></section>` : ''}
       ${later.length ? html`<section class="sec"><div class="label">Later today</div><div class="card list">${later.map((x) => dayItemRow(x))}</div></section>` : ''}
       ${everythingLink()}
     </main>`,
@@ -872,6 +887,7 @@ function viewTodayField(focus) {
         undoToast(`${street(prev.address)} · ${reactionLabel(k)}`, () => undoReaction(prev, r));
       }));
       root.querySelector('#pmore')?.addEventListener('click', () => reactionPicker(prev));
+      root.querySelector('#imok')?.addEventListener('click', () => { endCheckin(chk, 'ok'); render(); });
     }
   };
 }
@@ -4101,7 +4117,7 @@ function readBriefing(button) {
   const say = new SpeechSynthesisUtterance(text);
   say.lang = 'en-US';
   say.rate = 1;
-  if (button) { button.textContent = 'Stop'; say.onend = say.onerror = () => { button.innerHTML = str(html`${icon('speak', 18)}Listen`); }; }
+  if (button) { const was = button.innerHTML; button.textContent = 'Stop'; say.onend = say.onerror = () => { button.innerHTML = was; }; }
   speechSynthesis.speak(say);
 }
 
