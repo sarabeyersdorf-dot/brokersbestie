@@ -809,3 +809,22 @@ too** (2026-10-28): the `reminders` function's `?op=share` now also sends
 reads "Directions to the gate" and shows the heads-up tags. (The function's
 leave-by reminders still time the drive to the property pin; a gate is close
 enough not to matter.)
+
+## Demo link for other agents (2026-10-29)
+
+Sara: "an interactive demo page so I can share this with my MLS and local
+agents". It is the real app, not a mock-up: **brokersbestie.app/demo**
+(vercel.json redirect → `/?demo=1`). `startDemo` (app.js, before the first
+render) loads `sampleData()` and sets `settings.demo`, `setupDone`, `myName`
+"alex" — but never on a phone that already has its own properties (it says to
+use a private window). Sample rows never sync, so nothing reaches any team.
+A teal banner on every screen but kiosk ones: "Demo · sample data, nothing
+here is real · **Start my own**" (clears the sample, opens the setup
+checklist). Setup cards are hidden in the demo. The sample story
+(`js/sample.js`, dates in the phone's own time zone): a tour for today ~2 h
+from opening (Today shows Up next; opened late it is this morning's tour,
+already shown, so Today wraps up), a past tour for the buyer page, a listing
+with heads-up tags and a gate pin, an escrow with dates, showings and an
+inspection on the calendar, open house sign-ins, vendors, contacts. Tell
+Bestie, MLS-sheet reading and sync need sign-in, so they do not work in the
+demo.

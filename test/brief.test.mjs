@@ -234,3 +234,18 @@ test('the 24-hour share page goes to the gate too', async () => {
   assert.match(share, /Directions to the gate/);
   assert.match(share, /destination=\$\{p\.gate_lat\},\$\{p\.gate_lng\}/);
 });
+
+test('demo link: /demo loads the sample story on a fresh phone only, with a banner', async () => {
+  const fs = await import('node:fs');
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
+  assert.ok(vercel.redirects.some((r) => r.source === '/demo' && r.destination === '/?demo=1'));
+  assert.match(app, /if \(ownProps\(\)\.length\) \{ setTimeout\(\(\) => toast\('This phone already has your own properties/);
+  assert.match(app, /sample data, nothing here is real/);
+  const { sampleData } = await import('../js/sample.js');
+  const d = sampleData({ now: new Date(2026, 9, 29, 9, 0) });
+  assert.equal(d.tours[0].date, '2026-10-29');
+  assert.ok(d.tours[0].stops.every((x) => !x.shown)); // morning: the tour is still ahead
+  const eve = sampleData({ now: new Date(2026, 9, 29, 21, 0) });
+  assert.ok(eve.tours[0].stops.every((x) => x.shown)); // evening: already shown, Today wraps up
+});

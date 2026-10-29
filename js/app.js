@@ -714,6 +714,7 @@ function todayHeader(title, sub) {
 }
 const everythingLink = () => html`<a class="all-link" href="#/all">Show everything on Today ›</a>`;
 function setupCards() {
+  if (store.settings().demo) return ''; // the demo shows the work, not the chores
   return html`${!isInstalled() && !installHidden() ? installCard({ dismissable: true, slim: true }) : ''}
     ${!myProfile() && !profileNudgeHidden() ? html`<div class="card pad sec" data-profnudge><div class="label accent">Make it yours</div><div class="small">Add your name, brokerage, license numbers and logo. They go on your open house sign-in sheet and the texts Bestie writes.</div><div class="btns"><a class="btn dark" href="#/profile">Set up my profile</a><button class="btn ghost" type="button" id="profnot">Later</button></div></div>` : ''}`;
 }
@@ -4652,6 +4653,17 @@ function render() {
   $view.innerHTML = str(view.html);
   wire($view);
   colorHeaders($view);
+  // Demo banner: sample data, nothing real; one tap to start fresh.
+  if (store.settings().demo && store.hasSample() && tab !== 'kiosk') {
+    $view.insertAdjacentHTML('afterbegin', str(html`<div class="demo-bar"><span><b>Demo</b> · sample data, nothing here is real</span><button type="button" id="demoend">Start my own</button></div>`));
+    $view.querySelector('#demoend').addEventListener('click', () => {
+      if (!confirm('Clear the demo and set Bestie up for you?')) return;
+      store.clearSample();
+      store.saveSettings({ demo: false, setupDone: false, myName: '' });
+      location.hash = '#/setup';
+      render();
+    });
+  }
   if (view.mount) view.mount($view);
   $nav.querySelectorAll('a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
   // The open house sheet is a kiosk: no nav, no mic, nothing to wander into.
@@ -4681,6 +4693,16 @@ window.addEventListener('offline', render);
 $fab.addEventListener('click', tellBestie);
 $fab.setAttribute('aria-label', 'Tell Bestie');
 addEventListener('scroll', () => $fab.classList.toggle('mini', scrollY > 40), { passive: true });
+// The demo link (2026-10-29): brokersbestie.app/demo (→ /?demo=1) opens the
+// real app filled with the sample story, for showing to other agents. Never
+// on a phone that already has its own properties; nothing in it syncs.
+(function startDemo() {
+  if (!/[?&]demo\b/.test(location.search)) return;
+  history.replaceState(null, '', location.pathname + (location.hash || '#/'));
+  if (ownProps().length) { setTimeout(() => toast('This phone already has your own properties, so the demo did not load. Open the link in a private window to see it.'), 600); return; }
+  if (!store.hasSample()) store.loadSample(sampleData());
+  store.saveSettings({ demo: true, welcomed: true, setupDone: true, myName: store.settings().myName || 'alex' });
+})();
 render();
 store.startCloud();
 // First open: the setup checklist is Today until there is a property
