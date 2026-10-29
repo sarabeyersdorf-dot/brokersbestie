@@ -124,3 +124,20 @@ export async function stopShareLinks(propertyId) {
   const { data } = await c.client.from('share_links').update({ revoked: true }).eq('property_id', propertyId).eq('revoked', false).select('token');
   return (data || []).length;
 }
+
+// Buyer taps their own faces (2026-10-29): a 3-day link to this tour, and
+// the faces the buyer has picked so far (tour_faces, written by the function).
+export async function tourLink(tourId) {
+  const c = store.cloud;
+  if (!c.user || !c.teamId) throw new Error('Sign in first (Settings) to send the buyer a link.');
+  await store.syncNow();
+  const { data, error } = await c.client.from('tour_links').insert({ team_id: c.teamId, tour_id: tourId, owner: (store.settings().myName || '').toLowerCase() || null }).select('token').single();
+  if (error) throw new Error(/foreign key/i.test(error.message) ? 'This tour has not reached the server yet. Try again in a moment.' : error.message);
+  return `${location.origin}/faces.html?t=${data.token}`;
+}
+export async function buyerFaces(tourId) {
+  const c = store.cloud;
+  if (!c.user || !navigator.onLine) return null;
+  const { data, error } = await c.client.from('tour_faces').select('stop_id, reaction, note, updated_at').eq('tour_id', tourId);
+  return error ? null : data || [];
+}

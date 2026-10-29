@@ -206,3 +206,29 @@ export function mapsUrl(start, stops) {
   const parts = [start, ...stops].filter(Boolean).map(enc);
   return `https://www.google.com/maps/dir/${parts.join('/')}`;
 }
+
+// Pick up on the way (2026-10-29): gear waiting at a closed listing that sits
+// near a tour's route. One entry per property, with the place in the route
+// where adding it costs the fewest extra miles. `stops` and `places` carry
+// lat/lng; a place farther than `maxMiles` from every stop is left out.
+export function pickupsOnRoute(stops, places, { maxMiles = 5 } = {}) {
+  const pts = (stops || []).filter((s) => s.lat != null && s.lng != null);
+  if (!pts.length) return [];
+  const out = [];
+  for (const p of places || []) {
+    if (p.lat == null || p.lng == null) continue;
+    if ((stops || []).some((s) => s.property_id && s.property_id === p.property_id)) continue;
+    const near = Math.min(...pts.map((s) => haversineMiles(s, p)));
+    if (near > maxMiles) continue;
+    // Index into `stops` to insert before; stops.length = after the last.
+    let best = { index: stops.length, extra: Infinity };
+    for (let i = 0; i <= stops.length; i++) {
+      const a = stops[i - 1], b = stops[i];
+      const okA = a && a.lat != null, okB = b && b.lat != null;
+      const extra = okA && okB ? haversineMiles(a, p) + haversineMiles(p, b) - haversineMiles(a, b) : okA ? haversineMiles(a, p) : okB ? haversineMiles(p, b) : Infinity;
+      if (extra < best.extra) best = { index: i, extra };
+    }
+    out.push({ ...p, index: best.index, extraMiles: Math.round(best.extra * 10) / 10, nearMiles: Math.round(near * 10) / 10, _x: best.extra });
+  }
+  return out.sort((x, y) => x._x - y._x).map(({ _x, ...r }) => r);
+}

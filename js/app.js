@@ -4,7 +4,7 @@
 import * as store from './store.js';
 import { APP_VERSION, SUPPORT_EMAIL } from './config.js';
 import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLink, mapLink, todayIso, daysFrom, niceDate, whenText, toast, undoToast, copy } from './ui.js';
-import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMiles, roadMiles, driveMinutes } from './route.js';
+import { planRoute, routeInOrder, mapsUrl, formatClock, parseClock, haversineMiles, roadMiles, driveMinutes, pickupsOnRoute } from './route.js';
 import { parseTourText, matchProperty, search, tripsCsv, mergeSpeech, quickProperty } from './parse.js';
 import { sampleData } from './sample.js';
 import { sheetChanges, sheetExtras, sheetNoteText, actionPlan, EVENT_KINDS } from './assist.js';
@@ -13,11 +13,11 @@ import { planShowings, ACTION_WORDS } from './showings.js';
 import { plansOffered, planSentence, defaultPlan, TRIAL_END_TEXT, TRIAL_END_DECIDED } from './billing.js';
 import { CONTACT_KINDS, parseContacts, planImport, contactsChoice, contactsMode } from './contacts.js';
 import { CRM_CHOICES } from './crmlist.js';
-import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText, feedbackRequestText, lateText, lateBuyerText } from './messages.js';
+import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText, feedbackRequestText, lateText, lateBuyerText, facesLinkText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
-import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink, shareWhere, shareLink, stopShareLinks } from './push.js';
+import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink, shareWhere, shareLink, stopShareLinks, tourLink, buyerFaces } from './push.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, headsUp, HEADS_UP, todayMode, listenLength, feedbackDue, taxYear, taxCsv } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, codeTrust, headsUp, HEADS_UP, todayMode, listenLength, feedbackDue, taxYear, taxCsv } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -105,7 +105,22 @@ function codeBoxes(list) {
     <span class="k"><span>${a.code ? a.label || KINDS[a.kind]?.label || a.kind : KINDS[a.kind]?.label || a.kind}</span><span>Copy</span></span>
     <span class="v">${a.code || a.label || '—'}</span>
     ${a.location_note ? html`<span class="w">${a.location_note}</span>` : ''}
+    ${trustLine(a.id)}
   </button>`)}</div>`;
+}
+// "Worked for James 3 days ago" / "Reported not working" under a saved code.
+function trustLine(id) {
+  const t = id ? codeTrust(store.get('access', id), { me: store.settings().myName }) : null;
+  return t ? html`<span class="trust ${t.bad ? 'bad' : ''}">${t.bad ? '✗' : '✓'} ${t.words}</span>` : '';
+}
+// Worked / Didn't work, stamped with my name; Undo puts the old report back.
+function markCode(id, ok) {
+  const a = store.get('access', id);
+  if (!a) return;
+  const before = { id, worked_at: a.worked_at || null, worked_by: a.worked_by || null, failed_at: a.failed_at || null, failed_by: a.failed_by || null };
+  const me = store.settings().myName || '';
+  store.save('access', ok ? { id, worked_at: new Date().toISOString(), worked_by: me } : { id, failed_at: new Date().toISOString(), failed_by: me });
+  undoToast(ok ? `Marked worked: ${a.code}` : `Marked not working: ${a.code}`, () => store.save('access', before));
 }
 
 function personRow(m) {
@@ -794,7 +809,7 @@ function viewTodayPlan() {
     const leave = first && first.arrive != null && i0 === 0 ? first.arrive - (first.leg_minutes || 0) - 5 : null;
     const last = st[st.length - 1];
     const span = first && first.arrive != null && last.arrive != null ? last.arrive + (last.minutes || 20) - first.arrive : null;
-    const facts = [first && first.arrive != null ? `First stop ${formatClock(first.arrive)}` : '', `${st.length} home${st.length === 1 ? '' : 's'}`, span > 0 ? hrMin(span) : ''].filter(Boolean).join(' · ');
+    const facts = [first && first.arrive != null ? `First stop ${formatClock(first.arrive)}` : '', `${st.filter((x) => !x.pickup).length} home${st.filter((x) => !x.pickup).length === 1 ? '' : 's'}`, span > 0 ? hrMin(span) : ''].filter(Boolean).join(' · ');
     upnext = html`<section class="sec upnext dark-card">
       <div class="un-kick">Up next · ${tour.name || 'Showing tour'}</div>
       ${leave != null ? html`<div class="un-lead">Leave by ${formatClock(leave)}</div>` : html`<div class="un-lead">${tour.name || 'Showing tour'}</div>`}
@@ -864,7 +879,7 @@ function viewTodayField(focus) {
         <div class="nc-addr">${street(s.address)} ${occBadge(s.occ)}</div>
         <div class="un-facts">${[s.leg_minutes ? `${s.leg_minutes} min drive` : '', s.leg_miles ? `${Math.round(s.leg_miles * 10) / 10} mi` : '', drive].filter(Boolean).join(' · ')}</div>
         ${headsUp(s, p, codes).length ? html`<div class="heads">${headsUp(s, p, codes).map((h) => html`<span class="head-tag">${h}</span>`)}</div>` : ''}
-        ${codes.length ? codeBoxes(codes.map((c) => ({ label: c.label, code: c.code, location_note: c.where }))) : html`<div class="un-facts">No code saved for this stop.</div>`}
+        ${codes.length ? codeBoxes(codes.map((c) => ({ id: c.id, label: c.label, code: c.code, location_note: c.where }))) : html`<div class="un-facts">No code saved for this stop.</div>`}
         <div class="un-btns">
           <a class="btn teal" href="${dirLink(s)}" target="_blank" rel="noopener">${icon('pin', 18)}Directions</a>
           ${tour ? html`<a class="btn ghost-dark" href="#/door/${tour.id}/${i}">At the door</a>` : p ? html`<a class="btn ghost-dark" href="#/p/${p.id}">Open property</a>` : ''}
@@ -2370,6 +2385,82 @@ function viewTours() {
   };
 }
 
+// Pick up on the way (2026-10-29): gear waiting at a closed listing near
+// this tour's route, one line per property, "Add as a stop" puts it where it
+// costs the fewest miles. A pickup stop is not a home: no faces, no feedback.
+function pickupPlaces() {
+  const by = new Map();
+  for (const a of pickups()) {
+    const p = prop(a.property_id);
+    if (!p || p.lat == null) continue;
+    if (!by.has(p.id)) by.set(p.id, { property_id: p.id, address: p.address, lat: p.lat, lng: p.lng, items: [] });
+    by.get(p.id).items.push(a);
+  }
+  return [...by.values()];
+}
+const pickupWords = (items) => items.map((a) => a.label || KINDS[a.kind]?.label || 'Gear').join(', ');
+function onTheWayCard(t) {
+  const list = pickupsOnRoute((t.stops || []).map((s) => ({ ...s, lat: s.lat ?? prop(s.property_id)?.lat, lng: s.lng ?? prop(s.property_id)?.lng })), pickupPlaces());
+  if (!list.length) return '';
+  return html`<section class="sec"><div class="label">On your way · pick up</div><div class="card list">${list.map((x) => html`<div class="row"><span class="grow"><span class="t">${pickupWords(x.items)}</span><span class="s">${street(x.address)} · ${x.extraMiles < 0.5 ? 'right on your route' : `about ${x.extraMiles} mi extra`}</span></span><button class="btn" type="button" data-addpick="${x.property_id}" data-at="${x.index}" style="min-height:40px">Add as a stop</button></div>`)}</div></section>`;
+}
+function pickupStopCard(t, s, i) {
+  const items = (s.pickup || []).map((aid) => store.get('access', aid)).filter(Boolean);
+  return html`<div class="card stop pickup-stop ${s.shown ? 'shown' : ''}">
+    <div class="label">Stop ${i + 1} · pick up</div>
+    <div style="font-weight:700;font-size:18px">${street(s.address)}</div>
+    <div class="small">${items.length ? items.map((a) => `${a.label || KINDS[a.kind]?.label}${a.location_note ? ' (' + a.location_note + ')' : ''}`).join(' · ') : 'Already picked up'}</div>
+    <div class="btns"><a class="btn" href="${dirLink(s)}" target="_blank" rel="noopener">Navigate</a><button class="btn ${s.shown ? 'green' : 'dark'}" type="button" data-pickedup="${s.id}" ${s.shown ? raw('disabled') : ''}>${s.shown ? '✓ Picked up' : 'Picked up'}</button></div>
+    <button class="btn ghost block" type="button" data-droppick="${s.id}">Take it off the tour</button>
+  </div>`;
+}
+function pickedUp(tourId, sid) {
+  const t = store.get('tours', tourId);
+  const s = (t.stops || []).find((x) => x.id === sid);
+  if (!s) return;
+  for (const aid of s.pickup || []) if (store.get('access', aid)) store.save('access', { id: aid, status: 'office' }, { quiet: true });
+  store.save('tours', { id: tourId, stops: t.stops.map((x) => (x.id === sid ? { ...x, shown: true, shown_at: new Date().toISOString() } : x)) });
+  toast('Picked up. It is back in the office list.');
+  setTimeout(() => maybeTourDone(tourId), 600);
+}
+function wirePickups(root, tourId) {
+  root.querySelectorAll('[data-addpick]').forEach((b) => b.addEventListener('click', () => {
+    const t = store.get('tours', tourId);
+    const place = pickupPlaces().find((x) => x.property_id === b.getAttribute('data-addpick'));
+    if (!place) return;
+    const at = Math.min(Number(b.getAttribute('data-at')) || 0, (t.stops || []).length);
+    const stop = { id: store.uid(), property_id: place.property_id, address: place.address, lat: place.lat, lng: place.lng, pickup: place.items.map((a) => a.id), arrive: null, occ: '', confirmed: true };
+    const stops = [...t.stops.slice(0, at), stop, ...t.stops.slice(at)];
+    store.save('tours', { id: tourId, stops });
+    undoToast(`Added: pick up at ${street(place.address)}`, () => store.save('tours', { id: tourId, stops: t.stops }));
+  }));
+  root.querySelectorAll('[data-pickedup]').forEach((b) => b.addEventListener('click', () => pickedUp(tourId, b.getAttribute('data-pickedup'))));
+  root.querySelectorAll('[data-droppick]').forEach((b) => b.addEventListener('click', () => {
+    const t = store.get('tours', tourId);
+    store.save('tours', { id: tourId, stops: t.stops.filter((x) => x.id !== b.getAttribute('data-droppick')) });
+    undoToast('Taken off the tour', () => store.save('tours', { id: tourId, stops: t.stops }));
+  }));
+}
+
+// The faces a buyer picked on their own phone (faces.html), by tour, fetched
+// when the tour page opens. Not stored on the phone: the server has them.
+const buyerFaceCache = {};
+function buyerPickLine(t, s) {
+  const f = (buyerFaceCache[t.id] || {})[s.id];
+  if (!f) return '';
+  const who = buyerOf(t) ? buyerOf(t).split(' ')[0] : 'Your buyer';
+  return html`<div class="buyer-pick">${raw(reactionFace(f.reaction, { size: 30, label: '' }))}<span class="grow"><b>${who} picked: ${reactionLabel(f.reaction)}</b>${f.note ? html`<span class="small"> · “${f.note}”</span>` : ''}</span>${s.reaction === f.reaction ? '' : html`<button class="btn" type="button" data-usepick="${s.id}" style="min-height:36px">Use it</button>`}</div>`;
+}
+function facesLinkSheet(t) {
+  tourLink(t.id).then((url) => composeSheet({
+    title: 'Let them pick',
+    sub: `${buyerOf(t) || 'Your buyer'} taps a face for each home on their own phone. You see it on this page. The link shows the streets and times only, never codes or your notes, and ends in 3 days.`,
+    askContact: true, phone: t.buyer_phone || '', email: t.buyer_email || '',
+    body: facesLinkText({ buyer: buyerOf(t), url, me: store.settings().myName }),
+    onSent: ({ phone, email }) => store.save('tours', { id: t.id, buyer_phone: phone || t.buyer_phone || '', buyer_email: email || t.buyer_email || '' })
+  })).catch((e) => toast(e.message));
+}
+
 function viewTour(id) {
   const t = store.get('tours', id);
   if (!t) return notFound();
@@ -2402,7 +2493,8 @@ function viewTour(id) {
           ${withPhone.length ? '' : html`<div class="small">Add the listing agents' phones (Edit stop) to request by text.</div>`}
         </div>`;
       })()}
-      ${stops.map((s, i) => html`<div class="card stop ${s.shown ? 'shown' : ''}">
+      ${t.finished ? '' : onTheWayCard(t)}
+      ${stops.map((s, i) => s.pickup ? pickupStopCard(t, s, i) : html`<div class="card stop ${s.shown ? 'shown' : ''}">
         <div class="stop-head">
           <div class="stop-time">${s.arrive != null ? html`<span class="num">${formatClock(s.arrive)}</span>` : html`<span class="occ-word">Time unknown</span>`}${occ(s.occ)}</div>
           <div class="grow" style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
@@ -2422,6 +2514,7 @@ function viewTour(id) {
         ${stopFieldsHtml(s, s.id)}
         ${s.reaction ? html`<button class="stop-react" type="button" data-react="${s.id}" aria-label="Their reaction: ${reactionLabel(s.reaction)}. Tap to change">${raw(reactionFace(s.reaction, { size: 34 }))}<span><b>${reactionLabel(s.reaction)}</b>${s.reaction_note ? html`<span class="small"> · ${s.reaction_note}</span>` : ''}</span></button>`
           : s.shown ? html`<button class="btn ghost block" type="button" data-react="${s.id}">How did they like it?</button>` : ''}
+        ${buyerPickLine(t, s)}
         ${s.reaction && s.agent_phone ? html`<button class="btn ghost block" type="button" data-fb="${s.id}">${s.feedback_sent_at ? html`✓ Feedback sent to ${(s.agent || 'agent').split(' ')[0]} · send again` : html`${icon('text', 16)}Text feedback to ${(s.agent || 'the listing agent').split('(')[0].trim()}`}</button>` : ''}
         ${s.requested_at && !s.confirmed ? html`<div class="small wait">Showing requested ${niceDate(s.requested_at.slice(0, 10))} · waiting to hear back</div>` : ''}
         <a class="btn door-btn block" href="#/door/${id}/${i}">${icon('key', 18)}At the door</a>
@@ -2432,6 +2525,7 @@ function viewTour(id) {
         <div class="btns"><button class="btn ghost" type="button" data-editstop="${s.id}">${icon('edit', 16)}Edit stop</button><button class="btn ghost" type="button" data-confirm="${s.id}">${s.confirmed ? 'Undo confirmed' : 'Mark confirmed'}</button></div>
       </div>
       ${i < stops.length - 1 && stops[i + 1].leg_miles ? html`<div class="leg">↓ about ${stops[i + 1].leg_minutes} min · ${stops[i + 1].leg_miles} mi${occWord(stops[i + 1].occ) ? ` · next is ${occWord(stops[i + 1].occ).toLowerCase()}` : ''}</div>` : ''}`)}
+      ${stops.some((s) => !s.pickup) ? html`<button class="btn block" type="button" id="faceslink">${raw(reactionFace('love', { size: 22, label: '' }))}Send ${buyerOf(t) ? buyerOf(t).split(' ')[0] : 'your buyer'} a link to pick their faces</button>` : ''}
       ${stops.some((s) => s.shown) ? html`<button class="btn big block" type="button" id="recap">${icon('text', 18)}${t.recap_sent_at ? 'Send the recap again' : `Send ${buyerOf(t) ? buyerOf(t).split(' ')[0] : 'your buyer'} the tour recap`}</button>` : ''}
       ${t.finished ? html`<a class="note-box" href="#/tourdone/${t.id}" style="display:block;color:inherit">Tour finished. ${t.trip_id ? 'The miles are in your mileage log.' : ''} See the wrap-up ›</a>` : html`<button class="btn dark big block" type="button" id="finish">Finish the tour</button>`}
       <button class="btn ghost block" type="button" id="deltour">${icon('trash', 16)}Delete this tour</button>
@@ -2463,6 +2557,21 @@ function viewTour(id) {
             store.save('notes', { property_id: before.property_id, text: mls ? 'MLS sheet (from a tour)' : 'Photo note from a showing', source: mls ? 'mls_sheet' : 'showing_photo', files: added }, { quiet: true });
           }
         }
+      });
+      wirePickups(root, id);
+      root.querySelector('#faceslink')?.addEventListener('click', () => facesLinkSheet(store.get('tours', id)));
+      root.querySelectorAll('[data-usepick]').forEach((b) => b.addEventListener('click', () => {
+        const sid = b.getAttribute('data-usepick');
+        const f = (buyerFaceCache[id] || {})[sid];
+        const cur = fresh().find((x) => x.id === sid);
+        if (f && cur) { saveReaction(sid, f.reaction, cur.reaction_note || '', { reaction_note_public: !!cur.reaction_note_public }); toast(`Saved: ${reactionLabel(f.reaction)}`); }
+      }));
+      buyerFaces(id).then((rows) => {
+        if (!rows) return;
+        const next = Object.fromEntries(rows.map((r) => [r.stop_id, r]));
+        if (JSON.stringify(next) === JSON.stringify(buyerFaceCache[id] || {})) return;
+        buyerFaceCache[id] = next;
+        if (location.hash === `#/tour/${id}`) render();
       });
       root.querySelectorAll('[data-shown]').forEach((b) => b.addEventListener('click', () => {
         const s = fresh().find((x) => x.id === b.getAttribute('data-shown'));
@@ -2526,7 +2635,7 @@ function viewTour(id) {
       root.querySelector('#reqall')?.addEventListener('click', () => requestSheet(store.get('tours', id)));
       root.querySelector('#recap')?.addEventListener('click', () => {
         const cur = store.get('tours', id);
-        recapSheet(cur, (cur.stops || []).filter((x) => x.shown || x.reaction).map((x) => ({ address: x.address, reaction: x.reaction, mls_url: x.mls_url, date: cur.date })));
+        recapSheet(cur, (cur.stops || []).filter((x) => !x.pickup && (x.shown || x.reaction)).map((x) => ({ address: x.address, reaction: x.reaction, mls_url: x.mls_url, date: cur.date })));
       });
       root.querySelectorAll('[data-fb]').forEach((b) => b.addEventListener('click', () => feedbackSheet(fresh().find((x) => x.id === b.getAttribute('data-fb')))));
       root.querySelector('#deltour').addEventListener('click', () => { if (confirm('Delete this tour?')) { del('tours', id, 'Tour deleted'); location.hash = '#/tours'; } });
@@ -2575,7 +2684,7 @@ function viewTourDone(id) {
   const t = store.get('tours', id);
   if (!t) return notFound();
   const stops = t.stops || [];
-  const shown = stops.filter((x) => x.shown);
+  const shown = stops.filter((x) => x.shown && !x.pickup);
   const buyer = buyerOf(t);
   const trip = t.trip_id ? store.get('trips', t.trip_id) : null;
   const hrs = tourHours(t);
@@ -2616,7 +2725,7 @@ function viewTourDone(id) {
       root.querySelectorAll('[data-tdface]').forEach((b) => b.addEventListener('click', () => reactionPicker(stops.find((x) => x.id === b.getAttribute('data-tdface')))));
       root.querySelector('#tdrecap')?.addEventListener('click', () => {
         const cur = store.get('tours', id);
-        recapSheet(cur, (cur.stops || []).filter((x) => x.shown || x.reaction).map((x) => ({ address: x.address, reaction: x.reaction, mls_url: x.mls_url, date: cur.date })));
+        recapSheet(cur, (cur.stops || []).filter((x) => !x.pickup && (x.shown || x.reaction)).map((x) => ({ address: x.address, reaction: x.reaction, mls_url: x.mls_url, date: cur.date })));
       });
       root.querySelector('#tdfb')?.addEventListener('click', () => feedbackSheet(unsent[0]));
       root.querySelector('#tdundo').addEventListener('click', () => { unfinishTour(id); location.hash = `#/tour/${id}`; });
@@ -3015,7 +3124,7 @@ addEventListener('hashchange', () => { if (!/^#\/door\//.test(location.hash)) ke
 
 // "305 Cedar Hollow Ln · 9 min · Vacant": the next stop in one line.
 function nextStopWords(n) {
-  return [String(n.address || '').split(',')[0], n.leg_minutes ? `${n.leg_minutes} min` : '', occWord(n.occ)].filter(Boolean).join(' · ');
+  return [n.pickup ? 'Pick up' : '', String(n.address || '').split(',')[0], n.leg_minutes ? `${n.leg_minutes} min` : '', occWord(n.occ)].filter(Boolean).join(' · ');
 }
 
 function viewDoor(tourId, i) {
@@ -3040,17 +3149,19 @@ function viewDoor(tourId, i) {
       <div class="door-addr">${String(s.address || '').split(',')[0]}</div>
       ${s.occ || heads.length ? html`<div class="door-heads">${s.occ ? occBadge(s.occ, { extra: s.occ === 'O' ? 'knock first' : '' }) : ''}${heads.map((h) => html`<span class="door-head">${h}</span>`)}</div>` : ''}
       <div class="door-meta">${s.confirmed ? html`<span class="ok-on-dark">✓ Confirmed</span>` : 'Not confirmed yet'}</div>
-      ${codes.length ? html`<div class="door-codes">${codes.map((c) => html`<button class="door-code" type="button" data-copy="${c.code}"><span class="k">${c.label}</span><span class="v">${c.code}</span>${c.where ? html`<span class="w">${c.where}</span>` : ''}</button>`)}</div>
+      ${codes.length ? html`<div class="door-codes">${codes.map((c) => html`<div class="door-codewrap"><button class="door-code" type="button" data-copy="${c.code}"><span class="k">${c.label}</span><span class="v">${c.code}</span>${c.where ? html`<span class="w">${c.where}</span>` : ''}${trustLine(c.id)}</button>
+          ${c.id ? html`<div class="door-trust"><button type="button" data-worked="${c.id}">✓ Worked</button><button type="button" data-failed="${c.id}">✗ Didn't work</button></div>` : ''}</div>`)}</div>
         <div class="door-copyhint">Tap a code to copy it</div>
         <div class="door-saved">${navigator.onLine ? '' : 'No signal. '}Saved on this phone · updated ${savedAtWords(p || s, p ? store.where('access', 'property_id', p.id) : [])}${pendingWords()}</div>`
         : html`<div class="door-none">${s.code_pending ? 'Code still coming. Text the listing agent.' : 'No code saved for this stop.'}</div>`}
       ${how.length ? html`<div class="door-how">${how.map((x) => html`<p>${x}</p>`)}</div>` : ''}
       <div class="door-act">
-        <div class="door-ask"><b>How did they like it?</b><span>tap one = marked shown</span></div>
+        ${s.pickup ? html`<div class="door-ask"><b>Pick up here</b><span>${pickupWords((s.pickup || []).map((a) => store.get('access', a)).filter(Boolean)) || 'Nothing left'}</span></div>
+        <button class="door-btn2 pick-btn" type="button" id="dpick" ${s.shown ? raw('disabled') : ''}>${s.shown ? '✓ Picked up' : 'Picked up'}</button>` : html`<div class="door-ask"><b>How did they like it?</b><span>tap one = marked shown</span></div>
         <div class="door-faces" role="group" aria-label="How did they like it?">
           ${DOOR_FACES.map((k) => html`<button class="door-face ${s.reaction === k ? 'on' : ''}" type="button" data-quick="${k}" aria-pressed="${String(s.reaction === k)}">${raw(reactionFace(k, { size: 40, label: '' }))}<span>${reactionLabel(k)}</span></button>`)}
           <button class="door-face all ${s.reaction && !DOOR_FACES.includes(s.reaction) ? 'on' : ''}" type="button" id="dall">${s.reaction && !DOOR_FACES.includes(s.reaction) ? raw(reactionFace(s.reaction, { size: 40, label: '' })) : html`<span class="n">8</span>`}<span>${s.reaction && !DOOR_FACES.includes(s.reaction) ? reactionLabel(s.reaction) : 'All 8'}</span></button>
-        </div>
+        </div>`}
         ${s.shown ? html`<div class="door-shownline">✓ Shown${s.reaction ? ` · ${reactionLabel(s.reaction)}` : ''}${s.feedback_sent_at ? ' · feedback sent' : ''}</div>` : ''}
         <div class="door-two">
           <button class="door-btn2" type="button" id="dlate">${icon('clock', 20)}Running late</button>
@@ -3074,7 +3185,10 @@ function viewDoor(tourId, i) {
         });
         setTimeout(() => maybeTourDone(tourId), 900);
       }));
-      root.querySelector('#dall').addEventListener('click', () => allFacesSheet(tourId, i));
+      root.querySelector('#dall')?.addEventListener('click', () => allFacesSheet(tourId, i));
+      root.querySelector('#dpick')?.addEventListener('click', () => pickedUp(tourId, s.id));
+      root.querySelectorAll('[data-worked]').forEach((b) => b.addEventListener('click', () => markCode(b.getAttribute('data-worked'), true)));
+      root.querySelectorAll('[data-failed]').forEach((b) => b.addEventListener('click', () => markCode(b.getAttribute('data-failed'), false)));
       root.querySelector('#dlate').addEventListener('click', () => lateSheet(t, s));
       // Swipe left: next stop. Swipe right: the stop before.
       const door = root.querySelector('.door');
@@ -3091,6 +3205,31 @@ function viewDoor(tourId, i) {
       }, { passive: true });
     }
   };
+}
+
+// The note on a showing (2026-10-29): said or typed, and a switch for who
+// sees it. "Just me" (the default) keeps it on the phone and the property;
+// "Feedback text" adds it to the text to the listing agent.
+function noteBlock(s) {
+  const has = !!s.reaction_note;
+  return html`<button class="voice-note" type="button" id="fvoice" ${has ? raw('hidden') : ''}>${icon('mic', 18)}<b>Add a voice note</b><span>· Bestie types it out</span></button>
+    <div id="fnote" ${has ? '' : raw('hidden')}>${fieldHtml({ name: 'rnote', label: 'Your note', type: 'textarea', placeholder: 'Loved the yard, kitchen too small', mic: true }, s.reaction_note)}
+      <div class="seg note-who" role="group" aria-label="Who sees this note"><button type="button" data-pub="0" class="${s.reaction_note_public ? '' : 'on'}">${icon('lock', 16)}Just me</button><button type="button" data-pub="1" class="${s.reaction_note_public ? 'on' : ''}">${icon('text', 16)}In the feedback text</button></div>
+      <div class="hint" id="fwho">${s.reaction_note_public ? 'Goes to the listing agent with the feedback text. You see the text before it sends.' : 'Private. Stays on your phone and the property notes.'}</div>
+    </div>`;
+}
+function wireNoteBlock(sh) {
+  wireMics(sh);
+  sh.querySelector('#fvoice')?.addEventListener('click', (e) => {
+    e.currentTarget.hidden = true;
+    sh.querySelector('#fnote').hidden = false;
+    sh.querySelector('[data-mic="rnote"]')?.click();
+  });
+  sh.querySelectorAll('[data-pub]').forEach((b) => b.addEventListener('click', () => {
+    sh.querySelectorAll('[data-pub]').forEach((x) => x.classList.toggle('on', x === b));
+    sh.querySelector('#fwho').textContent = b.getAttribute('data-pub') === '1' ? 'Goes to the listing agent with the feedback text. You see the text before it sends.' : 'Private. Stays on your phone and the property notes.';
+  }));
+  return () => ({ note: sh.querySelector('[name=rnote]').value.trim(), pub: sh.querySelector('[data-pub="1"]').classList.contains('on') });
 }
 
 // The four faces on the door; the other four are under "All 8".
@@ -3126,15 +3265,14 @@ function allFacesSheet(tourId, i) {
     <div class="kicker" style="color:var(--teal-text)">Mark shown · Stop ${i + 1} of ${tour.stops.length}</div>
     <div class="title mark-title">How did ${buyer || 'they'} like ${street(s.address)}?</div>
     <div class="react-grid" role="group" aria-label="Their reaction">${REACTIONS.map(([k, label]) => html`<button class="react" type="button" data-k="${k}" aria-pressed="${String(pick === k)}">${raw(reactionFace(k, { size: 40, label: '' }))}<span>${label}</span></button>`)}</div>
-    <button class="voice-note" type="button" id="fvoice" ${s.reaction_note ? raw('hidden') : ''}>${icon('mic', 18)}<b>Add a voice note</b><span>· Bestie types it out</span></button>
-    <div id="fnote" ${s.reaction_note ? '' : raw('hidden')}>${fieldHtml({ name: 'rnote', label: 'Note (private)', type: 'textarea', placeholder: 'Loved the yard, kitchen too small', mic: true }, s.reaction_note)}</div>
+    ${noteBlock(s)}
     <div class="mark-boxes">
       ${s.agent_phone ? html`<label class="mark-box"><input type="checkbox" id="fbtext" ${s.feedback_sent_at ? '' : raw('checked')}><span><b>Text feedback to ${s.agent || 'the listing agent'}</b> (listing agent)<small>Written for you. Opens in Messages to send.</small></span></label>` : ''}
       ${buyer ? html`<label class="mark-box"><input type="checkbox" id="fbbuyer" ${s.hide_from_buyer ? '' : raw('checked')}><span><b>Add to ${buyer}'s buyer page</b></span></label>` : ''}
     </div>
     <button class="btn teal big block mark-done" type="button" id="fdone" ${pick ? '' : raw('disabled')}>${pick ? `Done · ${next ? 'Next stop' : 'Finish the tour'} ›` : 'Pick a face'}</button>
   </div>`, (sh) => {
-    wireMics(sh);
+    const noteOf = wireNoteBlock(sh);
     const btn = sh.querySelector('#fdone');
     sh.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => {
       pick = b.getAttribute('data-k');
@@ -3144,16 +3282,11 @@ function allFacesSheet(tourId, i) {
       btn.disabled = false;
       btn.textContent = `Done · ${next ? 'Next stop' : 'Finish the tour'} ›`;
     }));
-    sh.querySelector('#fvoice')?.addEventListener('click', (e) => {
-      e.currentTarget.hidden = true;
-      sh.querySelector('#fnote').hidden = false;
-      sh.querySelector('[data-mic="rnote"]')?.click();
-    });
     btn.addEventListener('click', () => {
       if (!pick) return;
-      const note = sh.querySelector('[name=rnote]').value.trim();
+      const { note, pub } = noteOf();
       const toBuyer = sh.querySelector('#fbbuyer');
-      const r = saveReaction(s.id, pick, note, toBuyer ? { hide_from_buyer: !toBuyer.checked } : {});
+      const r = saveReaction(s.id, pick, note, { reaction_note_public: !!(note && pub), ...(toBuyer ? { hide_from_buyer: !toBuyer.checked } : {}) });
       const textIt = sh.querySelector('#fbtext')?.checked;
       closeSheet();
       if (next) location.hash = `#/door/${tourId}/${i + 1}`;
@@ -3210,9 +3343,10 @@ function reactionPicker(s) {
     <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">How did they like it?</div>
     <div class="small">${s.address}</div>
     <div class="react-grid" role="group" aria-label="Their reaction">${REACTIONS.map(([k, label]) => html`<button class="react" type="button" data-k="${k}" aria-pressed="${String(pick === k)}">${raw(reactionFace(k, { size: 48, label: '' }))}<span>${label}</span></button>`)}</div>
-    ${fieldHtml({ name: 'rnote', label: 'Add a note (optional)', type: 'textarea', placeholder: 'Loved the yard, kitchen too small', mic: true }, s.reaction_note)}
+    ${noteBlock(s)}
     <button class="btn dark big block" type="button" id="rsave" ${pick ? '' : raw('disabled')}>${pick ? 'Save: ' + reactionLabel(pick) : 'Pick a face'}</button>
   </div>`, (sh) => {
+    const noteOf = wireNoteBlock(sh);
     const btn = sh.querySelector('#rsave');
     sh.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => {
       pick = b.getAttribute('data-k');
@@ -3224,7 +3358,8 @@ function reactionPicker(s) {
     }));
     btn.addEventListener('click', () => {
       if (!pick) return;
-      const r = saveReaction(s.id, pick, sh.querySelector('[name=rnote]').value.trim());
+      const { note, pub } = noteOf();
+      const r = saveReaction(s.id, pick, note, { reaction_note_public: !!(note && pub) });
       closeSheet();
       toast(`Saved: ${reactionLabel(pick)}`);
       render();
@@ -4642,7 +4777,7 @@ applyContrast();
 // orange, Seller updates rose...); any other header gets a colour from the
 // header palette by its words, so the same header is always the same colour.
 const HEADER_HUES = [
-  [/getting in|codes?\b|lockbox/i, 'code'], [/tour|showing/i, 'showing'], [/key date|deadline|due/i, 'deadline'],
+  [/getting in|codes?\b|lockbox/i, 'code'], [/pick up/i, 'todo'], [/tour|showing/i, 'showing'], [/key date|deadline|due/i, 'deadline'],
   [/clos/i, 'closing'], [/to ?do/i, 'todo'], [/seller|listing/i, 'listing'], [/escrow/i, 'escrow'],
   [/appoint|calendar|today|coming up/i, 'appt'], [/safety|check-in/i, 'safety'], [/people|vendor|contact|buyer/i, 'people'],
   [/note|feedback/i, 'notes'], [/remind/i, 'remind'], [/status/i, 'status']

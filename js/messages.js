@@ -28,7 +28,11 @@ export function feedbackText(stop, { me = '', date = '', today = '' } = {}) {
   const hi = first(stop.agent) ? `Hi ${first(stop.agent)}, ` : 'Hi, ';
   const line = FEEDBACK_LINES[stop.reaction] || 'Thank you for having us.';
   const when = !date || date === today ? 'today' : `on ${dayWord(date).split(',')[0]}`;
-  return `${hi}thank you for letting us see ${street(stop.address)} ${when}. ${line}${sign(me)}`;
+  // The agent's own note goes along only when they switched it to "Share in
+  // the feedback text" (2026-10-29); a private note never leaves the phone.
+  const note = stop.reaction_note_public ? String(stop.reaction_note || '').trim().replace(/\s+/g, ' ') : '';
+  const extra = note ? ` ${note[0].toUpperCase()}${note.slice(1)}${/[.!?]$/.test(note) ? '' : '.'}` : '';
+  return `${hi}thank you for letting us see ${street(stop.address)} ${when}. ${line}${extra}${sign(me)}`;
 }
 
 // One text per listing agent, covering every home of theirs on the tour.
@@ -169,4 +173,10 @@ export function lateBuyerText({ buyer = '', address = '', minutes = 10, arriveAt
   const late = minutes >= 20 ? 'running 20 minutes or more behind' : `running about ${minutes} minutes behind`;
   const when = arriveAt != null ? ` See you around ${formatClock(arriveAt)}.` : '';
   return `${hi}I'm ${late} for ${street(address) || 'our next home'}.${when}${sign(me)}`;
+}
+
+// Buyer taps their own faces (2026-10-29): the text with their link.
+export function facesLinkText({ buyer = '', url = '', me = '' } = {}) {
+  const hi = first(buyer) ? `Hi ${first(buyer)}! ` : 'Hi! ';
+  return `${hi}Here are the homes from our tour. Tap a face for each one so I know what you thought, and add a note if you like: ${url}${sign(me)}`;
 }

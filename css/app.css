@@ -865,3 +865,18 @@ html.hc .dark-card, html.hc .safety-bar { background: #000; }
 .setup-bar { border-radius: 0; margin: 0; height: 6px; }
 .tabs.hubtabs { flex-wrap: nowrap; overflow: visible; }
 .tabs.hubtabs .tab { flex: 1 1 0; font-weight: 600; color: var(--ink); min-width: 0; white-space: nowrap; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; }
+.note-who { margin-top: 8px; }
+.note-who button { min-height: 44px; font-size: 15px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+/* Code last worked (2026-10-29) */
+.code .trust, .door-code .trust { font: 600 12.5px var(--sans); color: #1f4d2b; }
+.code .trust.bad, .door-code .trust.bad { color: #9b1c1c; }
+.door-code .trust { font-size: 15px; }
+.door-codewrap { display: flex; flex-direction: column; gap: 6px; }
+.door-trust { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.door-trust button { min-height: 44px; border: 1.5px solid #4a5154; border-radius: 10px; background: none; color: #cfd6d3; font: 700 15px var(--sans); cursor: pointer; }
+.pick-btn { background: var(--code); color: #0e1012; border-color: var(--code); }
+.pick-btn:disabled { background: none; color: #3ddc97; border-color: #3ddc97; opacity: 1; }
+.pickup-stop { border-left: 4px solid var(--k-todo, #6b7378); }
+.buyer-pick { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: #e6f8f6; }
+.buyer-pick .grow { flex: 1; min-width: 0; }
+#faceslink svg { flex-shrink: 0; }

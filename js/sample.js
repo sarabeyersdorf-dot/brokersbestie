@@ -19,7 +19,7 @@ export function sampleData({ now = new Date() } = {}) {
     properties: [
       { id: P1, address: '100 Sample Ridge Rd', city: 'Murphys, CA', status: 'listing', price: 799000, mls: '000000001', occupancy: 'O', well: true, septic: true, hoa: 'None', solar: 'Owned', directions: 'GPS stops short. Past the mailboxes, second drive on the right.', showing_notes: 'Text the owner 2 hours ahead. Friendly dog in the side yard.', lat: 38.137, lng: -120.455, gate_lat: 38.1378, gate_lng: -120.4561, heads_up: ['Cattle guard', 'Steep drive'], list_date: plus(-12) },
       { id: P2, address: '200 Example St', city: 'Angels Camp, CA', status: 'escrow', price: 349000, mls: '000000002', occupancy: 'V', coe_date: plus(15), showing_notes: 'Vacant. Go direct.', lat: 38.064, lng: -120.540 },
-      { id: P3, address: '300 Demo Ct', city: 'Valley Springs, CA', status: 'closed', price: 450000, occupancy: 'V', lat: 38.191, lng: -120.829 },
+      { id: P3, address: '300 Demo Ct', city: 'Murphys, CA', status: 'closed', price: 450000, occupancy: 'V', lat: 38.171, lng: -120.418 },
       { id: P4, address: '305 Cedar Hollow Ln', city: 'Murphys, CA', status: 'tour', price: 625000, occupancy: 'V', showing_notes: 'Vacant. Lockbox on the back door.', lat: 38.142, lng: -120.468, heads_up: ['Low branches'] },
       { id: P5, address: '12 Oak Knoll Ct', city: 'Arnold, CA', status: 'tour', price: 540000, occupancy: 'O', showing_notes: 'Seller home with a cat. Shoes off.', lat: 38.255, lng: -120.351 }
     ],

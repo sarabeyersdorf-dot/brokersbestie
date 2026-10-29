@@ -7,6 +7,9 @@
 //   GET  ?op=oh&t=       an open house sign-in link: the address and branding
 //   POST {op:'visit'}    a visitor signing in on their own phone (no account)
 //   GET  ?op=share&t=    a 24-hour code link: one property's codes + directions
+//   GET  ?op=tour&t=     a buyer's tour link: the homes (street, time) and
+//                        the faces they picked; never codes or notes
+//   POST {op:'face'}     the buyer picks a face (and a note) for one home
 // Safety texts go through Twilio when TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN /
 // TWILIO_FROM are set as this function's secrets; until then nothing is texted
 // and the phone keeps saying "phone-only".
@@ -105,6 +108,14 @@ async function run(cfg: any) {
   return { subs: (subs || []).length, sent, safety };
 }
 
+const FACE_KEYS = ['love', 'like', 'maybe', 'nope', 'pricey', 'work', 'again', 'offer'];
+async function tourLink(t: unknown) {
+  if (!t || !/^[a-f0-9]{32,64}$/.test(String(t))) return null;
+  const { data } = await db.from('tour_links').select('*').eq('token', String(t)).maybeSingle();
+  return data && !data.revoked && new Date(data.expires_at) > new Date() ? data : null;
+}
+const homeStops = (tour: any) => (tour?.stops || []).filter((s: any) => !s.pickup);
+
 async function ohLink(t: unknown) {
   if (!t || !/^[a-f0-9]{16,64}$/.test(String(t))) return null;
   const { data } = await db.from('oh_links').select('*').eq('token', String(t)).maybeSingle();
@@ -138,7 +149,32 @@ Deno.serve(async (req) => {
     if (!p) return json({ error: 'This link has ended.' }, 404);
     return json({ ...p, access: access || [], agent: prof || null, expires_at: link.expires_at });
   }
+  if (req.method === 'GET' && url.searchParams.get('op') === 'tour') {
+    const link = await tourLink(url.searchParams.get('t'));
+    if (!link) return json({ error: 'This link has ended. Ask your agent for a new one.' }, 404);
+    const [{ data: tour }, { data: faces }, { data: prof }] = await Promise.all([
+      db.from('tours').select('id, name, buyer, date, stops').eq('id', link.tour_id).maybeSingle(),
+      db.from('tour_faces').select('stop_id, reaction, note').eq('tour_id', link.tour_id),
+      db.from('profiles').select('full_name, phone, brokerage').eq('team_id', link.team_id).eq('owner', link.owner || '').maybeSingle()
+    ]);
+    if (!tour) return json({ error: 'This link has ended.' }, 404);
+    const mine = new Map((faces || []).map((f: any) => [f.stop_id, f]));
+    const stops = homeStops(tour).map((s: any) => ({ id: s.id, street: String(s.address || '').split(',')[0], town: String(s.address || '').split(',')[1]?.trim() || '', arrive: s.arrive ?? null, shown: !!s.shown, reaction: mine.get(s.id)?.reaction || null, note: mine.get(s.id)?.note || '' }));
+    return json({ buyer: tour.buyer || '', date: tour.date, stops, agent: prof || null });
+  }
   const body = await req.json().catch(() => ({}));
+  if (body.op === 'face') {
+    const link = await tourLink(body.t);
+    if (!link) return json({ error: 'This link has ended. Ask your agent for a new one.' }, 404);
+    if (!FACE_KEYS.includes(String(body.reaction))) return json({ error: 'Pick a face' }, 400);
+    const { data: tour } = await db.from('tours').select('stops').eq('id', link.tour_id).maybeSingle();
+    const stopId = String(body.stop_id || '');
+    if (!homeStops(tour).some((s: any) => s.id === stopId)) return json({ error: 'That home is not on this tour' }, 404);
+    const note = String(body.note || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 500);
+    const { error } = await db.from('tour_faces').upsert({ id: `${link.tour_id}/${stopId}`, team_id: link.team_id, tour_id: link.tour_id, stop_id: stopId, reaction: body.reaction, note, updated_at: new Date().toISOString() });
+    if (error) return json({ error: 'Could not save. Please try again.' }, 500);
+    return json({ ok: true });
+  }
   if (body.op === 'run') {
     if (req.headers.get('x-cron-token') !== cfg.cron_token) return json({ error: 'no' }, 401);
     return json(await run(cfg));

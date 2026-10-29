@@ -249,3 +249,14 @@ test('demo link: /demo loads the sample story on a fresh phone only, with a bann
   const eve = sampleData({ now: new Date(2026, 9, 29, 21, 0) });
   assert.ok(eve.tours[0].stops.every((x) => x.shown)); // evening: already shown, Today wraps up
 });
+
+test('code last worked: the newer report wins, in plain words', async () => {
+  const { codeTrust, doorCodes } = await import('../js/brief.js');
+  const now = Date.parse('2026-10-29T18:00:00Z');
+  assert.equal(codeTrust({}), null);
+  assert.deepEqual(codeTrust({ worked_at: '2026-10-26T17:00:00Z', worked_by: 'james' }, { now, me: 'sara' }), { bad: false, words: 'Worked for James 3 days ago' });
+  assert.deepEqual(codeTrust({ worked_at: '2026-10-26T17:00:00Z', worked_by: 'james', failed_at: '2026-10-29T15:00:00Z', failed_by: 'sara' }, { now, me: 'sara' }), { bad: true, words: 'Reported not working by you today' });
+  // The stop's copy of a saved code carries the saved code's id.
+  const c = doorCodes({ code: '#2580' }, [{ id: 'a1', label: 'Gate', code: '#2580', location_note: 'Left post' }, { id: 'a2', label: 'Alarm', code: '7319' }]);
+  assert.deepEqual(c.map((x) => [x.code, x.id]), [['#2580', 'a1'], ['7319', 'a2']]);
+});

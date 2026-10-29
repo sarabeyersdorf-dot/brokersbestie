@@ -15,6 +15,13 @@ test('feedback greets the agent by first name and never includes the private not
   assert.match(t, /\nSara$/);
 });
 
+test('a note goes in the feedback text only when switched to shared', () => {
+  const stop = { agent: 'Kim Ray', address: '1 A St, Murphys', reaction: 'love', reaction_note: 'loved the deck, asking about the HOA' };
+  assert.doesNotMatch(feedbackText(stop), /deck/);
+  const t = feedbackText({ ...stop, reaction_note_public: true }, { me: 'sara' });
+  assert.match(t, / Loved the deck, asking about the HOA\.\nSara$/);
+});
+
 test('one showing request per listing agent, covering all their homes', () => {
   const stops = [
     { address: '1 A St, Murphys', agent: 'Kim', agent_phone: '(209) 555-0101', arrive: 600, code: '1' },
@@ -215,4 +222,11 @@ test('running late sits on the door and the next-stop card, with Messages and th
   assert.match(app, /Also text \$\{buyerOf\(tour\)/);
   assert.equal(lateText({ agent: 'Pat Lee', me: 'Sara Cooper', brokerage: 'Legacy Properties', address: '305 Cedar Hollow Ln', minutes: 10, arriveAt: 625 }),
     "Hi Pat, it's Sara Cooper with Legacy Properties. Running about 10 minutes late to 305 Cedar Hollow Ln, now arriving around 10:25 AM. Thank you!");
+});
+
+test('the faces link text greets the buyer and carries the link', async () => {
+  const { facesLinkText } = await import('../js/messages.js');
+  const t = facesLinkText({ buyer: 'Jo Smith', url: 'https://brokersbestie.app/faces.html?t=abc', me: 'sara' });
+  assert.match(t, /^Hi Jo! Here are the homes from our tour\./);
+  assert.match(t, /faces\.html\?t=abc\nSara$/);
 });

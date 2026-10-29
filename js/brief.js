@@ -196,6 +196,7 @@ export function buyers(tours) {
     b.tours.push(t);
     if (String(t.date) > b.last) { b.last = String(t.date); b.name = name; }
     for (const s of t.stops || []) {
+      if (s.pickup) continue; // gear picked up on the way is not a home they saw
       if (!s.shown && !s.reaction) continue;
       if (s.hide_from_buyer) continue; // unticked "Add to <buyer>'s buyer page"
       const hk = s.property_id || buyerKey(s.address);
@@ -276,8 +277,33 @@ export function doorCodes(stop, saved = [], kindLabel = (k) => k) {
     out.push({ label: label || 'Code', code: v, where });
   };
   if (stop) add(stop.code_label && stop.code_label !== 'Code' ? stop.code_label : 'Code', stop.code);
-  for (const a of saved) add(a.label || kindLabel(a.kind), a.code, a.location_note || '');
+  for (const a of saved) {
+    // The same code saved on the property: the stop's copy takes its id, so
+    // "worked / didn't work" lands on the saved code.
+    const same = out.find((o) => o.code.toUpperCase() === String(a.code || '').trim().toUpperCase());
+    if (same) { if (!same.id && a.id) Object.assign(same, { id: a.id, where: same.where || a.location_note || '' }); continue; }
+    add(a.label || kindLabel(a.kind), a.code, a.location_note || '');
+    if (a.id && out.length && out[out.length - 1].code === String(a.code || '').trim()) out[out.length - 1].id = a.id;
+  }
   return out;
+}
+
+// Code last worked (2026-10-29): the newer of "worked" and "didn't work",
+// in plain words. `me` is my first name, so my own reads "you".
+export function codeTrust(a, { now = Date.now(), me = '' } = {}) {
+  if (!a) return null;
+  const w = a.worked_at ? Date.parse(a.worked_at) : 0;
+  const f = a.failed_at ? Date.parse(a.failed_at) : 0;
+  if (!w && !f) return null;
+  const bad = f > w;
+  const at = bad ? f : w;
+  const by = String((bad ? a.failed_by : a.worked_by) || '').trim().toLowerCase();
+  const who = !by ? '' : by === String(me || '').toLowerCase() ? 'you' : by[0].toUpperCase() + by.slice(1);
+  const days = Math.floor((now - at) / 86400000);
+  const when = days <= 0 ? 'today' : days === 1 ? 'yesterday' : days < 60 ? `${days} days ago` : `on ${new Date(at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  return bad
+    ? { bad: true, words: `Reported not working${who ? ` by ${who}` : ''} ${when}` }
+    : { bad: false, words: `Worked${who ? ` for ${who}` : ''} ${when}` };
 }
 
 // Heads-up words for the door (2026-10-28): plain words under the address.

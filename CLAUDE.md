@@ -871,3 +871,40 @@ not every look. Now:
 - **Setup:** "Your first gate code / About 2 minutes · N of 4 done" with the
   buddy, a thin bar, ONE step open (teal frame, "Step 1 · Sign in"), the rest
   one line each that opens on a tap (`setupOpen`).
+
+## Four more for the road (2026-10-29, Sara: "do all")
+
+- **Voice note, private or public.** `noteBlock` / `wireNoteBlock` (app.js)
+  are the one note on a showing (All 8 and the face picker): a dashed "Add a
+  voice note" that opens the box and starts the mic, and a switch **Just me**
+  (default) / **In the feedback text**. Shared sets
+  `stop.reaction_note_public`, and only then does `feedbackText` add the note
+  (the agent still sees and edits the text before Messages opens). A private
+  note never leaves the phone and the property notes.
+- **Code last worked (#5).** db/025: `access.worked_at/by`, `failed_at/by`.
+  `codeTrust(a, { me })` in brief.js (tested) is the one wording: the newer
+  report wins ("Worked for James 3 days ago", "Reported not working by you
+  today"). Shown under every saved code (`trustLine` in `codeBoxes`, the door,
+  Today's next stop). At the door each saved code has **✓ Worked / ✗ Didn't
+  work** (`markCode`, Undo). `doorCodes` now gives the stop's copy of a saved
+  code that code's `id`.
+- **Pick up on the way (#6).** `pickupsOnRoute(stops, places, { maxMiles: 5 })`
+  in route.js (tested): gear still out at a closed/cancelled listing near the
+  route, one per property, with the cheapest place to add it. The tour page
+  shows **On your way · pick up** → **Add as a stop** (Undo). A pickup stop
+  carries `pickup: [access ids]`; it is not a home: no faces, no feedback, not
+  on the buyer page, the recap or "homes shown". **Picked up** (tour card or
+  At the door) moves the gear to "office" and marks the stop done. The demo's
+  300 Demo Ct moved to Murphys so the demo shows it.
+- **Buyer taps their own faces (#7).** db/026: `tour_links` (3-day token, team
+  RLS) and `tour_faces` (one row per home; members may read, only the function
+  writes). Tour page → **Send <buyer> a link to pick their faces** (`tourLink`
+  in push.js, `facesLinkText` in messages.js, composeSheet; the agent sends).
+  `faces.html?t=` is the buyer's page: street, town and time per home, the 8
+  faces and a note; nothing else (no codes, notes or seller details). The
+  `reminders` function (version 6): `GET ?op=tour` and `POST {op:'face'}`
+  (checks the link, the face, and that the stop is a home on that tour).
+  The tour page fetches `tour_faces` (`buyerFaces`) and shows "Jo picked:
+  Loved it" on each stop with **Use it** (sets the stop's face). Verified
+  against the live function: save, pickup refused, bad link 404, no code in
+  the reply.

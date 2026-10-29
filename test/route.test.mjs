@@ -113,3 +113,20 @@ test('no "saves N minutes" for an order that makes a showing late', () => {
   const r = planRoute({ start: office, startMinutes: 600, stops: [{ ...copper, at: 601 }, angels1] });
   if (r.late > 0) assert.ok(r.savedMinutes === 0 || r.late <= 0);
 });
+
+test('pick up on the way: near the route, cheapest place to add it', async () => {
+  const { pickupsOnRoute } = await import('../js/route.js');
+  const stops = [{ lat: 38.10, lng: -120.40 }, { lat: 38.10, lng: -120.30 }, { lat: 38.10, lng: -120.20 }];
+  const out = pickupsOnRoute(stops, [
+    { property_id: 'p3', lat: 38.105, lng: -120.25 },  // between stop 2 and 3
+    { property_id: 'far', lat: 39.0, lng: -121.0 },    // far away
+    { property_id: 'p0', lat: 38.1, lng: -120.30 }     // same spot as a stop
+  ]);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].property_id, 'p0');
+  assert.equal(out[1].property_id, 'p3');
+  assert.equal(out[1].index, 2);
+  assert.ok(out[1].extraMiles < 1);
+  // A place already on the tour is not offered.
+  assert.equal(pickupsOnRoute([{ lat: 38.1, lng: -120.4, property_id: 'p3' }], [{ property_id: 'p3', lat: 38.1, lng: -120.4 }]).length, 0);
+});
