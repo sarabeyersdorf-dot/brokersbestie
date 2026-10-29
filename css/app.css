@@ -811,3 +811,57 @@ html.hc .dark-card, html.hc .safety-bar { background: #000; }
 .safety-bar > svg { flex-shrink: 0; }
 .dark-card .un-btns .btn { white-space: nowrap; padding: 0 10px; }
 .dark-card .un-btns #readbrief { font-size: 14px; text-transform: none; letter-spacing: 0; }
+
+/* At the door and Mark shown, in the mock-up's look (2026-10-29). */
+.door-x { border: 2px solid #fff; border-radius: 10px; padding: 0 14px; font-size: 16px; }
+.door-n { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.door-n b { color: var(--code); font-weight: 800; }
+.door-n span { font: 600 12px var(--sans); letter-spacing: 0; text-transform: none; color: #cfd6d3; }
+.door .door-heads { align-items: center; }
+.door .door-heads .occb { font-size: 16px; padding: 4px 12px; border-width: 2px; border-radius: 8px; gap: 6px; }
+.door-head { font-size: 16px; padding: 3px 10px; }
+.door-ask { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.door-ask b { font: 800 15px var(--tall); letter-spacing: .08em; text-transform: uppercase; }
+.door-ask span { font: 600 12px var(--sans); color: #cfd6d3; }
+.door-act .door-drive { text-align: center; color: #cfd6d3; font: 600 14px var(--sans); }
+.door-act .door-drive a { color: #fff; text-decoration: underline; }
+.mark-title { font: 800 26px/1.05 var(--tall); text-transform: uppercase; color: var(--ink); margin: 2px 0 4px; }
+.voice-note { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 52px; padding: 0 14px; border: 2px dashed var(--line); border-radius: 12px; background: none; color: var(--ink); font: 500 15px var(--sans); cursor: pointer; }
+.voice-note svg { color: var(--teal-text); }
+.voice-note span { color: var(--mute); }
+.mark-boxes { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.mark-box { display: flex; gap: 12px; align-items: flex-start; padding: 12px 2px; border-bottom: 1px solid var(--line); font-size: 15px; cursor: pointer; }
+.mark-box input { width: 24px; height: 24px; flex-shrink: 0; accent-color: var(--ink); margin: 0; }
+.mark-box small { display: block; color: var(--mute); font-size: 13px; margin-top: 2px; }
+.mark-done { justify-content: space-between; font: 800 19px var(--tall); text-transform: uppercase; letter-spacing: .04em; }
+.mark-done:disabled { justify-content: center; background: var(--line); border-color: var(--line); color: var(--ink-2); }
+.react-grid .react { min-height: 76px; }
+.done-head { display: flex; align-items: center; gap: 14px; }
+.done-head > span:last-child { display: flex; flex-direction: column; gap: 2px; }
+.done-head .title { margin: 0; }
+.td-word { flex-shrink: 0; font-weight: 700; }
+.td-n { font-weight: 400; color: var(--ink-2); }
+/* Property page, the mock-up's look (2026-10-29): Getting in is one framed
+   yellow-topped panel, codes are full-width rows with Copy on the right, the
+   tabs are one segmented control. */
+.getin { border: 2px solid var(--code); border-radius: 14px; background: var(--card); padding: 0 12px 12px; overflow: hidden; }
+.getin > .sec-head { margin: 0 -12px; padding: 0 12px; background: var(--code); }
+.getin > .sec-head .label.hd { margin: 0; }
+.getin .codes { grid-template-columns: 1fr; }
+.getin .code { position: relative; padding: 8px 88px 10px 14px; }
+.getin .code .k > span:last-child { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,.09); border-radius: 8px; padding: 9px 14px; letter-spacing: .04em; }
+.getin .code .v { font-size: 34px; }
+.getin-txt { border: 0; border-top: 1px solid var(--line); border-radius: 0; padding: 10px 2px 0; background: none; }
+.tabs.hubtabs { background: var(--line); border-radius: 12px; padding: 4px; gap: 4px; }
+.tabs.hubtabs .tab { flex: 1; border: 0; background: none; border-radius: 9px; min-height: 42px; padding: 0 6px; }
+.tabs.hubtabs .tab.on { background: var(--card); color: var(--ink); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.setup-step .ss-head { width: 100%; background: none; border: 0; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.setup-step .ss-head:disabled { cursor: default; }
+.ss-tt { display: flex; flex-direction: column; }
+.ss-s { font-size: 13px; color: var(--mute); }
+.setup-step.done .ss-t { color: var(--ink); }
+.setup-step.now { border: 2px solid var(--teal); background: #f2fbfa; }
+.ss-kick { font: 700 12px var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--teal-text); }
+.setup-bar { border-radius: 0; margin: 0; height: 6px; }
+.tabs.hubtabs { flex-wrap: nowrap; overflow: visible; }
+.tabs.hubtabs .tab { flex: 1 1 0; font-weight: 600; color: var(--ink); min-width: 0; white-space: nowrap; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; }

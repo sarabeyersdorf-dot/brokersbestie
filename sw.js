@@ -1,7 +1,7 @@
 // Offline: the app's own files are cached on install, so it opens with no
 // signal. Data lives in localStorage/IndexedDB, not here. /api is never cached.
 // Bump VERSION whenever an app file changes, or phones keep the old copy.
-const VERSION = 'bb-v71';
+const VERSION = 'bb-v72';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/store.js', './js/ui.js', './js/route.js', './js/parse.js', './js/assist.js', './js/brief.js', './js/faces.js', './js/install.js', './js/dropbox.js', './js/crmlist.js', './js/messages.js', './js/sample.js', './js/config.js', './js/push.js', './js/showings.js', './js/contacts.js', './js/billing.js',

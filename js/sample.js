@@ -51,7 +51,7 @@ export function sampleData({ now = new Date() } = {}) {
     tours: [
       { id: 'sample-tour1', name: 'Smith · home tour', buyer: 'Jo Smith', buyer_phone: '2095550120', date: iso(today), start_minutes: t0 - 30, start_place: 'Office', miles: 38, stops: [
         shown({ id: 'sample-s1', address: '305 Cedar Hollow Ln, Murphys, CA', property_id: P4, occ: 'V', arrive: t0, leg_minutes: 22, leg_miles: 14, confirmed: true, code: '4417', code_label: 'Lockbox', agent: 'Kim Ray', agent_phone: '2095550111', ...(late ? { reaction: 'love' } : {}) }),
-        shown({ id: 'sample-s2', address: '100 Sample Ridge Rd, Murphys, CA', property_id: P1, occ: 'O', arrive: t0 + 45, leg_minutes: 9, leg_miles: 4, confirmed: true, ...(late ? { reaction: 'pricey' } : {}) }),
+        shown({ id: 'sample-s2', address: '100 Sample Ridge Rd, Murphys, CA', property_id: P1, occ: 'O', arrive: t0 + 45, leg_minutes: 9, leg_miles: 4, confirmed: true, agent: 'Kelly Moore', agent_phone: '2095550113', ...(late ? { reaction: 'pricey' } : {}) }),
         shown({ id: 'sample-s3', address: '12 Oak Knoll Ct, Arnold, CA', property_id: P5, occ: 'O', arrive: t0 + 90, leg_minutes: 18, leg_miles: 12, confirmed: false, code: '#0912', agent: 'Lee Park', agent_phone: '2095550112', ...(late ? { reaction: 'again' } : {}) })
       ] },
       { id: 'sample-tour0', name: 'Smith · home tour', buyer: 'Jo Smith', date: plus(-6), start_minutes: 540, miles: 41, finished: true, stops: [

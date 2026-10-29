@@ -847,3 +847,27 @@ modes:
 - The safety check-in on Today is one dark row with the "You OK?" face and an
   **I'm OK** button (`endCheckin(c, 'ok')`). Its words say "Texts …" only
   when the server alert is on, else "Opens a text to …".
+
+## The other mock-ups, matched (2026-10-29)
+
+Sara sent the rest of Claude Design's screens; the phases had the behavior but
+not every look. Now:
+- **Property page:** Getting in is one panel framed in yellow with the yellow
+  band on top; codes are full-width rows with Copy on the right; How to get in
+  and Driving in sit inside it. The three tabs are one segmented control
+  (`.tabs.hubtabs`; `.seg` was already taken by the two-choice buttons).
+- **At the door:** "✕ Exit" top left; "Stop 2 of 3 · 10:00 AM" in yellow and
+  "Screen stays awake" (only where the phone supports it) top right;
+  Occupied and the heads-up tags on one row; "How did they like it? · tap one
+  = marked shown" over the faces; "or swipe left anywhere" under Next stop.
+- **Mark shown (All 8):** "Mark shown · Stop N of M", "How did <buyer> like
+  <street>?", a dashed **Add a voice note · Bestie types it out** that opens
+  the note and starts the mic (the note's mic was never wired in this sheet
+  before), the two ticks with "Written for you. Opens in Messages to send.",
+  and a teal **Done · Next stop ›**. Sample stop 2 now has a listing agent
+  (Kelly Moore) so the demo shows the feedback tick.
+- **Tour done:** the buddy beside "Tour done · <time> / Nice work"; each home
+  with its face word on the right; teal Review; "Gear · nothing left out ✓ Done".
+- **Setup:** "Your first gate code / About 2 minutes · N of 4 done" with the
+  buddy, a thin bar, ONE step open (teal frame, "Step 1 · Sign in"), the rest
+  one line each that opens on a tap (`setupOpen`).

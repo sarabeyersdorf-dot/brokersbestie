@@ -579,26 +579,30 @@ function setupSteps() {
     { key: 'home', done: isInstalled() }
   ];
 }
+let setupOpen = null; // a later step the agent tapped open
 function viewSetup() {
   const steps = setupSteps();
   const doneN = steps.filter((x) => x.done).length;
-  const on = steps.find((x) => !x.done)?.key || null;
+  const first = steps.find((x) => !x.done)?.key || null;
+  const on = setupOpen && !steps.find((x) => x.key === setupOpen)?.done ? setupOpen : first;
   const c = store.cloud;
   const s = store.settings();
   const prof = myProfile() || {};
-  const step = (key, n, title, body) => {
+  // One step open at a time (the mock-up): done steps are one line with a
+  // check, the rest one line you can tap open.
+  const step = (key, n, title, body, sub = '') => {
     const st = steps.find((x) => x.key === key);
-    return html`<section class="card pad sec setup-step ${st.done ? 'done' : ''} ${on === key ? 'now' : ''}">
-      <div class="ss-head"><span class="ss-n">${st.done ? '✓' : n}</span><span class="ss-t">${title}</span></div>
-      ${st.done && on !== key ? '' : body}
+    const open = on === key && !st.done;
+    return html`<section class="card pad sec setup-step ${st.done ? 'done' : ''} ${open ? 'now' : ''}">
+      ${open ? html`<div class="ss-kick">Step ${n} · ${title}</div>` : html`<button class="ss-head" type="button" ${st.done ? raw('disabled') : raw(`data-open="${key}"`)}><span class="ss-n">${st.done ? '✓' : n}</span><span class="ss-tt"><span class="ss-t">${title}</span>${sub ? html`<span class="ss-s">${sub}</span>` : ''}</span></button>`}
+      ${open ? body : ''}
     </section>`;
   };
   return {
     form: true,
-    html: html`${header({ kicker: 'Welcome to Brokers Bestie', title: 'Let’s get you set up', sub: 'About two minutes. Your first gate code is saved by the end.' })}
+    html: html`${header({ extra: html`<div class="done-head"><span class="done-buddy">${raw(winkFace({ size: 56, onDark: true, label: '' }))}</span><span><span class="kicker">Welcome to Brokers Bestie</span><span class="title">Your first gate code</span><span class="sub">About 2 minutes · ${doneN} of 4 done</span></span></div>` })}
+    <div class="progress setup-bar" role="progressbar" aria-valuemin="0" aria-valuemax="4" aria-valuenow="${doneN}"><span style="width:${doneN * 25}%"></span></div>
     <main class="wrap">
-      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="4" aria-valuenow="${doneN}"><span style="width:${doneN * 25}%"></span></div>
-      <div class="small"><b>${doneN} of 4 done</b></div>
 
       ${step('signin', 1, c.user ? `Signed in as ${c.user.email}` : 'Sign in', c.user ? '' : html`
         <label class="field"><span>Your email</span><input id="sx_email" type="email" autocomplete="email" value="${s.pendingEmail || ''}" placeholder="you@brokerage.com"></label>
@@ -607,23 +611,23 @@ function viewSetup() {
         <div id="sx_codebox" ${s.pendingEmail ? '' : raw('hidden')}>
           <label class="field"><span>Code from the email</span><input id="sx_otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10" class="codein"></label>
           <button class="btn teal big block" type="button" id="sx_verify">Sign in</button>
-        </div>`)}
+        </div>`, c.user ? 'Code came from noreply@send.brokersbestie.app' : 'An email code, no password')}
 
       ${step('name', 2, prof.full_name ? `${prof.full_name}${prof.license ? ' · ' + licenseText(prof.license) : ''}` : 'Your name & license number', html`
         <label class="field"><span>Your full name</span><input id="sx_name" value="${prof.full_name || ''}" placeholder="Sara Cooper" autocomplete="name"></label>
         <label class="field"><span>Your license #</span><input id="sx_lic" value="${prof.license || ''}" placeholder="DRE #01234567"></label>
         <button class="btn dark block" type="button" id="sx_saveme">Save</button>
-        <div class="hint">They go on your open house sheet and the texts Bestie writes. Brokerage and logo can wait: Settings → Your profile.</div>`)}
+        <div class="hint">They go on your open house sheet and the texts Bestie writes. Brokerage and logo can wait: Settings → Your profile.</div>`, 'Used on open house sheets and texts')}
 
       ${step('prop', 3, ownProps().length ? `First property saved: ${ownProps()[0].address}` : 'Add your first property', html`
         <label class="field"><span>Address and the gate or lockbox code</span><textarea id="sx_prop" rows="2" placeholder="100 Ridge Rd, Murphys, gate code 2580"></textarea></label>
         <div class="btns"><button class="btn" type="button" data-mic="sx_prop">${icon('mic', 18)}Say it</button><button class="btn dark" type="button" id="sx_addprop">Save it</button></div>
-        <a class="small" href="#/sheet" style="color:var(--teal-text);font-weight:700">Or snap a photo of an MLS sheet ›</a>`)}
+        <a class="small" href="#/sheet" style="color:var(--teal-text);font-weight:700">Or snap a photo of an MLS sheet ›</a>`, 'Say it or type it, with the gate code')}
 
       ${step('home', 4, isInstalled() ? 'Bestie is on your home screen' : 'Put Bestie on your home screen', html`
         <div class="small">Reminders only work from the home screen app.</div>
         <div class="ios-share">On iPhone: tap <span class="share-ic">${icon('share', 18)}</span> Share at the bottom of Safari, then <b>Add to Home Screen</b>.</div>
-        ${installCard()}`)}
+        ${installCard({ slim: true })}`, 'Reminders only work from there')}
 
       <section class="sec">
         <div class="label">Later, when you're ready</div>
@@ -675,6 +679,7 @@ function viewSetup() {
       root.querySelector('#sx_invite')?.addEventListener('click', async () => {
         try { const code = await store.inviteCode(); await copy(code); openSheet(html`<div class="sec"><div class="label">Invite code</div><div class="num" style="font-size:44px;text-align:center">${code}</div><div class="small">Copied. Your teammate signs in, then enters this code under Settings → Join a team. It works for 7 days.</div><button class="btn block" type="button" onclick="this.closest('.sheet-back').remove()">Done</button></div>`); } catch (e) { toast(e.message); }
       });
+      root.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => { setupOpen = b.getAttribute('data-open'); render(); }));
       root.querySelector('#sx_alone')?.addEventListener('click', () => { store.saveSettings({ worksAlone: true }); render(); });
       root.querySelector('#sx_team')?.addEventListener('click', () => { store.saveSettings({ worksAlone: false }); render(); });
       const finish = () => { store.saveSettings({ setupDone: true, welcomed: true }); location.hash = '#/'; render(); };
@@ -1318,7 +1323,7 @@ function viewHub(id) {
         <span class="small" style="color:var(--teal-text);font-weight:700">All dates ›</span>
       </button>
 
-      <div class="tabs">${tab('people', `People · ${people.length}`)}${tab('where', `Gear & signs · ${spots.length}`)}${tab('notes', `Notes & files · ${notes.length}`)}</div>
+      <div class="tabs hubtabs">${tab('people', `People · ${people.length}`)}${tab('where', `Gear & signs · ${spots.length}`)}${tab('notes', `Notes & files · ${notes.length}`)}</div>
 
       ${hubTab === 'where' ? html`<section class="sec">
         <div class="card list">${access.length ? access.map((a) => html`<button class="row" type="button" data-access="${a.id}">
@@ -2581,9 +2586,8 @@ function viewTourDone(id) {
   const gear = pickups().filter((a) => pids.has(a.property_id));
   return {
     html: html`${header({
-      back: '#/tours', kicker: 'Tour done', title: 'Nice work',
-      sub: `${shown.length} home${shown.length === 1 ? '' : 's'}${buyer ? ` with ${buyer}` : ''}`,
-      right: html`<span class="done-buddy">${raw(winkFace({ size: 56, onDark: true, label: '' }))}</span>`
+      back: '#/tours',
+      extra: html`<div class="done-head"><span class="done-buddy">${raw(winkFace({ size: 64, onDark: true, label: '' }))}</span><span><span class="kicker">Tour done${t.finished_at ? ` · ${new Date(t.finished_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : ''}</span><span class="title">Nice work</span><span class="sub">${shown.length} home${shown.length === 1 ? '' : 's'}${buyer ? ` with ${buyer}` : ''}</span></span></div>`
     })}
     <main class="wrap">
       <div class="stat-tiles">
@@ -2595,14 +2599,14 @@ function viewTourDone(id) {
         <div class="label">What they thought</div>
         <div class="card list">${shown.length ? shown.map((x) => html`<button class="row" type="button" data-tdface="${x.id}">
           ${x.reaction ? raw(reactionFace(x.reaction, { size: 40, label: '' })) : html`<span class="td-noface">?</span>`}
-          <span class="grow"><span class="t">${street(x.address)}</span><span class="s">${x.reaction ? reactionLabel(x.reaction) : 'No face yet · tap to add'}${x.reaction_note ? ' · ' + x.reaction_note : ''}</span></span></button>`) : html`<div class="empty">No homes were marked shown.</div>`}</div>
+          <span class="grow"><span class="t">${street(x.address)}</span>${x.reaction_note ? html`<span class="s">${x.reaction_note}</span>` : ''}</span><b class="td-word">${x.reaction ? reactionLabel(x.reaction) : 'Tap to add'}</b></button>`) : html`<div class="empty">No homes were marked shown.</div>`}</div>
       </section>
       <section class="sec">
         <div class="label">Wrap up</div>
         <div class="card list">
-          ${shown.length ? html`<div class="row"><span class="grow"><span class="t">Recap for ${buyer ? buyer.split(' ')[0] : 'your buyer'}</span><span class="s">${t.recap_sent_at ? '✓ Sent' : 'Each home and how they felt'}</span></span><button class="btn ${t.recap_sent_at ? '' : 'dark'}" type="button" id="tdrecap" style="min-height:40px">Review</button></div>` : ''}
-          ${withPhone.length ? html`<div class="row"><span class="grow"><span class="t">Feedback texts</span><span class="s">${sent.length} of ${withPhone.length} sent</span></span>${unsent.length ? html`<button class="btn dark" type="button" id="tdfb" style="min-height:40px">${unsent.length === 1 ? 'Send last' : `Send next · ${unsent.length} left`}</button>` : html`<span class="ok">All sent ✓</span>`}</div>` : ''}
-          <div class="row"><span class="grow"><span class="t">Gear left out</span><span class="s">${gear.length ? gear.map((a) => `${a.label || KINDS[a.kind].label} at ${addr(a.property_id)}`).join(' · ') : ''}</span></span>${gear.length ? html`<a class="btn" href="#/signs" style="min-height:40px">See it</a>` : html`<span class="ok">Nothing left out ✓</span>`}</div>
+          ${shown.length ? html`<div class="row"><span class="grow"><span class="t">Recap for ${buyer || 'your buyer'}</span><span class="s">${t.recap_sent_at ? '✓ Sent' : 'Written for you, with their faces'}</span></span><button class="btn ${t.recap_sent_at ? '' : 'teal'}" type="button" id="tdrecap" style="min-height:40px">Review</button></div>` : ''}
+          ${withPhone.length ? html`<div class="row"><span class="grow"><span class="t">Feedback texts <span class="td-n">· ${sent.length} of ${withPhone.length} sent</span></span></span>${unsent.length ? html`<button class="btn" type="button" id="tdfb" style="min-height:40px">${unsent.length === 1 ? 'Send last' : `Send next · ${unsent.length} left`}</button>` : html`<span class="ok">All sent ✓</span>`}</div>` : ''}
+          <div class="row"><span class="grow"><span class="t">Gear <span class="td-n">· ${gear.length ? `${gear.length} left out` : 'nothing left out'}</span></span>${gear.length ? html`<span class="s">${gear.map((a) => `${a.label || KINDS[a.kind].label} at ${addr(a.property_id)}`).join(' · ')}</span>` : ''}</span>${gear.length ? html`<a class="btn" href="#/signs" style="min-height:40px">See it</a>` : html`<span class="ok">✓ Done</span>`}</div>
         </div>
       </section>
       <button class="btn ghost block" type="button" id="tdundo">Not done yet? Back to the tour</button>
@@ -3030,19 +3034,19 @@ function viewDoor(tourId, i) {
   return {
     html: html`<main class="door">
       <div class="door-top">
-        <a class="door-x" href="#/tour/${tourId}" aria-label="Back to the tour">${icon('back', 22)}Tour</a>
-        <span class="door-n">Stop ${i + 1} of ${stops.length}</span>
+        <a class="door-x" href="#/tour/${tourId}" aria-label="Exit to the tour">✕ Exit</a>
+        <span class="door-n"><b>Stop ${i + 1} of ${stops.length}${s.arrive != null ? ` · ${formatClock(s.arrive)}` : ''}</b>${'wakeLock' in navigator ? html`<span>Screen stays awake</span>` : ''}</span>
       </div>
       <div class="door-addr">${String(s.address || '').split(',')[0]}</div>
-      ${s.occ ? html`<div class="door-occ">${occBadge(s.occ, { big: true, extra: s.occ === 'O' ? 'knock first' : '' })}</div>` : ''}
-      ${heads.length ? html`<div class="door-heads">${heads.map((h) => html`<span class="door-head">${h}</span>`)}</div>` : ''}
-      <div class="door-meta">${s.arrive != null ? html`<b>${formatClock(s.arrive)}</b> · ` : ''}${s.confirmed ? html`<span class="ok-on-dark">✓ Confirmed</span>` : 'Not confirmed yet'}</div>
+      ${s.occ || heads.length ? html`<div class="door-heads">${s.occ ? occBadge(s.occ, { extra: s.occ === 'O' ? 'knock first' : '' }) : ''}${heads.map((h) => html`<span class="door-head">${h}</span>`)}</div>` : ''}
+      <div class="door-meta">${s.confirmed ? html`<span class="ok-on-dark">✓ Confirmed</span>` : 'Not confirmed yet'}</div>
       ${codes.length ? html`<div class="door-codes">${codes.map((c) => html`<button class="door-code" type="button" data-copy="${c.code}"><span class="k">${c.label}</span><span class="v">${c.code}</span>${c.where ? html`<span class="w">${c.where}</span>` : ''}</button>`)}</div>
         <div class="door-copyhint">Tap a code to copy it</div>
         <div class="door-saved">${navigator.onLine ? '' : 'No signal. '}Saved on this phone · updated ${savedAtWords(p || s, p ? store.where('access', 'property_id', p.id) : [])}${pendingWords()}</div>`
         : html`<div class="door-none">${s.code_pending ? 'Code still coming. Text the listing agent.' : 'No code saved for this stop.'}</div>`}
       ${how.length ? html`<div class="door-how">${how.map((x) => html`<p>${x}</p>`)}</div>` : ''}
       <div class="door-act">
+        <div class="door-ask"><b>How did they like it?</b><span>tap one = marked shown</span></div>
         <div class="door-faces" role="group" aria-label="How did they like it?">
           ${DOOR_FACES.map((k) => html`<button class="door-face ${s.reaction === k ? 'on' : ''}" type="button" data-quick="${k}" aria-pressed="${String(s.reaction === k)}">${raw(reactionFace(k, { size: 40, label: '' }))}<span>${reactionLabel(k)}</span></button>`)}
           <button class="door-face all ${s.reaction && !DOOR_FACES.includes(s.reaction) ? 'on' : ''}" type="button" id="dall">${s.reaction && !DOOR_FACES.includes(s.reaction) ? raw(reactionFace(s.reaction, { size: 40, label: '' })) : html`<span class="n">8</span>`}<span>${s.reaction && !DOOR_FACES.includes(s.reaction) ? reactionLabel(s.reaction) : 'All 8'}</span></button>
@@ -3053,7 +3057,7 @@ function viewDoor(tourId, i) {
           ${s.agent_phone ? html`<a class="door-btn2" href="tel:${digits(s.agent_phone)}">${icon('phone', 20)}Call agent</a>` : html`<button class="door-btn2" type="button" disabled>No agent phone</button>`}
         </div>
         ${next ? html`<a class="door-next" href="#/door/${tourId}/${i + 1}"><span class="l">Next stop${next.arrive != null ? ` · ${formatClock(next.arrive)}` : ''}</span><span class="a">${nextStopWords(next)} ›</span></a>
-          <a class="door-drive" href="${dirLink(next)}" target="_blank" rel="noopener">Directions to the next stop</a>`
+          <div class="door-drive"><a href="${dirLink(next)}" target="_blank" rel="noopener">Directions to the next stop</a> · or swipe left anywhere</div>`
           : html`<a class="door-next" href="#/tour/${tourId}"><span class="l">Last stop</span><span class="a">Finish the tour ›</span></a>`}
       </div>
     </main>`,
@@ -3119,14 +3123,18 @@ function allFacesSheet(tourId, i) {
   const buyer = buyerOf(tour);
   let pick = s.reaction || null;
   openSheet(html`<div class="sec">
-    <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">How did they like it?</div>
-    <div class="small">${s.address}</div>
-    <div class="react-grid" role="group" aria-label="Their reaction">${REACTIONS.map(([k, label]) => html`<button class="react" type="button" data-k="${k}" aria-pressed="${String(pick === k)}">${raw(reactionFace(k, { size: 48, label: '' }))}<span>${label}</span></button>`)}</div>
-    ${fieldHtml({ name: 'rnote', label: 'Note (optional, private)', type: 'textarea', placeholder: 'Loved the yard, kitchen too small', mic: true }, s.reaction_note)}
-    ${s.agent_phone ? html`<label class="switch"><input type="checkbox" id="fbtext" ${s.feedback_sent_at ? '' : raw('checked')}>Text feedback to ${s.agent || 'the listing agent'}</label>` : ''}
-    ${buyer ? html`<label class="switch"><input type="checkbox" id="fbbuyer" ${s.hide_from_buyer ? '' : raw('checked')}>Add to ${buyer.split(' ')[0]}'s buyer page</label>` : ''}
-    <button class="btn dark big block" type="button" id="fdone" ${pick ? '' : raw('disabled')}>${pick ? `Done · ${next ? 'next stop' : 'finish the tour'}` : 'Pick a face'}</button>
+    <div class="kicker" style="color:var(--teal-text)">Mark shown · Stop ${i + 1} of ${tour.stops.length}</div>
+    <div class="title mark-title">How did ${buyer || 'they'} like ${street(s.address)}?</div>
+    <div class="react-grid" role="group" aria-label="Their reaction">${REACTIONS.map(([k, label]) => html`<button class="react" type="button" data-k="${k}" aria-pressed="${String(pick === k)}">${raw(reactionFace(k, { size: 40, label: '' }))}<span>${label}</span></button>`)}</div>
+    <button class="voice-note" type="button" id="fvoice" ${s.reaction_note ? raw('hidden') : ''}>${icon('mic', 18)}<b>Add a voice note</b><span>· Bestie types it out</span></button>
+    <div id="fnote" ${s.reaction_note ? '' : raw('hidden')}>${fieldHtml({ name: 'rnote', label: 'Note (private)', type: 'textarea', placeholder: 'Loved the yard, kitchen too small', mic: true }, s.reaction_note)}</div>
+    <div class="mark-boxes">
+      ${s.agent_phone ? html`<label class="mark-box"><input type="checkbox" id="fbtext" ${s.feedback_sent_at ? '' : raw('checked')}><span><b>Text feedback to ${s.agent || 'the listing agent'}</b> (listing agent)<small>Written for you. Opens in Messages to send.</small></span></label>` : ''}
+      ${buyer ? html`<label class="mark-box"><input type="checkbox" id="fbbuyer" ${s.hide_from_buyer ? '' : raw('checked')}><span><b>Add to ${buyer}'s buyer page</b></span></label>` : ''}
+    </div>
+    <button class="btn teal big block mark-done" type="button" id="fdone" ${pick ? '' : raw('disabled')}>${pick ? `Done · ${next ? 'Next stop' : 'Finish the tour'} ›` : 'Pick a face'}</button>
   </div>`, (sh) => {
+    wireMics(sh);
     const btn = sh.querySelector('#fdone');
     sh.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => {
       pick = b.getAttribute('data-k');
@@ -3134,8 +3142,13 @@ function allFacesSheet(tourId, i) {
       void b.offsetWidth;
       b.classList.add('bb-on');
       btn.disabled = false;
-      btn.textContent = `Done · ${next ? 'next stop' : 'finish the tour'}`;
+      btn.textContent = `Done · ${next ? 'Next stop' : 'Finish the tour'} ›`;
     }));
+    sh.querySelector('#fvoice')?.addEventListener('click', (e) => {
+      e.currentTarget.hidden = true;
+      sh.querySelector('#fnote').hidden = false;
+      sh.querySelector('[data-mic="rnote"]')?.click();
+    });
     btn.addEventListener('click', () => {
       if (!pick) return;
       const note = sh.querySelector('[name=rnote]').value.trim();

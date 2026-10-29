@@ -181,7 +181,7 @@ test('Today picks its screen by mode, and "Show everything" keeps the full page'
 test('tour done: the last stop opens the wrap-up, and the buddy keeps to its moments', async () => {
   const fs = await import('node:fs');
   const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
-  for (const k of ['Nice work', 'homes shown', 'miles saved to mileage', 'What they thought', 'Wrap up', 'Send last', 'Nothing left out ✓', 'Not done yet?']) assert.ok(app.includes(k), k);
+  for (const k of ['Nice work', 'homes shown', 'miles saved to mileage', 'What they thought', 'Wrap up', 'Send last', 'nothing left out', 'Not done yet?']) assert.ok(app.includes(k), k);
   assert.match(app, /setTimeout\(\(\) => maybeTourDone\(tourId\), 900\)/); // quick face on the last stop
   assert.match(app, /else if \(!maybeTourDone\(tourId\)\)/); // All 8 on the last stop
   // Never on the morning greeting or a "not found" result.

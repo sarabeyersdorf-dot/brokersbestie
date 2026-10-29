@@ -124,7 +124,7 @@ test('the billing screen is its own route, apart from the tour planner', () => {
 test('occupied / vacant shows on every tour surface, with no color of its own', () => {
   const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
   const css = fs.readFileSync(new URL('../css/app.css', import.meta.url), 'utf8');
-  assert.match(app, /occBadge\(s\.occ, \{ big: true, extra: s\.occ === 'O' \? 'knock first'/); // at the door
+  assert.match(app, /occBadge\(s\.occ, \{ extra: s\.occ === 'O' \? 'knock first'/); // at the door
   assert.match(app, /nextStopWords\(next\)/); // next stop button
   assert.match(app, /tour-stop[\s\S]{0,200}occBadge\(x\.occ\)/); // Today's tour list
   const occCss = css.slice(css.indexOf('Occupied / vacant (2026-10-28)')); assert.doesNotMatch(occCss.slice(0, occCss.indexOf('\n\n')), /--occ-o|--occ-v|--alert/);
@@ -136,9 +136,9 @@ test('at the door: four quick faces + All 8, late and call, next stop; buttons 5
   assert.match(app, /const DOOR_FACES = \['love', 'maybe', 'nope', 'again'\]/);
   assert.match(app, /Tap a code to copy it/);
   assert.match(app, /id="dlate"[\s\S]{0,200}Call agent/);
-  assert.match(app, /Done · \$\{next \? 'next stop'/);
+  assert.match(app, /Done · \$\{next \? 'Next stop'/);
   assert.match(app, /Text feedback to/);
-  assert.match(app, /Add to \$\{buyer\.split\(' '\)\[0\]\}'s buyer page/);
+  assert.match(app, /Add to \$\{buyer\}'s buyer page/);
   for (const sel of ['.door-btn2', '.door-face', '.door-next']) {
     const m = css.match(new RegExp(sel.replace('.', '\\.') + ' \\{[^}]*min-height: (\\d+)px'));
     assert.ok(m && Number(m[1]) >= 56, sel);
