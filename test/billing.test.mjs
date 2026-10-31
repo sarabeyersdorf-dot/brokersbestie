@@ -39,9 +39,8 @@ test('the SQL rule names the same paying statuses as the app', () => {
   assert.doesNotMatch(sql, /'checkins'/);
 });
 
-test('founding price is offered through Dec 31 2026 Pacific, then gone', () => {
-  assert.ok(plansOffered(new Date('2027-01-01T07:59:00Z')).some((p) => p.id === 'founding')); // 11:59 pm Dec 31 PT
-  assert.ok(!plansOffered(new Date('2027-01-01T08:01:00Z')).some((p) => p.id === 'founding'));
+test('no founding rate (Sara, 2026-10-31): yearly $99 and monthly $12 only', () => {
+  assert.deepEqual(plansOffered().map((p) => p.id), ['annual', 'monthly']);
   assert.deepEqual(PLANS.map((p) => p.lookup), ['bestie_founding_annual', 'bestie_standard_annual', 'bestie_monthly']);
 });
 
@@ -156,17 +155,34 @@ test('property page: status chip, four buttons, one Getting in, Next up, three t
   for (const k of ['Edit details', 'Snap MLS sheet', 'Quick add', 'Open house sign-in']) assert.match(more, new RegExp(k));
 });
 
-test('plan screen: monthly costs, founding first, one Choose button, trial-end placeholder', async () => {
+test('plan screen: monthly costs, yearly first, one Choose button, trial-end sentence', async () => {
   const b = await import('../js/billing.js');
   const byId = Object.fromEntries(b.PLANS.map((p) => [p.id, p]));
-  assert.equal(byId.founding.monthly, '$5.75'); assert.equal(byId.founding.badge, 'Until Dec 31');
   assert.equal(byId.annual.monthly, '$8.25');
-  assert.equal(b.defaultPlan(b.plansOffered(new Date('2026-11-01T12:00:00Z'))).id, 'founding');
-  assert.equal(b.defaultPlan(b.plansOffered(new Date('2027-02-01T12:00:00Z'))).id, 'annual');
+  assert.equal(b.defaultPlan(b.plansOffered()).id, 'annual');
   assert.equal(b.TRIAL_END_DECIDED, true); // Sara chose the sentence 2026-10-31
   assert.match(b.TRIAL_END_TEXT, /still see everything/);
   const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
   const view = app.slice(app.indexOf('function viewBilling()'), app.indexOf('function viewBilling()') + 6000);
   for (const k of ['No card on file. Nothing is charged unless you pick a plan.', "'s'} left</b>", 'Works out to', 'Choose ${pick ? pick.label', 'anyone on the team can choose it here', 'SUPPORT_EMAIL']) assert.ok(view.includes(k), k);
   assert.doesNotMatch(view, /countdown|setInterval/);
+});
+
+test('a cancel scheduled in the Customer Portal (cancel_at) reads as ending', () => {
+  const r = billingFromSubscription({ ...SUB, cancel_at_period_end: false, cancel_at: 1794682899 });
+  assert.equal(r.cancel_at_period_end, true);
+  assert.equal(r.current_period_end, new Date(1794682899 * 1000).toISOString());
+  assert.equal(billingFromSubscription(SUB).cancel_at_period_end, false);
+});
+
+test('Checkout always takes a card, even during the trial', () => {
+  const src = fs.readFileSync(new URL('../api/billing.js', import.meta.url), 'utf8');
+  assert.match(src, /payment_method_collection: 'always'/);
+  assert.doesNotMatch(src, /if_required/);
+});
+
+test('the plan page repaints when the sign-in arrives (back from Stripe)', () => {
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  assert.match(app, /repaint: true/);
+  assert.match(app, /current\.form && !current\.repaint/);
 });

@@ -995,3 +995,26 @@ paying users", then "do the fixes".
 - Still Sara's (Cowork prompt given): Stripe live mode + prices, webhook
   endpoints (none existed, even in the sandbox), Vercel keys, a test
   purchase, then `billing_enforced` = 'true'; lawyer review of terms/privacy.
+
+## The sandbox test purchase, and what it changed (2026-10-31)
+
+Cowork set up the Stripe sandbox ("Brokers Bestie sandbox", acct_1UVbZC8R2LiDEdT0;
+NOT the empty "Test mode" account acct_1UVbZ65X5XVV9GwC): webhook
+we_1UWhKZ8R2LiDEdT0XDzEJq4W with the 7 events, Customer Portal (card, cancel at
+period end, switch $99/yr <-> $12/mo). Sara put the sandbox keys in Vercel and
+bought Monthly as sarasellscalifornia+bbtest@gmail.com: every webhook answered
+200 and the `billing` row read trialing / bestie_monthly. Three fixes:
+- **No founding rate** (Sara: "no founding rate, $99"). The portal allows one
+  yearly price per product anyway. `plansOffered()` = PLANS not `retired`;
+  the $69 row stays only so a subscription on it would still read.
+- **Checkout always takes a card** (`payment_method_collection: 'always'`).
+  With `if_required` a plan was "picked" with no card and would quietly cancel
+  at trial end. The trial end date still carries over, so nothing is charged
+  early.
+- **A portal cancel arrives as `cancel_at`** (API 2026-09-30) with
+  `cancel_at_period_end` false. `billingFromSubscription` reads both and uses
+  `cancel_at` as the end date, so Your plan says "ending <date>".
+- **Back from Stripe the plan page looked signed out.** viewBilling is
+  `form: true` (to hide the mic), and the store's change listener never
+  repaints a form, so the sign-in arriving a moment after the page drew never
+  showed. `repaint: true` on a view = nothing to type, repaint freely.
