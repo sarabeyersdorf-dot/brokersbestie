@@ -58,3 +58,12 @@ test('joining a team moves every table, and keeps merged files reachable (db/028
   const acct = readFileSync(new URL('../api/account.js', import.meta.url), 'utf8');
   assert.match(acct, /merged_into=eq\./, 'deleting the team also removes merged teams and their files');
 });
+
+test('one team per new person (db/029), and delete clears any duplicate team', async () => {
+  const { readFileSync } = await import('node:fs');
+  const sql = readFileSync(new URL('../db/029_one_team_per_new_user.sql', import.meta.url), 'utf8');
+  assert.match(sql, /pg_advisory_xact_lock/);
+  assert.match(sql, /if t is not null then return t/);
+  const acct = readFileSync(new URL('../api/account.js', import.meta.url), 'utf8');
+  assert.match(acct, /team_members\?user_id=eq\.\$\{uid\}&select=team_id/);
+});

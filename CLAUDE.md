@@ -1018,3 +1018,12 @@ bought Monthly as sarasellscalifornia+bbtest@gmail.com: every webhook answered
   `form: true` (to hide the mic), and the store's change listener never
   repaints a form, so the sign-in arriving a moment after the page drew never
   showed. `repaint: true` on a view = nothing to type, repaint freely.
+
+## One team per person (2026-10-31, db/029, applied)
+
+The second sandbox test account left an empty, memberless team after Delete
+my account: on first sign-in the phone asks for its team from two places at
+once (startCloud and the sign-in event both run syncNow), and each called
+`bb_create_team`. It now takes a per-person advisory lock and returns the
+team the person already has. `api/account.js` also deletes any other team the
+person is the only member of (with its files). The leftover was removed.
