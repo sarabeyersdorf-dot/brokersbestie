@@ -908,3 +908,17 @@ not every look. Now:
   Loved it" on each stop with **Use it** (sets the stop's face). Verified
   against the live function: save, pickup refused, bad link 404, no code in
   the reply.
+
+## Legacy feed key: kept, not remade (2026-10-31)
+
+Sara disconnected the Legacy feed to test Follow Up Boss, then could not
+reconnect: "The CRM refused the key". Three new keys later, the key Bestie
+held (Make a new key) and the one the live Legacy site used still differed.
+Legacy now also accepts a key whose SHA-256 is in its `integration_keys`
+table (Legacy db/155), so Bestie's current key works with no Vercel edit.
+Once a feed link is connected, Settings shows **Replace the key…** with a
+hint and a confirm instead of a plain "Make a new key": one tap used to cut
+the sync off. A replaced key needs its fingerprint added on the Legacy side
+(`encode(sha256(convert_to(feed_key,'UTF8')),'hex')` from `crm_links`, never
+the key itself). Legacy's feed now answers a refusal with a `reason`
+(unset / missing / wrong) and lengths; `runSync` still shows only "refused".

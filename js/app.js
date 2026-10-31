@@ -3808,6 +3808,7 @@ function viewSettings() {
           <label class="field"><span>Feed link (from your CRM)</span><input id="crmurl" type="url" autocomplete="off" placeholder="https://yourcrm.com/api/crm/bestie-feed"></label>
           <label class="field"><span>Feed key</span><input id="crmkey" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"></label>
           <button class="btn block" type="button" id="crmmake">Make a new key (copies it)</button>
+          <div class="hint" id="crmmakehint" hidden>Connected. Keep this key: a new one stops the sync until your CRM has the same new key.</div>
         </div>
         <fieldset class="field" id="crmcontacts" style="border:0;padding:0;margin:0"><span>Which contacts should come in?</span>
           <label class="switch"><input type="radio" name="crmc" value="deals">Just the people on my deals</label>
@@ -3938,6 +3939,7 @@ function viewSettings() {
       if (store.cloud.user) {
         const st = root.querySelector('#crmstate');
         const kind = root.querySelector('#crmkind');
+        let feedConnected = false;
         const pickKind = () => {
           const c = CRM_CHOICES.find((x) => x.id === kind.value) || {};
           const keyed = !c.soon && c.id !== 'feed';
@@ -3967,6 +3969,11 @@ function viewSettings() {
           connected = r.connected;
           if (r.connected && !known && !root.querySelector('#crmurl').value) root.querySelector('#crmurl').value = r.feed_url;
           root.querySelector('#crmoff').hidden = !r.connected;
+          // Once a feed link is connected, a new key cuts it off until the
+          // CRM has the same key (Sara, 2026-10-31: one tap broke the sync).
+          feedConnected = r.connected && !known;
+          root.querySelector('#crmmake').textContent = feedConnected ? 'Replace the key…' : 'Make a new key (copies it)';
+          root.querySelector('#crmmakehint').hidden = !feedConnected;
         };
         api('/api/crm-sync').then(show).catch((e) => { st.textContent = e.message; });
         const call = async (body, btn) => {
@@ -3981,6 +3988,7 @@ function viewSettings() {
           btn.disabled = false;
         };
         root.querySelector('#crmmake').addEventListener('click', async () => {
+          if (feedConnected && !confirm('Your CRM is connected with the key you have now. A new key stops the sync until your CRM has the same new key. Make a new key anyway?')) return;
           const bytes = crypto.getRandomValues(new Uint8Array(24));
           const key = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
           root.querySelector('#crmkey').value = key;
