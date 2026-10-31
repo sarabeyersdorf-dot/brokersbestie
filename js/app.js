@@ -26,8 +26,11 @@ const $fab = document.getElementById('fab');
 // ---------- vocabulary ----------
 
 const STATUS = {
-  listing: 'My listing', prep: 'Coming soon', escrow: 'In escrow', tour: "Other agent's", closed: 'Closed', cancelled: 'Canceled'
+  listing: 'My listing', prep: 'Coming soon', escrow: 'In escrow', tour: "Other agent's", shown: 'Done showing', closed: 'Closed', cancelled: 'Canceled'
 };
+// Not on the active list: a finished deal, or another agent's home you are
+// done showing (James, 2026-10-31).
+const DONE_STATUSES = ['shown', 'closed', 'cancelled'];
 const LIVE = ['listing', 'prep', 'escrow', 'tour'];
 
 // What can be added in one tap. `table` says where it is filed.
@@ -391,7 +394,7 @@ let searchText = '';
 let here = null;
 
 function pickups() {
-  const dead = new Set(props().filter((p) => p.status === 'closed' || p.status === 'cancelled').map((p) => p.id));
+  const dead = new Set(props().filter((p) => DONE_STATUSES.includes(p.status)).map((p) => p.id));
   return store.all('access').filter((a) => KINDS[a.kind]?.tracked && a.status === 'out' && dead.has(a.property_id));
 }
 
@@ -1189,7 +1192,7 @@ function addTaskSheet(pid) {
 
 let propFilter = 'live';
 function viewProps() {
-  const groups = { live: (p) => LIVE.includes(p.status), escrow: (p) => p.status === 'escrow', tour: (p) => p.status === 'tour', done: (p) => p.status === 'closed' || p.status === 'cancelled' };
+  const groups = { live: (p) => LIVE.includes(p.status), escrow: (p) => p.status === 'escrow', tour: (p) => p.status === 'tour', done: (p) => DONE_STATUSES.includes(p.status) };
   const sortBy = (() => { try { return localStorage.getItem('bb:propsort') || 'az'; } catch { return 'az'; } })();
   const list = sortProps(props().filter(groups[propFilter]).filter((p) => isWhose(p.owner, viewFilter.who)), sortBy);
   const tab = (k, l) => html`<button class="tab ${propFilter === k ? 'on' : ''}" type="button" data-f="${k}">${l}</button>`;
@@ -1197,7 +1200,7 @@ function viewProps() {
     html: html`${header({ kicker: 'Properties', title: `${props().filter(groups.live).length} active`, right: html`<a class="btn teal" href="#/p/new" style="min-height:40px">+ Add</a>` })}
     <main class="wrap">
       <a class="card row" href="#/sheet"><span class="tile" style="border:0;padding:0"><span class="ic t">${icon('sheet', 22)}</span></span><span class="grow"><span class="t">Snap an MLS sheet</span><span class="s">Bestie reads it and fills in the property card</span></span>${icon('chev', 18)}</a>
-      <div class="tabs">${tab('live', 'Active')}${tab('escrow', 'In escrow')}${tab('tour', "Other agent's")}${tab('done', 'Closed')}</div>
+      <div class="tabs">${tab('live', 'Active')}${tab('escrow', 'In escrow')}${tab('tour', "Other agent's")}${tab('done', 'Done')}</div>
       ${whoChips()}
       <label class="sortby">Sort<select id="propsort">${PROP_SORTS.map(([k, l]) => html`<option value="${k}" ${k === sortBy ? raw('selected') : ''}>${l}</option>`)}</select></label>
       <div class="card list">${list.length ? list.map(propRow) : buddy('Nothing here yet. Add a listing or a home you are showing.')}</div>
@@ -1410,7 +1413,9 @@ function viewHub(id) {
     </main>
     <div class="pbar">
       ${sellerUpd ? html`<button class="btn dark" type="button" id="sellerupd">${icon('text', 18)}Send seller update</button>` : ''}
-      <button class="btn ${sellerUpd ? '' : 'block'}" type="button" id="hubmore">More</button>
+      ${!sellerUpd && canFinish(p) ? html`<button class="btn dark" type="button" id="donehome">Done with this home</button>` : ''}
+      ${!sellerUpd && p.status === 'shown' && p.source !== 'crm' ? html`<button class="btn" type="button" id="showagain">Back to active</button>` : ''}
+      <button class="btn ${sellerUpd || canFinish(p) || (p.status === 'shown' && p.source !== 'crm') ? '' : 'block'}" type="button" id="hubmore">More</button>
     </div>`,
     mount(root) {
       wireMics(root);
@@ -1418,6 +1423,11 @@ function viewHub(id) {
       root.querySelector('#share').addEventListener('click', () => shareSheet(p));
       root.querySelector('#nextup').addEventListener('click', () => datesSheet(id));
       root.querySelector('#statchip')?.addEventListener('click', () => statusSheet(p));
+      root.querySelector('#donehome')?.addEventListener('click', () => doneHomeSheet(id));
+      root.querySelector('#showagain')?.addEventListener('click', () => {
+        store.save('properties', { id, status: 'tour' });
+        undoToast("Back on your active list", () => store.save('properties', { id, status: 'shown' }));
+      });
       root.querySelector('#headsup').addEventListener('click', () => headsUpSheet(id));
       root.querySelector('#gatepin').addEventListener('click', () => pinGate(id));
       root.querySelector('#gateoff')?.addEventListener('click', () => {
@@ -1515,10 +1525,58 @@ function headsUpSheet(id) {
 }
 
 // Tap the status chip in the header: pick one, saved with Undo.
+// "Done with this home" (James, 2026-10-31: "Rough and Ready was a showing to
+// Brian Duarte. He is not interested in that property. What do I do now with
+// this property on the app?"). Another agent's home you showed: say who saw it
+// and how they felt (both optional), and it moves to Done showing. The code
+// and notes stay; the buyer's reaction goes on their buyer page.
+const canFinish = (p) => p && p.status === 'tour' && p.source !== 'crm';
+function lastShowingOf(pid) {
+  let best = null;
+  for (const t of store.all('tours')) {
+    for (const s of t.stops || []) {
+      if (s.property_id !== pid || s.pickup) continue;
+      if (!best || String(t.date) >= String(best.tour.date)) best = { tour: t, stop: s };
+    }
+  }
+  return best;
+}
+function doneHomeSheet(id) {
+  const p = prop(id);
+  if (!p) return;
+  const last = lastShowingOf(id);
+  const buyer0 = p.shown_buyer || (last ? buyerOf(last.tour) : '') || '';
+  let pick = p.shown_reaction || (last && last.stop.reaction) || null;
+  openSheet(html`<div class="sec">
+    <div class="kicker" style="color:var(--teal-text)">Done with this home</div>
+    <div class="title mark-title">${street(p.address)}</div>
+    <div class="small">It leaves your active list. The code and notes stay here, under Properties · Done.</div>
+    <label class="field"><span>Who did you show it to?</span><input id="dbuyer" value="${buyer0}" placeholder="Buyer's name" autocomplete="off"></label>
+    <div class="small" style="margin-top:6px">How did they feel about it?</div>
+    <div class="react-grid" role="group" aria-label="Their reaction">${REACTIONS.map(([k, label]) => html`<button class="react" type="button" data-k="${k}" aria-pressed="${String(pick === k)}">${raw(reactionFace(k, { size: 40, label: '' }))}<span>${label}</span></button>`)}</div>
+    <label class="field"><span>Note (just for you)</span><textarea id="dnote" placeholder="Too far from town">${p.shown_note || ''}</textarea></label>
+    <button class="btn dark big block" type="button" id="ddone">Done · take it off active</button>
+  </div>`, (sh) => {
+    sh.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => {
+      const k = b.getAttribute('data-k');
+      pick = pick === k ? null : k;
+      sh.querySelectorAll('[data-k]').forEach((x) => x.setAttribute('aria-pressed', String(x.getAttribute('data-k') === pick)));
+    }));
+    sh.querySelector('#ddone').addEventListener('click', () => {
+      const was = { status: p.status, shown_buyer: p.shown_buyer || null, shown_reaction: p.shown_reaction || null, shown_note: p.shown_note || null, shown_at: p.shown_at || null };
+      const buyer = sh.querySelector('#dbuyer').value.trim();
+      const note = sh.querySelector('#dnote').value.trim();
+      store.save('properties', { id, status: 'shown', shown_buyer: buyer || null, shown_reaction: pick, shown_note: note || null, shown_at: new Date().toISOString() });
+      closeSheet();
+      undoToast('Done showing · off your active list', () => store.save('properties', { id, ...was }));
+    });
+  });
+}
+
 function statusSheet(p) {
   openSheet(html`<div class="sec">
     <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Status</div>
-    <div class="stat-opts">${['prep', 'listing', 'escrow', 'tour', 'closed', 'cancelled'].map((k) => html`<button type="button" class="stat-opt st-${k} ${p.status === k ? 'on' : ''}" data-status="${k}">${STATUS[k]}</button>`)}</div>
+    <div class="stat-opts">${['prep', 'listing', 'escrow', 'tour', 'shown', 'closed', 'cancelled'].map((k) => html`<button type="button" class="stat-opt st-${k} ${p.status === k ? 'on' : ''}" data-status="${k}">${STATUS[k]}</button>`)}</div>
   </div>`, (sh) => sh.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', () => {
     const next = b.getAttribute('data-status');
     closeSheet();
@@ -2786,35 +2844,35 @@ function viewTourDone(id) {
 // ======================================================================
 
 function viewBuyers() {
-  const list = buyers(store.all('tours'));
+  const list = buyers(store.all('tours'), store.all('properties'));
   return {
     html: html`${header({ back: '#/tours', kicker: 'Tours', title: 'Buyers' })}
     <main class="wrap">
       <div class="card list">${list.length ? list.map((b) => {
         const faces = b.homes.filter((h) => h.reaction).slice(0, 5);
-        return html`<a class="row" href="#/buyer/${encodeURIComponent(b.key)}"><span class="grow"><span class="t">${b.name}</span><span class="s">${b.homes.length} home${b.homes.length === 1 ? '' : 's'} seen · ${b.tours.length} tour${b.tours.length === 1 ? '' : 's'} · last ${niceDate(b.last)}</span></span><span class="face-row">${faces.map((h) => raw(reactionFace(h.reaction, { size: 22, label: '' })))}</span>${icon('chev', 18)}</a>`;
+        return html`<a class="row" href="#/buyer/${encodeURIComponent(b.key)}"><span class="grow"><span class="t">${b.name}</span><span class="s">${b.homes.length} home${b.homes.length === 1 ? '' : 's'} seen${b.tours.length ? ` · ${b.tours.length} tour${b.tours.length === 1 ? '' : 's'}` : ''} · last ${niceDate(b.last)}</span></span><span class="face-row">${faces.map((h) => raw(reactionFace(h.reaction, { size: 22, label: '' })))}</span>${icon('chev', 18)}</a>`;
       }) : buddy('No buyers yet. When you plan a tour, put the buyer\'s name in “Who is it for?”.')}</div>
     </main>`
   };
 }
 
 function viewBuyer(key) {
-  const b = buyers(store.all('tours')).find((x) => x.key === decodeURIComponent(key));
+  const b = buyers(store.all('tours'), store.all('properties')).find((x) => x.key === decodeURIComponent(key));
   if (!b) return notFound();
   const counts = REACTIONS.map(([k, label]) => [k, label, b.homes.filter((h) => h.reaction === k).length]).filter((r) => r[2]);
   return {
-    html: html`${header({ back: '#/buyers', kicker: 'Buyer', title: b.name, sub: `${b.homes.length} home${b.homes.length === 1 ? '' : 's'} seen on ${b.tours.length} tour${b.tours.length === 1 ? '' : 's'}` })}
+    html: html`${header({ back: '#/buyers', kicker: 'Buyer', title: b.name, sub: `${b.homes.length} home${b.homes.length === 1 ? '' : 's'} seen${b.tours.length ? ` on ${b.tours.length} tour${b.tours.length === 1 ? '' : 's'}` : ''}` })}
     <main class="wrap">
       ${counts.length ? html`<div class="face-tally">${counts.map(([k, label, n]) => html`<span class="tally">${raw(reactionFace(k, { size: 26, label: '' }))}<span>${label}</span><b class="num">${n}</b></span>`)}</div>` : ''}
       <section class="sec"><div class="label accent">Homes they saw</div>
       <div class="card list">${b.homes.length ? b.homes.map((h) => html`<div class="row buyer-home">
-        <button class="face-btn" type="button" data-react="${h.tour_id}|${h.stop_id}" aria-label="${h.reaction ? reactionLabel(h.reaction) + '. Tap to change' : 'Add their reaction'}">${h.reaction ? raw(reactionFace(h.reaction, { size: 40, label: '' })) : html`<span class="face-empty">+</span>`}</button>
+        <button class="face-btn" type="button" ${h.from_property ? raw(`data-propdone="${esc(h.property_id)}"`) : raw(`data-react="${esc(h.tour_id)}|${esc(h.stop_id)}"`)} aria-label="${h.reaction ? reactionLabel(h.reaction) + '. Tap to change' : 'Add their reaction'}">${h.reaction ? raw(reactionFace(h.reaction, { size: 40, label: '' })) : html`<span class="face-empty">+</span>`}</button>
         <span class="grow">${h.property_id ? html`<a class="t" href="#/p/${h.property_id}">${h.address}</a>` : html`<span class="t">${h.address}</span>`}
           <span class="s">${h.reaction ? html`<b>${reactionLabel(h.reaction)}</b> · ` : 'No reaction yet · '}${niceDate(h.date)}</span>
           ${h.note ? html`<span class="s">“${h.note}”</span>` : ''}</span></div>`) : html`<div class="empty">No homes marked shown yet.</div>`}</div></section>
-      ${b.homes.length ? html`<button class="btn dark big block" type="button" id="brecap">${icon('text', 18)}Send ${b.name.split(' ')[0]} every home they've seen</button>` : ''}
-      <section class="sec"><div class="label">Tours</div>
-      <div class="card list">${b.tours.map((t) => html`<a class="row" href="#/tour/${t.id}"><span class="grow"><span class="t">${t.name}</span><span class="s">${niceDate(t.date)} · ${(t.stops || []).length} stops</span></span>${icon('chev', 18)}</a>`)}</div></section>
+      ${b.homes.length && b.tours.length ? html`<button class="btn dark big block" type="button" id="brecap">${icon('text', 18)}Send ${b.name.split(' ')[0]} every home they've seen</button>` : ''}
+      ${b.tours.length ? html`<section class="sec"><div class="label">Tours</div>
+      <div class="card list">${b.tours.map((t) => html`<a class="row" href="#/tour/${t.id}"><span class="grow"><span class="t">${t.name}</span><span class="s">${niceDate(t.date)} · ${(t.stops || []).length} stops</span></span>${icon('chev', 18)}</a>`)}</div></section>` : ''}
     </main>`,
     mount(root) {
       // The recap goes to the newest tour's buyer contact, and is stamped there.
@@ -2824,6 +2882,7 @@ function viewBuyer(key) {
         const stop = (store.get('tours', tid)?.stops || []).find((x) => x.id === sid);
         reactionPicker(stop);
       }));
+      root.querySelectorAll('[data-propdone]').forEach((el) => el.addEventListener('click', () => doneHomeSheet(el.getAttribute('data-propdone'))));
     }
   };
 }

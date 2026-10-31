@@ -196,7 +196,7 @@ export const buyerKey = (name) => String(name || '').trim().toLowerCase().replac
 
 // Every buyer, newest tour first, each with the homes they saw (newest first).
 // A home seen twice shows once, with its latest reaction.
-export function buyers(tours) {
+export function buyers(tours, properties = []) {
   const by = new Map();
   for (const t of tours || []) {
     const name = buyerOf(t);
@@ -215,6 +215,22 @@ export function buyers(tours) {
       const prev = b.homes.get(hk);
       if (!prev || `${seen.date}${seen.at}` >= `${prev.date}${prev.at}`) b.homes.set(hk, seen);
     }
+  }
+  // Another agent's home finished from its own page ("Done with this home",
+  // 2026-10-31): who saw it and how they felt live on the property, so a home
+  // shown without a Bestie tour still reaches that buyer's page. The newer of
+  // this and a tour stop wins, as above.
+  for (const p of properties || []) {
+    const name = p && String(p.shown_buyer || '').trim();
+    if (!name || !p.shown_reaction) continue;
+    const k = buyerKey(name);
+    if (!by.has(k)) by.set(k, { key: k, name, tours: [], homes: new Map(), last: '' });
+    const b = by.get(k);
+    const date = String(p.shown_at || '').slice(0, 10);
+    if (date > b.last) b.last = date;
+    const seen = { address: p.address, property_id: p.id, date, tour_id: null, stop_id: null, reaction: p.shown_reaction, note: p.shown_note || '', at: p.shown_at || '', mls_url: p.mls_url || '', from_property: true };
+    const prev = b.homes.get(p.id);
+    if (!prev || `${seen.date}${seen.at}` >= `${prev.date}${prev.at}`) b.homes.set(p.id, seen);
   }
   return [...by.values()]
     .map((b) => ({ ...b, tours: b.tours.sort((x, y) => String(y.date).localeCompare(String(x.date))), homes: [...b.homes.values()].sort((x, y) => `${y.date}${y.at}`.localeCompare(`${x.date}${x.at}`)) }))
