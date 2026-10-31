@@ -186,3 +186,8 @@ test('the plan page repaints when the sign-in arrives (back from Stripe)', () =>
   assert.match(app, /repaint: true/);
   assert.match(app, /current\.form && !current\.repaint/);
 });
+
+test('a complimentary plan never says "You pay per agent"', () => {
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  assert.match(app, /b\.state === 'comped' \? '' : ' You pay per agent/);
+});
