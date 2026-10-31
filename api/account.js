@@ -51,6 +51,17 @@ export default async function handler(req, res) {
     await db(`checkins?user_id=eq.${uid}`, { method: 'PATCH', body: { user_id: null } });
     await db(`team_invites?created_by=eq.${uid}`, { method: 'PATCH', body: { created_by: null } });
     let files = 0;
+    // Any OTHER team this person is the only member of (a duplicate made on
+    // first sign-in before db/029) goes too, with its files: nobody else can
+    // ever open it.
+    const mine = await db(`team_members?user_id=eq.${uid}&select=team_id`);
+    for (const { team_id: other } of mine || []) {
+      if (other === teamId) continue;
+      const people = await db(`team_members?team_id=eq.${other}&select=user_id`);
+      if ((people || []).length > 1) { await db(`team_members?team_id=eq.${other}&user_id=eq.${uid}`, { method: 'DELETE' }); continue; }
+      files += await removeTeamFiles(other);
+      await db(`teams?id=eq.${other}`, { method: 'DELETE' });
+    }
     if (teamId && !teammates) {
       // Solo teams merged into this one when someone joined (db/028) still
       // hold that person's files under their old folder: remove them too.
