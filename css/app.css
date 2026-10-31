@@ -98,7 +98,7 @@ img { max-width: 100%; display: block; }
 .top .occ.q { color: #c5ccc9; }
 .pill { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 4px 8px; border-radius: 3px; background: var(--teal-on-dark); color: var(--ink); }
 .pill.escrow { background: var(--code); }
-.pill.closed, .pill.cancelled { background: #c5ccc9; }
+.pill.closed, .pill.cancelled, .pill.shown { background: #c5ccc9; }
 .pill.tour { background: #ffffff; }
 .ok { color: var(--done); font-weight: 600; }
 .wait { color: var(--pending); font-weight: 600; }
@@ -276,13 +276,13 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .pill.prep { background: var(--k-prep); color: #fff; }
 .pill.escrow { background: var(--k-deadline); color: #fff; }
 .pill.tour { background: var(--k-appt); color: #fff; }
-.pill.closed, .pill.cancelled { background: #c5ccc9; color: var(--ink); }
+.pill.closed, .pill.cancelled, .pill.shown { background: #c5ccc9; color: var(--ink); }
 .pill.sm { font-size: 10px; padding: 1px 6px; margin-right: 6px; vertical-align: 1px; }
 .row.st-listing { box-shadow: inset 5px 0 0 var(--teal); }
 .row.st-prep { box-shadow: inset 5px 0 0 var(--k-prep); }
 .row.st-escrow { box-shadow: inset 5px 0 0 var(--k-deadline); }
 .row.st-tour { box-shadow: inset 5px 0 0 var(--k-appt); }
-.row.st-closed, .row.st-cancelled { box-shadow: inset 5px 0 0 #c5ccc9; }
+.row.st-closed, .row.st-cancelled, .row.st-shown { box-shadow: inset 5px 0 0 #c5ccc9; }
 
 /* ---------- the lockbox buddy: showing reactions, safety face ---------- */
 .react-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
@@ -418,7 +418,7 @@ details.install-slim[open] > summary .small { visibility: hidden; }
 .chip.st.on.st-prep { background: var(--k-prep); border-color: var(--k-prep); color: #fff; }
 .chip.st.on.st-escrow { background: var(--k-deadline); border-color: var(--k-deadline); color: #fff; }
 .chip.st.on.st-tour { background: var(--k-appt); border-color: var(--k-appt); color: #fff; }
-.chip.st.on.st-closed, .chip.st.on.st-cancelled { background: #c5ccc9; border-color: #c5ccc9; color: var(--ink); }
+.chip.st.on.st-closed, .chip.st.on.st-cancelled, .chip.st.on.st-shown { background: #c5ccc9; border-color: #c5ccc9; color: var(--ink); }
 .chip.st:disabled { opacity: .55; cursor: default; }
 .chip.st.on:disabled { opacity: 1; }
 .toast-undo { margin-left: 10px; border: 0; background: var(--code, #F5C93E); color: #0e1012; font: 800 15px var(--sans); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
@@ -468,12 +468,12 @@ html.hc .nav a { color: #000; }
 .pill.prep { background: var(--s-prep); color: #fff; }
 .pill.escrow { background: var(--s-escrow); color: #fff; }
 .pill.tour { background: var(--s-tour); color: #fff; }
-.pill.closed, .pill.cancelled { background: var(--s-closed); color: var(--ink); }
+.pill.closed, .pill.cancelled, .pill.shown { background: var(--s-closed); color: var(--ink); }
 .row.st-listing { box-shadow: inset 5px 0 0 var(--s-listing); }
 .row.st-prep { box-shadow: inset 5px 0 0 var(--s-prep); }
 .row.st-escrow { box-shadow: inset 5px 0 0 var(--s-escrow); }
 .row.st-tour { box-shadow: inset 5px 0 0 var(--s-tour); }
-.row.st-closed, .row.st-cancelled { box-shadow: inset 5px 0 0 var(--s-closed); }
+.row.st-closed, .row.st-cancelled, .row.st-shown { box-shadow: inset 5px 0 0 var(--s-closed); }
 .chip.st.st-listing.on, .stat-opt.st-listing.on { background: var(--s-listing); border-color: var(--s-listing); color: #fff; }
 .chip.st.st-prep.on, .stat-opt.st-prep.on { background: var(--s-prep); border-color: var(--s-prep); color: #fff; }
 .chip.st.st-escrow.on, .stat-opt.st-escrow.on { background: var(--s-escrow); border-color: var(--s-escrow); color: #fff; }
@@ -586,18 +586,18 @@ html.hc .label.hd[data-hue="code"] { color: #000; }
 .pill.prep { --s: var(--s-prep); }
 .pill.escrow { --s: var(--s-escrow); }
 .pill.tour { --s: var(--s-tour); }
-.pill.closed, .pill.cancelled { --s: var(--s-closed-dot); }
-.pill.listing, .pill.prep, .pill.escrow, .pill.tour, .pill.closed, .pill.cancelled {
+.pill.closed, .pill.cancelled, .pill.shown { --s: var(--s-closed-dot); }
+.pill.listing, .pill.prep, .pill.escrow, .pill.tour, .pill.closed, .pill.cancelled, .pill.shown {
   background: none; color: var(--ink); padding: 0; border-radius: 0; display: inline-flex; align-items: center; gap: 5px;
 }
-.pill.listing::before, .pill.prep::before, .pill.escrow::before, .pill.tour::before, .pill.closed::before, .pill.cancelled::before {
+.pill.listing::before, .pill.prep::before, .pill.escrow::before, .pill.tour::before, .pill.closed::before, .pill.cancelled::before, .pill.shown::before {
   content: ''; width: 9px; height: 9px; border-radius: 50%; background: var(--s); flex-shrink: 0;
 }
 .top .pill { color: #fff; }
 .pill.sm { padding: 0; margin-right: 8px; }
 details.status-pick > summary .pill { padding: 0; font-size: 13px; }
 .stat-opt.st-listing { --s: var(--s-listing); } .stat-opt.st-prep { --s: var(--s-prep); } .stat-opt.st-escrow { --s: var(--s-escrow); }
-.stat-opt.st-tour { --s: var(--s-tour); } .stat-opt.st-closed, .stat-opt.st-cancelled { --s: var(--s-closed-dot); }
+.stat-opt.st-tour { --s: var(--s-tour); } .stat-opt.st-closed, .stat-opt.st-cancelled, .stat-opt.st-shown { --s: var(--s-closed-dot); }
 .stat-opt { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
 .stat-opt::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: var(--s); }
 .stat-opt.on, .chip.st.on, .chip.st.st-listing.on, .chip.st.st-prep.on, .chip.st.st-escrow.on, .chip.st.st-tour.on,

@@ -949,3 +949,21 @@ FUB homes stayed, many duplicating Legacy's under other spellings. Her rules:
   reads In escrow becomes Closed) and **Not yet** (hidden 7 days on this phone,
   `bb:closeask:<id>`). Other deadlines keep the overdue look.
 Guarded by `test/crm-leftovers.test.mjs` and `test/close-ask.test.mjs`.
+
+## Done with this home (2026-10-31)
+
+James: *"Rough and Ready was a showing to Brian Duarte. He is not interested in
+that property. What do I do now with this property on the app?"* An "Other
+agent's" home stayed on the active list forever, and Canceled was the only
+way off it. Sara chose **Done with this home**: on any phone-made `tour`
+home, the property page's bottom bar has that button (`doneHomeSheet`):
+"Who did you show it to?" (prefilled from the latest tour stop there), the 8
+faces and a private note, all optional, then **Done · take it off active**
+(Undo). It sets status **`shown` = "Done showing"** (`DONE_STATUSES` with
+closed/cancelled: grey, off the active list, listed under Properties → Done,
+gear there counts for pick-up) and `shown_buyer` / `shown_reaction` /
+`shown_note` / `shown_at` (db/027, applied). `buyers(tours, properties)` adds
+those homes to the buyer's page even with no Bestie tour (the newer of a tour
+stop and this record wins); such a buyer has no recap button (nothing to
+stamp). **Back to active** sets it to `tour` again. CRM homes never get the
+button (the CRM owns status). bb-v76. Guarded by `test/buyers.test.mjs`.
