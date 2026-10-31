@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { sampleData } from '../js/sample.js';
-import { alertText, e164 } from '../api/_lib/server.js';
+import { alertText, e164 } from '../supabase/functions/reminders/safety.js';
 
 import { readdirSync } from 'node:fs';
 import { actionPlan } from '../js/assist.js';

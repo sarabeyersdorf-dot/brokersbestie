@@ -753,9 +753,9 @@ the install card no longer carries the buddy.
 `viewBilling` (`#/billing`): in a trial with no plan the header reads **Free
 trial** / "No card on file. Nothing is charged unless you pick a plan.", then
 days left as a bar with the end date, then ONE sentence about what happens
-when the trial ends, which is a **clearly marked placeholder**
-(`TRIAL_END_TEXT`, `TRIAL_END_DECIDED = false` in billing.js) because Sara has
-not decided the wording; the app itself goes read-only (`entitlement`). Then
+when the trial ends (`TRIAL_END_TEXT` in billing.js, Sara 2026-10-31: "After
+14 days you can still see everything, but you'll need a plan to add or change
+anything."); the app itself goes read-only (`entitlement`). Then
 the three plans as radio cards, each with a monthly cost (`PLANS[].monthly`:
 founding "Works out to $5.75 a month" + badge "Until Dec 31", yearly $8.25,
 monthly "Billed every month"), founding picked first (`defaultPlan`; yearly
@@ -967,3 +967,31 @@ those homes to the buyer's page even with no Bestie tour (the newer of a tour
 stop and this record wins); such a buyer has no recap button (nothing to
 stamp). **Back to active** sets it to `tour` again. CRM homes never get the
 button (the CRM owns status). bb-v76. Guarded by `test/buyers.test.mjs`.
+
+## Pre-launch audit fixes (2026-10-31)
+
+Sara: "audit brokers bestie to ensure everything works and I can start taking
+paying users", then "do the fixes".
+- **Joining a team brings everything** (db/028, applied). `bb_join_team` used
+  to move only the 11 tables of db/006, so contacts, vendors, profile,
+  visitors, open-house / share / tour links, faces, reminders and the CRM link
+  were stranded in a memberless team. It now moves EVERY public table with a
+  `team_id`, found at run time (except teams, team_members, team_invites,
+  billing; crm_links / cal_feeds move only if the joined team has none).
+  Storage files cannot be moved by SQL, so the old team stays as a shell with
+  `teams.merged_into`; the photos policy reads through `bb_can_files(folder)`
+  (own team or a team merged into yours); writes still need membership.
+  `api/account.js` deletes merged shells and their files with the team.
+  Verified against the live DB in a rolled-back block.
+- **Safety texts are capped** (`reminders` function version 7). Every text
+  goes through `safetyText`: US/Canada numbers only (`e164` refuses overseas
+  and the +1 Caribbean area codes, which bill as international), at most
+  `SMS_DAILY_CAP` (10) per team and `SMS_PER_NUMBER_CAP` (4) per number in
+  24 h, logged in `sms_log` (db/028, RLS on, no policies). Typed words in the
+  text are shortened and links removed (`cleanTyped`). Send help still opens
+  the agent's own Messages too, so a capped server text is never the only
+  alert. The old Vercel sender (`api/checkin.js`, `api/cron/checkins.js`,
+  `sendText`/`alertText` in server.js) is deleted: one sender only.
+- Still Sara's (Cowork prompt given): Stripe live mode + prices, webhook
+  endpoints (none existed, even in the sandbox), Vercel keys, a test
+  purchase, then `billing_enforced` = 'true'; lawyer review of terms/privacy.

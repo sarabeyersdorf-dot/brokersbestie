@@ -23,8 +23,8 @@ export const PLANS = [
 // a clearly marked placeholder. (What the app does today: read-only, see
 // entitlement() and bb_can_write in db/022.) Replace the text and set
 // TRIAL_END_DECIDED to true once she has.
-export const TRIAL_END_DECIDED = false;
-export const TRIAL_END_TEXT = 'What happens when the trial ends: to be decided.';
+export const TRIAL_END_DECIDED = true;
+export const TRIAL_END_TEXT = "After 14 days you can still see everything, but you'll need a plan to add or change anything.";
 
 // The plan picked first on the screen: founding while it is offered.
 export const defaultPlan = (offered) => (offered.find((p) => p.id === 'founding') || offered.find((p) => p.id === 'annual') || offered[0] || null);
