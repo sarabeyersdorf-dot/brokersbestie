@@ -127,6 +127,17 @@ export const COLOR_KINDS = [
 ];
 const CLOSING = /close of escrow|\bcoe\b|closing|recording/i;
 
+// A closing date more than this many days past asks "Did <street> close?"
+// as a calm row instead of a red overdue one (Sara, 2026-10-31: two July
+// closings read "103 days past" in red, forever). Other deadlines keep the
+// overdue look.
+export const CLOSE_ASK_DAYS = 14;
+export function asksDidItClose(d, today) {
+  if (!d || d.done || !d.due || !CLOSING.test(d.label || '')) return false;
+  const past = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${String(d.due).slice(0, 10)}T00:00:00Z`)) / 86400e3);
+  return past > CLOSE_ASK_DAYS;
+}
+
 // A dayItems() item -> its colour kind. `late` is a deadline past its day.
 export function itemKind(i, today) {
   if (i.kind === 'tour') return 'showing';

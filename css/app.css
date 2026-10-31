@@ -801,6 +801,11 @@ button.stat { cursor: pointer; }
 .due-row .kw .ktag { margin: 0; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; }
 .due-row .t { font-weight: 600; }
 .due-row .on-route { flex-shrink: 0; color: var(--teal-text); font: 700 13px var(--sans); }
+/* "Did <street> close?" — a calm question, wraps under the words on a phone */
+.close-ask { flex-wrap: wrap; gap: 8px; }
+.close-ask .grow { min-width: 160px; }
+.close-ask-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.close-ask-btns .btn { min-height: 44px; }
 .safety-bar { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-left: 0; background: var(--ink); color: #fff; border-color: var(--ink); }
 .safety-bar .grow { display: flex; flex-direction: column; color: #fff; }
 .safety-bar .t { font-weight: 700; }

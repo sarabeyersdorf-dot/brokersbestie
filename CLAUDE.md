@@ -941,4 +941,11 @@ FUB homes stayed, many duplicating Legacy's under other spellings. Her rules:
   at all. `last_result` says "Removed N homes the CRM no longer sends."
 - **A CRM property that is closed or cancelled has its CRM dates ticked on
   sync** — only ticks, never un-ticks, never a `crm_dirty` row.
-Guarded by `test/crm-leftovers.test.mjs`.
+- **A closing 14+ days past asks "Did <street> close?" instead of showing
+  overdue** (Sara's pick over letting them vanish). `asksDidItClose` /
+  `CLOSE_ASK_DAYS` in brief.js; `closeAskRow` / `wireCloseAsk` in app.js. A
+  calm row (closing tag, never "Overdue", so never the one red item) with
+  **Yes, it closed** (ticks the date, Undo; a home the agent added that still
+  reads In escrow becomes Closed) and **Not yet** (hidden 7 days on this phone,
+  `bb:closeask:<id>`). Other deadlines keep the overdue look.
+Guarded by `test/crm-leftovers.test.mjs` and `test/close-ask.test.mjs`.
