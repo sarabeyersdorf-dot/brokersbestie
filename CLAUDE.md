@@ -569,7 +569,8 @@ page (the app is at brokersbestie.vercel.app).
   `store.wipeLocal()` (localStorage `bb*` / `sb-*`, the `bb-photos` IndexedDB,
   local sign-out). Signed out, the card offers "Erase everything on this
   phone". `test/account-delete.test.mjs`.
-- **privacy.html / terms.html**: DRAFTS for a lawyer to review, plain words.
+- **privacy.html / terms.html**: plain words; Sara approved them as written
+  (2026-10-31: "the terms are fine"), so do not re-raise a lawyer review.
   Linked from Settings' footer, under the sign-in button ("By signing in you
   agree…") and on `oh.html` for open house visitors. Terms say plainly the
   safety check-in is not an emergency service. The legal name is just
