@@ -4453,7 +4453,7 @@ function viewBilling() {
       </section>` : ''}
       ${signedIn && b && !trial ? html`<section class="card pad sec">
         <div style="font-size:18px;font-weight:600">${planSentence(b)}</div>
-        ${b.seats ? html`<div class="small">${b.seats} agent${b.seats === 1 ? '' : 's'} on your team. You pay per agent; the count follows your team.</div>` : ''}
+        ${b.seats ? html`<div class="small">${b.seats} agent${b.seats === 1 ? '' : 's'} on your team.${b.state === 'comped' ? '' : ' You pay per agent; the count follows your team.'}</div>` : ''}
         ${b.subscribed ? html`<button class="btn dark block" type="button" id="portal">Manage billing (card, plan, cancel)</button>` : ''}
       </section>` : ''}
       ${signedIn && !b ? html`<div class="small">Checking your plan…</div>` : ''}

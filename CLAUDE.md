@@ -1028,3 +1028,17 @@ once (startCloud and the sign-in event both run syncNow), and each called
 `bb_create_team`. It now takes a per-person advisory lock and returns the
 team the person already has. `api/account.js` also deletes any other team the
 person is the only member of (with its files). The leftover was removed.
+
+## Live (2026-10-31)
+
+Stripe LIVE account acct_1UVbZ65X5XVV9GwC (verified): product
+prod_VXnqiJYpO8lEoC, prices bestie_standard_annual $99/yr and bestie_monthly
+$12/mo, webhook we_1UWiGG5X5XVV9GwCiHDsbx4A (the 7 events), portal configured
+with business name, support email and policy links. Sara put the live keys in
+Vercel; the secret key is a RESTRICTED key ("full access except sensitive
+operations", rk_live_) — if a Stripe call ever returns a permission error,
+check that first. **`billing_enforced` = 'true' since 2026-10-31**: verified
+in a rolled-back block that Sara and James (comped) can write, a new trial
+can, and a 15-day-old trial cannot. The comped plan card no longer says "You
+pay per agent". Stripe still lists "Management and ownership: Incomplete"
+for Sara to finish in the dashboard.
