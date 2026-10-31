@@ -2,18 +2,18 @@
 // the phone (Settings → Your plan, the read-only banner) and the server
 // (api/billing.js). Prices live in Stripe; the app only knows the lookup keys.
 //
-// Sara's decisions (2026-10-28): $99/year, founding members $69/year for
-// sign-ups through Dec 31 2026 (kept while subscribed), $12/month, 14-day free
-// trial with no card. Billed PER AGENT, one bill for the team (quantity =
+// Sara's decisions (2026-10-28): $99/year, $12/month, 14-day free trial with
+// no card. (A $69 founding yearly price was planned; Sara dropped it on
+// 2026-10-31: "no founding rate, $99". Its row stays in PLANS only so a
+// subscription on it would still read correctly; it is never offered.) Billed PER AGENT, one bill for the team (quantity =
 // people on the team). When a trial ends or payment stops, the team is
 // READ-ONLY: everything stays visible, nothing new can be saved, and syncing,
 // reading and Tell Bestie stop. Safety check-ins are never blocked.
 
 export const TRIAL_DAYS = 14;
-export const FOUNDING_UNTIL = '2026-12-31'; // last Pacific day a NEW founding sign-up is offered
 
 export const PLANS = [
-  { id: 'founding', lookup: 'bestie_founding_annual', label: 'Founding yearly', price: '$69', per: 'year', monthly: '$5.75', badge: 'Until Dec 31', note: 'Locked in for as long as you stay subscribed.' },
+  { id: 'founding', lookup: 'bestie_founding_annual', label: 'Founding yearly', price: '$69', per: 'year', monthly: '$5.75', retired: true },
   { id: 'annual', lookup: 'bestie_standard_annual', label: 'Yearly', price: '$99', per: 'year', monthly: '$8.25', note: '' },
   { id: 'monthly', lookup: 'bestie_monthly', label: 'Monthly', price: '$12', per: 'month', monthly: '', note: '' }
 ];
@@ -23,11 +23,11 @@ export const PLANS = [
 // a clearly marked placeholder. (What the app does today: read-only, see
 // entitlement() and bb_can_write in db/022.) Replace the text and set
 // TRIAL_END_DECIDED to true once she has.
-export const TRIAL_END_DECIDED = false;
-export const TRIAL_END_TEXT = 'What happens when the trial ends: to be decided.';
+export const TRIAL_END_DECIDED = true;
+export const TRIAL_END_TEXT = "After 14 days you can still see everything, but you'll need a plan to add or change anything.";
 
-// The plan picked first on the screen: founding while it is offered.
-export const defaultPlan = (offered) => (offered.find((p) => p.id === 'founding') || offered.find((p) => p.id === 'annual') || offered[0] || null);
+// The plan picked first on the screen: yearly.
+export const defaultPlan = (offered) => (offered.find((p) => p.id === 'annual') || offered[0] || null);
 
 // 'YYYY-MM-DD' in Pacific time.
 export function pacificDay(d = new Date()) {
@@ -35,10 +35,9 @@ export function pacificDay(d = new Date()) {
   return `${p.year}-${p.month}-${p.day}`;
 }
 
-// The plans a team may pick today. Founding disappears after Dec 31, 2026.
-export function plansOffered(now = new Date()) {
-  const day = pacificDay(now);
-  return PLANS.filter((p) => p.id !== 'founding' || day <= FOUNDING_UNTIL);
+// The plans a team may pick: every plan not retired.
+export function plansOffered() {
+  return PLANS.filter((p) => !p.retired);
 }
 export const planByLookup = (lookup) => PLANS.find((p) => p.lookup === lookup) || null;
 

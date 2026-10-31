@@ -48,3 +48,13 @@ test('nothing happens without typing DELETE', async () => {
   assert.equal(res.statusCode, 400);
   assert.ok(!calls.some((c) => c.startsWith('DELETE') || c.startsWith('PATCH')));
 });
+
+test('joining a team moves every table, and keeps merged files reachable (db/028)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const sql = readFileSync(new URL('../db/028_join_moves_everything_sms_log.sql', import.meta.url), 'utf8');
+  assert.match(sql, /information_schema\.columns/, 'tables found at run time, not a hand-kept list');
+  assert.match(sql, /merged_into = t/);
+  assert.match(sql, /bb_can_files/);
+  const acct = readFileSync(new URL('../api/account.js', import.meta.url), 'utf8');
+  assert.match(acct, /merged_into=eq\./, 'deleting the team also removes merged teams and their files');
+});

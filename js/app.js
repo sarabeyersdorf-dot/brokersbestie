@@ -4424,7 +4424,7 @@ function planBanner() {
 
 // Your plan (2026-10-28, phase 8). A trial with no card says so plainly:
 // days left as a bar with the end date, the three plans each also as a
-// monthly cost, founding picked first, one "Choose" button. No countdowns.
+// monthly cost, yearly picked first, one "Choose" button. No countdowns.
 let billingPick = null;
 let billingAskedAt = 0;
 function viewBilling() {
@@ -4441,6 +4441,7 @@ function viewBilling() {
   const left = trial ? Math.max(0, Math.min(14, b.daysLeft)) : 0;
   return {
     form: true, // no Tell Bestie button over "Choose"
+    repaint: true, // nothing to type here: repaint when the sign-in arrives (back from Stripe)
     html: html`${header({ back: '#/settings', kicker: 'Brokers Bestie', title, sub: trial ? 'No card on file. Nothing is charged unless you pick a plan.' : '' })}
     <main class="wrap">
       ${done ? html`<div class="card pad sec" style="border-color:var(--done)"><b>Thank you!</b> Your plan is being set up. It can take a minute to show here.</div>` : ''}
@@ -4465,7 +4466,7 @@ function viewBilling() {
             ${p.note ? html`<span class="small">${p.note}</span>` : ''}</span>
           <span class="pp-price num">${p.price}<span class="small">/${p.per === 'year' ? 'yr' : 'mo'}</span></span>
         </button>`)}</div>
-        <div class="small">Per agent. ${trial ? 'Picking one now still charges nothing until your trial ends.' : ''}</div>
+        <div class="small">Per agent. ${trial ? `Stripe takes your card now, and nothing is charged until your trial ends${endDay ? ` on ${endDay}` : ''}.` : ''}</div>
         <button class="btn dark big block" type="button" id="choose" ${pick ? '' : raw('disabled')}>Choose ${pick ? pick.label : 'a plan'}</button>
         ${b && !b.payments ? html`<div class="small">Payments are not switched on yet.</div>` : ''}
       </section>` : ''}
@@ -4963,7 +4964,7 @@ window.addEventListener('hashchange', () => {
 // Never while a pop-up is open or on a screen with a form: repainting there
 // would wipe what the agent is typing. The pop-up repaints when it closes.
 store.onChange(() => {
-  if (document.querySelector('.sheet-back') || (current && current.form)) { pendingRender = true; return; }
+  if (document.querySelector('.sheet-back') || (current && current.form && !current.repaint)) { pendingRender = true; return; }
   render();
 });
 window.addEventListener('online', render);

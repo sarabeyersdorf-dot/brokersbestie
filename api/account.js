@@ -52,7 +52,14 @@ export default async function handler(req, res) {
     await db(`team_invites?created_by=eq.${uid}`, { method: 'PATCH', body: { created_by: null } });
     let files = 0;
     if (teamId && !teammates) {
-      files = await removeTeamFiles(teamId);
+      // Solo teams merged into this one when someone joined (db/028) still
+      // hold that person's files under their old folder: remove them too.
+      const shells = await db(`teams?merged_into=eq.${teamId}&select=id`);
+      for (const s of shells || []) {
+        files += await removeTeamFiles(s.id);
+        await db(`teams?id=eq.${s.id}`, { method: 'DELETE' });
+      }
+      files += await removeTeamFiles(teamId);
       await db(`teams?id=eq.${teamId}`, { method: 'DELETE' });
     } else if (teamId) {
       await db(`team_members?team_id=eq.${teamId}&user_id=eq.${uid}`, { method: 'DELETE' });

@@ -18,7 +18,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { makeVapidKeys, sendPush } from './webpush.js';
 import { dueReminders } from './due.js';
-import { overdue, alertText, e164, cleanVisit } from './safety.js';
+import { overdue, alertText, e164, cleanVisit, SMS_DAILY_CAP, SMS_PER_NUMBER_CAP } from './safety.js';
 
 const TW = { sid: Deno.env.get('TWILIO_ACCOUNT_SID'), tok: Deno.env.get('TWILIO_AUTH_TOKEN'), from: Deno.env.get('TWILIO_FROM') };
 const texting = () => !!(TW.sid && TW.tok && TW.from);
@@ -27,9 +27,26 @@ async function sendSms(to: string, body: string) {
   const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TW.sid}/Messages.json`, {
     method: 'POST',
     headers: { Authorization: 'Basic ' + btoa(`${TW.sid}:${TW.tok}`), 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ To: e164(to), From: TW.from!, Body: body })
+    body: new URLSearchParams({ To: to, From: TW.from!, Body: body })
   });
   if (!r.ok) throw new Error(`Twilio ${r.status}: ${(await r.text()).slice(0, 200)}`);
+}
+
+// Every safety text goes through here: US / Canada numbers only, at most
+// SMS_DAILY_CAP a team and SMS_PER_NUMBER_CAP to one number in 24 hours, and
+// each one logged in sms_log (db/028, server only). Returns 'sent', or why not.
+async function safetyText(c: any, body: string, kind: string) {
+  const to = e164(c.contact_phone);
+  if (!to) return 'not a US or Canada number';
+  const since = new Date(Date.now() - 24 * 3600e3).toISOString();
+  const [{ count: team }, { count: number }] = await Promise.all([
+    db.from('sms_log').select('id', { count: 'exact', head: true }).eq('team_id', c.team_id).gte('sent_at', since),
+    db.from('sms_log').select('id', { count: 'exact', head: true }).eq('to_phone', to).gte('sent_at', since)
+  ]);
+  if ((team || 0) >= SMS_DAILY_CAP || (number || 0) >= SMS_PER_NUMBER_CAP) return 'daily safety text limit reached';
+  await sendSms(to, body);
+  await db.from('sms_log').insert({ team_id: c.team_id, user_id: c.user_id || null, checkin_id: c.id, to_phone: to, kind });
+  return 'sent';
 }
 
 // Overdue check-ins: claim first (alerted_at), so two runs can never text twice;
@@ -37,14 +54,14 @@ async function sendSms(to: string, body: string) {
 async function safetyRun() {
   if (!texting()) return { texted: 0, skipped: 'texting not set up' };
   const { data } = await db.from('checkins').select('*').eq('status', 'active').is('alerted_at', null);
-  let texted = 0;
+  let texted = 0, held = 0;
   for (const c of overdue(data || [])) {
     const { data: claimed } = await db.from('checkins').update({ alerted_at: new Date().toISOString() }).eq('id', c.id).is('alerted_at', null).select('id');
     if (!claimed || !claimed.length || !c.contact_phone) continue;
-    try { await sendSms(c.contact_phone, alertText(c, { overdue: true })); texted++; }
+    try { (await safetyText(c, alertText(c, { overdue: true }), 'overdue')) === 'sent' ? texted++ : held++; }
     catch (_) { await db.from('checkins').update({ alerted_at: null }).eq('id', c.id); }
   }
-  return { texted };
+  return { texted, held };
 }
 
 async function signedIn(req: Request) {
@@ -209,7 +226,9 @@ Deno.serve(async (req) => {
     else if (body.action === 'help') {
       await db.from('checkins').update({ status: 'help', ended_at: now, alerted_at: now }).eq('id', c.id);
       if (c.contact_phone && texting()) {
-        try { await sendSms(c.contact_phone, alertText(c, { overdue: false })); } catch (e) { return json({ error: String(e) }, 502); }
+        let r = '';
+        try { r = await safetyText(c, alertText(c, { overdue: false }), 'help'); } catch (e) { return json({ error: String(e) }, 502); }
+        if (r !== 'sent') return json({ ok: true, texting: true, texted: false, reason: r });
       }
     } else return json({ error: 'unknown action' }, 400);
     return json({ ok: true, texting: texting() });
