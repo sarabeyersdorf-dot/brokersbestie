@@ -7,7 +7,7 @@
 // pull leaves that row alone so it is never overwritten before it is sent.
 
 import { db } from './server.js';
-import { mapFeed, crmId, pushChanges, MAX_CONTACTS } from './feed.js';
+import { mapFeed, crmId, pushChanges, MAX_CONTACTS, AGENT_FIELDS, leftoverPlan, FINISHED_STATUSES } from './feed.js';
 import { CONNECTORS, CONTACT_LISTS } from './crms.js';
 import { CRM_CHOICES } from '../../js/crmlist.js';
 import { contactsChoice } from '../../js/contacts.js';
@@ -98,11 +98,51 @@ async function pruneContacts(teamId, keep) {
   for (let i = 0; i < gone.length; i += 100) await db(`contacts?team_id=eq.${teamId}&id=in.(${encodeURIComponent(quoteList(gone.slice(i, i + 100)))})`, { method: 'DELETE' });
 }
 
+// Tick every open CRM date on these homes. Only ticks, never un-ticks (same
+// rule as doneDates), and never a date still waiting to go to the CRM.
+async function tickDatesOf(teamId, propertyIds) {
+  for (let i = 0; i < propertyIds.length; i += 100) {
+    const ids = propertyIds.slice(i, i + 100);
+    await db(`dates?team_id=eq.${teamId}&source=eq.crm&done=is.false&crm_dirty=is.false&property_id=in.(${encodeURIComponent(quoteList(ids))})`, { method: 'PATCH', body: { done: true, updated_at: new Date().toISOString() } });
+  }
+}
+
+// Homes the CRM no longer sends (another CRM was connected, or it dropped a
+// deal): removed when nothing of the agent's is on them, kept otherwise with
+// their CRM dates ticked. See leftoverPlan in feed.js. Returns the counts.
+async function pruneProperties(teamId, sentIds) {
+  const crmProps = await db(`properties?team_id=eq.${teamId}&source=eq.crm&select=id,${AGENT_FIELDS.join(',')}`);
+  const leftovers = crmProps.filter((p) => !sentIds.has(p.id));
+  if (!leftovers.length) return { removed: 0, kept: 0 };
+  const used = new Set();
+  const ids = leftovers.map((p) => p.id);
+  for (let i = 0; i < ids.length; i += 100) {
+    const inList = `property_id=in.(${encodeURIComponent(quoteList(ids.slice(i, i + 100)))})`;
+    const asks = [
+      ...['access', 'notes', 'tasks', 'trips', 'expenses', 'visitors', 'oh_links', 'share_links'].map((t) => `${t}?${inList}&select=property_id`),
+      // Rows the phone made (the CRM's own carry source = 'crm').
+      ...['people', 'dates', 'events'].map((t) => `${t}?${inList}&or=(source.is.null,source.neq.crm)&select=property_id`)
+    ];
+    for (const rows of await Promise.all(asks.map((q) => db(q)))) for (const r of rows) used.add(r.property_id);
+  }
+  const tours = await db(`tours?team_id=eq.${teamId}&select=stops`);
+  for (const t of tours) for (const st of (Array.isArray(t.stops) ? t.stops : [])) if (st && st.property_id) used.add(st.property_id);
+  const plan = leftoverPlan(leftovers, used);
+  // Their CRM dates first, so a kept home never nags; a removed one takes its
+  // CRM people and dates with it (cascade).
+  await tickDatesOf(teamId, plan.keep);
+  for (let i = 0; i < plan.remove.length; i += 100) {
+    await db(`properties?team_id=eq.${teamId}&source=eq.crm&id=in.(${encodeURIComponent(quoteList(plan.remove.slice(i, i + 100)))})`, { method: 'DELETE' });
+  }
+  return { removed: plan.remove.length, kept: plan.keep.length };
+}
+
 export async function runSync(teamId, today = new Date().toISOString().slice(0, 10)) {
   const link = await linkOf(teamId);
   if (!link || !link.feed_url) return { ok: false, error: 'No CRM connected' };
   let result;
   let pushed = { sent: 0, failed: 0 };
+  let pruned = { removed: 0, kept: 0 };
   const connector = CONNECTORS[link.provider];
   const label = (CRM_CHOICES.find((c) => c.id === link.provider) || {}).label || 'The CRM';
   let shape = null;
@@ -152,6 +192,13 @@ export async function runSync(teamId, today = new Date().toISOString().slice(0, 
         await db(`${table}?team_id=eq.${teamId}&done=is.false&crm_dirty=is.false&id=in.(${encodeURIComponent(quoteList(ids))})`, { method: 'PATCH', body: { done: true, updated_at: new Date().toISOString() } });
       }
     }
+    // Homes the CRM stopped sending. Only when it sent some: a CRM answering
+    // with nothing at all is more likely a hiccup than an empty book.
+    if (rows.properties.length) pruned = await pruneProperties(teamId, new Set(rows.properties.map((p) => p.id)));
+    // A closed or cancelled CRM home has nothing left due: its CRM dates are
+    // ticked, so a closing the CRM stopped dating never sits overdue.
+    const finished = await db(`properties?team_id=eq.${teamId}&source=eq.crm&status=in.(${FINISHED_STATUSES.join(',')})&select=id`);
+    await tickDatesOf(teamId, finished.map((p) => p.id));
     // An appointment cancelled in the CRM leaves the calendar too (past ones stay).
     const keep = rows.events.map((e) => e.id);
     await db(`events?team_id=eq.${teamId}&source=eq.crm&crm_dirty=is.false&date=gte.${today}${keep.length ? `&id=not.in.(${encodeURIComponent(quoteList(keep))})` : ''}`, { method: 'DELETE' });
@@ -166,10 +213,10 @@ export async function runSync(teamId, today = new Date().toISOString().slice(0, 
     }
     const counts = Object.fromEntries(['properties', 'people', 'dates', 'events', 'contacts'].map((k) => [k, rows[k].length]));
     if (!(allContacts && feed.contacts)) counts.contacts = null;
-    result = { ok: true, counts, pushed };
+    result = { ok: true, counts, pushed, pruned };
   } catch (e) {
     result = { ok: false, error: e.name === 'TimeoutError' ? `${label} did not answer in time` : e.message };
   }
-  await db(`crm_links?team_id=eq.${teamId}`, { method: 'PATCH', body: { ...(shape ? { last_shape: shape.slice(0, 2000) } : {}), last_synced_at: new Date().toISOString(), last_result: result.ok ? `Synced ${result.counts.properties} properties, ${result.counts.events} appointments, ${result.counts.dates} dates, ${result.counts.people} people on deals${result.counts.contacts != null ? `, ${result.counts.contacts} contacts` : ''}.${contactsNote ? ' Note: ' + contactsNote + '.' : ''}${pushed.sent ? ` Sent ${pushed.sent} change${pushed.sent === 1 ? '' : 's'} to the CRM.` : ''}${pushed.failed ? ` ${pushed.failed} change${pushed.failed === 1 ? '' : 's'} not taken yet${pushed.note ? ' (' + pushed.note + ')' : ''}; will retry.` : ''}` : `Failed: ${result.error}` } });
+  await db(`crm_links?team_id=eq.${teamId}`, { method: 'PATCH', body: { ...(shape ? { last_shape: shape.slice(0, 2000) } : {}), last_synced_at: new Date().toISOString(), last_result: result.ok ? `Synced ${result.counts.properties} properties, ${result.counts.events} appointments, ${result.counts.dates} dates, ${result.counts.people} people on deals${result.counts.contacts != null ? `, ${result.counts.contacts} contacts` : ''}.${result.pruned && result.pruned.removed ? ` Removed ${result.pruned.removed} home${result.pruned.removed === 1 ? '' : 's'} the CRM no longer sends.` : ''}${contactsNote ? ' Note: ' + contactsNote + '.' : ''}${pushed.sent ? ` Sent ${pushed.sent} change${pushed.sent === 1 ? '' : 's'} to the CRM.` : ''}${pushed.failed ? ` ${pushed.failed} change${pushed.failed === 1 ? '' : 's'} not taken yet${pushed.note ? ' (' + pushed.note + ')' : ''}; will retry.` : ''}` : `Failed: ${result.error}` } });
   return result;
 }

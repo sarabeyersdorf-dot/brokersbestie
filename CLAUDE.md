@@ -922,3 +922,30 @@ the sync off. A replaced key needs its fingerprint added on the Legacy side
 (`encode(sha256(convert_to(feed_key,'UTF8')),'hex')` from `crm_links`, never
 the key itself). Legacy's feed now answers a refusal with a `reason`
 (unset / missing / wrong) and lengths; `runSync` still shows only "refused".
+
+## Homes the CRM stopped sending, and closed homes' dates (2026-10-31)
+
+Two July closings (7230 Latigo, 9985 Wendell) showed as 100+ days OVERDUE on
+Today. They were not from the Legacy feed: Sara connected Follow Up Boss that
+morning (FUB deal ids 127/130, still in an escrow stage there), then went back
+to the feed, and **nothing ever removed a CRM home that stops arriving** — 26
+FUB homes stayed, many duplicating Legacy's under other spellings. Her rules:
+- **A home the CRM no longer sends is removed when nothing of the agent's is on
+  it, kept otherwise with its CRM dates ticked** (`pruneProperties` in
+  `api/_lib/crm.js`, the rule is `leftoverPlan` / `AGENT_FIELDS` in feed.js).
+  "The agent's" = a typed field (occupancy, well, septic, HOA, solar, showing
+  notes, directions, links, gate pin, heads-up) or a row the CRM did not make
+  (code, note, to-do, drive, expense, visitor, open house / share link, a
+  phone-made person/date/appointment, a tour stop). Map coordinates do not
+  count (Bestie fills them in). Nothing is pruned when the CRM sends no homes
+  at all. `last_result` says "Removed N homes the CRM no longer sends."
+- **A CRM property that is closed or cancelled has its CRM dates ticked on
+  sync** — only ticks, never un-ticks, never a `crm_dirty` row.
+- **A closing 14+ days past asks "Did <street> close?" instead of showing
+  overdue** (Sara's pick over letting them vanish). `asksDidItClose` /
+  `CLOSE_ASK_DAYS` in brief.js; `closeAskRow` / `wireCloseAsk` in app.js. A
+  calm row (closing tag, never "Overdue", so never the one red item) with
+  **Yes, it closed** (ticks the date, Undo; a home the agent added that still
+  reads In escrow becomes Closed) and **Not yet** (hidden 7 days on this phone,
+  `bb:closeask:<id>`). Other deadlines keep the overdue look.
+Guarded by `test/crm-leftovers.test.mjs` and `test/close-ask.test.mjs`.

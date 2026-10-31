@@ -17,7 +17,7 @@ import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visi
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink, shareWhere, shareLink, stopShareLinks, tourLink, buyerFaces } from './push.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, codeTrust, headsUp, HEADS_UP, todayMode, listenLength, feedbackDue, taxYear, taxCsv } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, codeTrust, headsUp, HEADS_UP, todayMode, asksDidItClose, listenLength, feedbackDue, taxYear, taxCsv } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -395,6 +395,43 @@ function pickups() {
   return store.all('access').filter((a) => KINDS[a.kind]?.tracked && a.status === 'out' && dead.has(a.property_id));
 }
 
+// "Did it close?" — Not yet hides the question on this phone for 7 days.
+const CLOSE_ASK_KEY = (id) => 'bb:closeask:' + id;
+function closeAskHidden(id) {
+  try { return Number(localStorage.getItem(CLOSE_ASK_KEY(id)) || 0) > Date.now(); } catch { return false; }
+}
+function hideCloseAsk(id) {
+  try { localStorage.setItem(CLOSE_ASK_KEY(id), String(Date.now() + 7 * 86400e3)); } catch {}
+}
+// The row: a calm closing tag (never "Overdue", so never the red one on a
+// screen) and two answers.
+function closeAskRow(t) {
+  return html`<div class="row due-row close-ask"><span class="grow"><span class="kw">${ktag('closing', false)}</span><span class="t">${t.text}</span><span class="s">${t.sub}</span></span><span class="close-ask-btns"><button class="btn dark" type="button" data-closeyes="${t.id}">Yes, it closed</button><button class="btn" type="button" data-closenot="${t.id}">Not yet</button></span></div>`;
+}
+// Yes ticks the closing date (a CRM date goes back to the CRM like any tick;
+// a home the agent added, still marked In escrow, becomes Closed). Undo puts
+// both back.
+function wireCloseAsk(root) {
+  root.querySelectorAll('[data-closeyes]').forEach((b) => b.addEventListener('click', () => {
+    const id = b.getAttribute('data-closeyes');
+    const d = store.get('dates', id);
+    if (!d) return toast('That item is no longer here');
+    const p = prop(d.property_id);
+    const closeHome = p && p.source !== 'crm' && p.status === 'escrow';
+    store.save('dates', { id, done: true });
+    if (closeHome) store.save('properties', { id: p.id, status: 'closed' });
+    undoToast('Marked closed', () => {
+      store.save('dates', { id, done: false });
+      if (closeHome) store.save('properties', { id: p.id, status: 'escrow' });
+    });
+  }));
+  root.querySelectorAll('[data-closenot]').forEach((b) => b.addEventListener('click', () => {
+    hideCloseAsk(b.getAttribute('data-closenot'));
+    toast("I'll ask again in a week");
+    render();
+  }));
+}
+
 function todoItems() {
   const items = [];
   const t = todayIso();
@@ -409,6 +446,13 @@ function todoItems() {
     // Due today or overdue only: the week ahead is in the briefing card, and a
     // closing 6 days out is not something to do today.
     if (n == null || n > 0) continue;
+    // A closing well past its day asks once, calmly, instead of sitting red
+    // forever (asksDidItClose in brief.js). "Not yet" hides it for a week.
+    if (asksDidItClose(d, t)) {
+      if (closeAskHidden(d.id)) continue;
+      items.push({ table: 'dates', id: d.id, ask: true, text: `Did ${street(addr(d.property_id)) || 'this home'} close?`, sub: `Closing date was ${niceDate(d.due)}`, pid: d.property_id, late: false, ck: 'closing', owner: prop(d.property_id)?.owner || null });
+      continue;
+    }
     items.push({ table: 'dates', id: d.id, text: `${d.label} · ${addr(d.property_id)}`, sub: n < 0 ? `${-n} days past · confirm it happened` : whenText(d.due), pid: d.property_id, late: n < 0, ck: itemKind({ kind: 'date', title: d.label }), owner: prop(d.property_id)?.owner || null });
   }
   for (const a of pickups()) {
@@ -784,6 +828,7 @@ function todoLine(t, routePids) {
   const inner = html`<span class="grow"><span class="kw">${ktag(t.ck, t.late)}</span><span class="t">${t.text}</span>${t.sub ? html`<span class="s">${t.sub}</span>` : ''}</span>${onRoute ? html`<span class="on-route">On your route</span>` : ''}`;
   if (t.pickup) return html`<a class="row due-row" href="#/signs">${inner}${icon('chev', 18)}</a>`;
   if (t.tour) return html`<a class="row due-row" href="#/tour/${t.tour}">${inner}${icon('chev', 18)}</a>`;
+  if (t.ask) return closeAskRow(t);
   return html`<button class="row due-row" type="button" data-done="${t.table}:${t.id}"><span class="check"></span>${inner}</button>`;
 }
 const todaysTours = () => store.all('tours').filter((x) => x.date === todayIso() && !x.finished);
@@ -978,6 +1023,7 @@ function wireTodayCommon(root) {
     store.save(table, table === 'tasks' ? { id, done: true, done_at: new Date().toISOString() } : { id, done: true });
     undoToast('Done', () => store.save(table, table === 'tasks' ? { id, done: false, done_at: null } : { id, done: false }));
   }));
+  wireCloseAsk(root);
   autoCrmSync();
   refreshBilling();
 }
@@ -1036,6 +1082,7 @@ function viewTodayFull() {
       ${todos.length ? html`<section class="sec">
         <div class="sec-head"><div class="label">To do today · ${shownTodos.length}</div><button class="btn ghost" type="button" id="addtodo" style="min-height:36px">+ Add</button></div>
         <div class="card list">${shownTodos.length ? shownTodos.map((t) => t.pickup ? html`<a class="row ${colorClass(t.ck, t.late)}" href="#/signs"><span class="check" style="border-color:var(--pending)"></span><span class="grow"><span class="t">${t.text}</span><span class="s">${ktag(t.ck, t.late)}${t.sub}</span></span>${icon('chev', 18)}</a>`
+          : t.ask ? closeAskRow(t)
           : t.tour ? html`<a class="row ${colorClass(t.ck, t.late)}" href="#/tour/${t.tour}"><span class="check" style="border-color:var(--pending)"></span><span class="grow"><span class="t">${t.text}</span><span class="s">${ktag(t.ck, t.late)}${t.sub}</span></span>${icon('chev', 18)}</a>`
           : html`<button class="row ${colorClass(t.ck, t.late)}" type="button" data-done="${t.table}:${t.id}"><span class="check"></span><span class="grow"><span class="t">${t.text}</span><span class="s ${t.late ? 'wait' : ''}">${ktag(t.ck, t.late)}${t.sub}</span></span></button>`) : html`<div class="empty">${todos.length ? 'Nothing of that kind today.' : 'Nothing due. Nice.'}</div>`}</div>
       </section>` : ''}
@@ -1107,6 +1154,7 @@ function viewTodayFull() {
         undoToast('Done', () => store.save(table, table === 'tasks' ? { id, done: false, done_at: null } : { id, done: false }));
         toast('Done');
       }));
+      wireCloseAsk(root);
     }
   };
 }
