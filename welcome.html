@@ -76,7 +76,7 @@ p{margin:0}
 .fine{font-size:15px;color:#9aa3a7;margin-top:14px}
 .fine b{color:#fff;font-weight:600}
 .phone{position:relative;width:min(300px,78vw);margin:0 auto;border-radius:46px;background:#0c0d0f;padding:11px;border:2px solid #4a5056;box-shadow:0 30px 70px rgba(0,0,0,.45),0 0 0 6px rgba(255,255,255,.02)}
-.phone video,.phone img{border-radius:36px;width:100%;aspect-ratio:1170/2532;object-fit:cover;background:#111}
+.phone video,.phone img{border-radius:36px;width:100%;height:auto;aspect-ratio:1170/2532;object-fit:cover;background:#111}
 .phone.sm{width:min(250px,64vw)}
 .bubble{position:absolute;left:-14px;bottom:18%;background:var(--buddy);color:var(--char);font-family:var(--tall);font-weight:800;font-size:19px;text-transform:uppercase;padding:10px 14px;border-radius:14px;box-shadow:0 10px 24px rgba(0,0,0,.3);transform:rotate(-4deg)}
 @media (min-width:900px){
@@ -127,7 +127,8 @@ section{padding:72px 0}
 .founder blockquote p + p{margin-top:14px}
 .sig{margin-top:18px;font-size:16px;color:var(--ink-2)}
 .sig b{color:var(--ink);font-weight:700}
-@media (min-width:900px){.founder{grid-template-columns:220px 1fr;gap:48px}}
+.buddy svg{width:140px;height:auto;display:block}
+@media (min-width:900px){.founder{grid-template-columns:200px 1fr;gap:48px}.buddy svg{width:180px}}
 
 /* brokers */
 .brokers{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:30px;display:grid;gap:22px}
@@ -296,7 +297,7 @@ footer a:hover{text-decoration:underline}
 
   <section class="light">
     <div class="wrap founder reveal">
-      <div><div class="phone sm" style="width:200px"><img src="/welcome/05-property-codes.webp" alt="A property card in Brokers Bestie showing the gate, alarm and lockbox codes" width="585" height="1266"></div></div>
+      <div class="buddy" aria-hidden="true"><svg viewBox="0 0 120 140"><path d="M38 52 V34 A22 22 0 0 1 82 34 V52" fill="none" stroke="#202428" stroke-width="10" stroke-linecap="round"/><rect x="10" y="48" width="100" height="84" rx="18" fill="#F5C93E"/><rect x="30" y="68" width="20" height="18" rx="5" fill="#202428"/><path d="M70 79 Q80 69 90 79" fill="none" stroke="#202428" stroke-width="6" stroke-linecap="round"/><path d="M38 102 Q60 120 82 102" fill="none" stroke="#202428" stroke-width="7" stroke-linecap="round"/><circle cx="98" cy="96" r="5" fill="#E5484D"/></svg></div>
       <div>
         <p class="kick">Why I built it</p>
         <blockquote style="margin-top:12px">
