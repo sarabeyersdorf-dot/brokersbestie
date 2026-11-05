@@ -49,6 +49,10 @@
     {
       "source": "/welcome",
       "destination": "/welcome.html"
+    },
+    {
+      "source": "/sms",
+      "destination": "/sms.html"
     }
   ]
 }

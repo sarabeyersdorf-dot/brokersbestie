@@ -84,6 +84,18 @@ export async function safetyCall(action, row) {
   return j;
 }
 
+// Safety contacts (2026-11-05): carriers require the contact to agree before
+// any alert. 'status' asks where each phone stands (none | pending | accepted
+// | opted_out); 'invite' texts the contact once to reply YES (the server skips
+// it if they already answered or were asked in the last hour).
+export async function contactCall(action, payload) {
+  const token = await store.accessToken();
+  const res = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }, body: JSON.stringify({ op: 'contact', action, ...payload }) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(j.error || 'Could not reach the server');
+  return j;
+}
+
 // A link (and QR code) for visitors to sign in at an open house on their own
 // phones. Lasts 3 days. Needs team mode: the visitor is saved to the team.
 export async function openHouseLink(propertyId) {

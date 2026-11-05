@@ -10,6 +10,10 @@
 //   GET  ?op=tour&t=     a buyer's tour link: the homes (street, time) and
 //                        the faces they picked; never codes or notes
 //   POST {op:'face'}     the buyer picks a face (and a note) for one home
+//   POST {op:'contact'}  a signed-in agent: 'status' of safety contacts, or
+//                        'invite' one (texts them once to reply YES)
+//   POST ?op=sms         Twilio's incoming-text webhook (signature checked):
+//                        YES accepts, STOP opts out, START re-asks, HELP replies
 // Safety texts go through Twilio when TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN /
 // TWILIO_FROM are set as this function's secrets; until then nothing is texted
 // and the phone keeps saying "phone-only".
@@ -18,7 +22,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { makeVapidKeys, sendPush } from './webpush.js';
 import { dueReminders } from './due.js';
-import { overdue, alertText, e164, cleanVisit, SMS_DAILY_CAP, SMS_PER_NUMBER_CAP } from './safety.js';
+import { overdue, alertText, e164, cleanVisit, SMS_DAILY_CAP, SMS_PER_NUMBER_CAP, inviteText, acceptedText, HELP_TEXT, smsKeyword, contactStatus, twilioSignature } from './safety.js';
 
 const TW = { sid: Deno.env.get('TWILIO_ACCOUNT_SID'), tok: Deno.env.get('TWILIO_AUTH_TOKEN'), from: Deno.env.get('TWILIO_FROM') };
 const texting = () => !!(TW.sid && TW.tok && TW.from);
@@ -32,21 +36,36 @@ async function sendSms(to: string, body: string) {
   if (!r.ok) throw new Error(`Twilio ${r.status}: ${(await r.text()).slice(0, 200)}`);
 }
 
-// Every safety text goes through here: US / Canada numbers only, at most
+// Every text goes through here: US / Canada numbers only, at most
 // SMS_DAILY_CAP a team and SMS_PER_NUMBER_CAP to one number in 24 hours, and
 // each one logged in sms_log (db/028, server only). Returns 'sent', or why not.
-async function safetyText(c: any, body: string, kind: string) {
-  const to = e164(c.contact_phone);
+async function cappedText(teamId: string, userId: string | null, toRaw: string, body: string, kind: string, checkinId: string | null) {
+  const to = e164(toRaw);
   if (!to) return 'not a US or Canada number';
   const since = new Date(Date.now() - 24 * 3600e3).toISOString();
   const [{ count: team }, { count: number }] = await Promise.all([
-    db.from('sms_log').select('id', { count: 'exact', head: true }).eq('team_id', c.team_id).gte('sent_at', since),
+    db.from('sms_log').select('id', { count: 'exact', head: true }).eq('team_id', teamId).gte('sent_at', since),
     db.from('sms_log').select('id', { count: 'exact', head: true }).eq('to_phone', to).gte('sent_at', since)
   ]);
-  if ((team || 0) >= SMS_DAILY_CAP || (number || 0) >= SMS_PER_NUMBER_CAP) return 'daily safety text limit reached';
+  if ((team || 0) >= SMS_DAILY_CAP || (number || 0) >= SMS_PER_NUMBER_CAP) return 'daily text limit reached';
   await sendSms(to, body);
-  await db.from('sms_log').insert({ team_id: c.team_id, user_id: c.user_id || null, checkin_id: c.id, to_phone: to, kind });
+  await db.from('sms_log').insert({ team_id: teamId, user_id: userId, checkin_id: checkinId, to_phone: to, kind });
   return 'sent';
+}
+
+// A contact's rows (every team that added this number).
+async function contactRows(phone: string) {
+  const { data } = await db.from('safety_contacts').select('*').eq('phone', phone);
+  return data || [];
+}
+
+// A safety ALERT goes only to a contact who replied YES (db/030).
+async function safetyText(c: any, body: string, kind: string) {
+  const to = e164(c.contact_phone);
+  if (!to) return 'not a US or Canada number';
+  const status = contactStatus(await contactRows(to), c.team_id);
+  if (status !== 'accepted') return status === 'opted_out' ? 'contact opted out' : 'contact has not replied YES yet';
+  return cappedText(c.team_id, c.user_id || null, to, body, kind, c.id);
 }
 
 // Overdue check-ins: claim first (alerted_at), so two runs can never text twice;
@@ -68,6 +87,39 @@ async function signedIn(req: Request) {
   const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   const { data } = await db.auth.getUser(jwt);
   return data?.user || null;
+}
+
+async function teamOfUser(userId: string) {
+  const { data } = await db.from('team_members').select('team_id').eq('user_id', userId).order('created_at').limit(1);
+  return data && data[0] ? data[0].team_id : null;
+}
+
+// Twilio's incoming-text webhook. Twilio signs the exact URL it called, so the
+// URL is built from SUPABASE_URL, never from the request (which can differ).
+const SMS_HOOK = `${Deno.env.get('SUPABASE_URL')}/functions/v1/reminders?op=sms`;
+const twiml = (msg = '') => new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${msg ? `<Message>${msg.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</Message>` : ''}</Response>`, { headers: { 'Content-Type': 'text/xml' } });
+async function inboundSms(req: Request) {
+  if (!TW.tok) return new Response('not set up', { status: 503 });
+  const params = Object.fromEntries(new URLSearchParams(await req.text()));
+  const want = await twilioSignature(TW.tok, SMS_HOOK, params);
+  if ((req.headers.get('x-twilio-signature') || '') !== want) return new Response('bad signature', { status: 403 });
+  const from = e164(params.From);
+  const word = smsKeyword(params.Body);
+  if (!from || !word) return twiml();
+  const now = new Date().toISOString();
+  if (word === 'stop') {
+    await db.from('safety_contacts').update({ status: 'opted_out', answered_at: now }).eq('phone', from);
+    return twiml(); // the carrier / Twilio sends the standard STOP confirmation
+  }
+  if (word === 'start') {
+    await db.from('safety_contacts').update({ status: 'pending', answered_at: now }).eq('phone', from).eq('status', 'opted_out');
+    return twiml('Brokers Bestie: you can get texts again. To be a safety contact, reply YES. Reply STOP to opt out.');
+  }
+  if (word === 'help') return twiml(HELP_TEXT);
+  // YES: accepts every invitation still waiting for this number.
+  const { data: rows } = await db.from('safety_contacts').update({ status: 'accepted', answered_at: now }).eq('phone', from).eq('status', 'pending').select('agent_name');
+  if (!rows || !rows.length) return twiml();
+  return twiml(acceptedText(rows.length === 1 ? rows[0].agent_name : ''));
 }
 
 const SUBJECT = 'https://brokersbestie.vercel.app';
@@ -179,7 +231,39 @@ Deno.serve(async (req) => {
     const stops = homeStops(tour).map((s: any) => ({ id: s.id, street: String(s.address || '').split(',')[0], town: String(s.address || '').split(',')[1]?.trim() || '', arrive: s.arrive ?? null, shown: !!s.shown, reaction: mine.get(s.id)?.reaction || null, note: mine.get(s.id)?.note || '' }));
     return json({ buyer: tour.buyer || '', date: tour.date, stops, agent: prof || null });
   }
+  if (req.method === 'POST' && url.searchParams.get('op') === 'sms') return inboundSms(req);
   const body = await req.json().catch(() => ({}));
+  if (body.op === 'contact') {
+    const user = await signedIn(req);
+    if (!user) return json({ error: 'sign in first' }, 401);
+    const teamId = await teamOfUser(user.id);
+    if (!teamId) return json({ error: 'join or start a team first' }, 400);
+    if (body.action === 'status') {
+      const phones = [...new Set((Array.isArray(body.phones) ? body.phones : []).slice(0, 10).map((p: unknown) => e164(String(p))).filter(Boolean))];
+      const out: Record<string, string> = {};
+      for (const p of phones) out[p] = contactStatus(await contactRows(p), teamId);
+      return json({ statuses: out, texting: texting() });
+    }
+    if (body.action === 'invite') {
+      const phone = e164(String(body.phone || ''));
+      if (!phone) return json({ error: 'Use a US or Canada mobile number.' }, 400);
+      const rows = await contactRows(phone);
+      const status = contactStatus(rows, teamId);
+      if (status === 'opted_out' || status === 'accepted') return json({ status });
+      const mine = rows.find((r: any) => r.team_id === teamId);
+      if (mine && mine.invited_at && Date.now() - new Date(mine.invited_at).getTime() < 3600e3) return json({ status: 'pending', sent: false, reason: 'asked within the last hour' });
+      if (!texting()) return json({ status, sent: false, reason: 'texting is not set up' });
+      const agentName = String(body.agent_name || '').trim().slice(0, 60);
+      const name = String(body.name || '').trim().slice(0, 60);
+      const r = await cappedText(teamId, user.id, phone, inviteText(agentName), 'invite', null).catch((e) => String(e));
+      if (r !== 'sent') return json({ status, sent: false, reason: r });
+      const row = { team_id: teamId, phone, name, agent_name: agentName, status: 'pending', invited_at: new Date().toISOString(), invited_by: user.id };
+      if (mine) await db.from('safety_contacts').update(row).eq('id', mine.id);
+      else await db.from('safety_contacts').insert(row);
+      return json({ status: 'pending', sent: true });
+    }
+    return json({ error: 'unknown action' }, 400);
+  }
   if (body.op === 'face') {
     const link = await tourLink(body.t);
     if (!link) return json({ error: 'This link has ended. Ask your agent for a new one.' }, 404);

@@ -1042,3 +1042,34 @@ in a rolled-back block that Sara and James (comped) can write, a new trial
 can, and a 15-day-old trial cannot. The comped plan card no longer says "You
 pay per agent". Stripe still lists "Management and ownership: Incomplete"
 for Sara to finish in the dashboard.
+
+## Safety contacts say YES first (2026-11-05)
+
+From Cowork (`20261105_CWtoCC_twilio-tollfree-optin.md`): Twilio toll-free
+verification (+1 833 528 1197) needs the person RECEIVING texts to have agreed.
+- **db/030**: `safety_contacts` (team_id, phone +1…, name, agent_name, status
+  pending | accepted | opted_out, invited_at/by, answered_at). Written only by
+  the `reminders` function; members may read. No unique constraint on purpose
+  (bb_join_team moves every team_id table). `checkins.agent_name` (the phone
+  stamps it from the profile) so the alert names the agent.
+- **reminders function v8**: `op:'contact'` (`status` for phones, `invite`
+  texts the contact once: not if accepted / opted out / asked in the last
+  hour; counts toward the SMS caps, kind 'invite'). **Alerts go only to a
+  contact whose status is accepted** (`safetyText` → `contactStatus`, a STOP
+  on any team wins). `POST ?op=sms` is Twilio's incoming webhook, signature
+  checked against `SUPABASE_URL/functions/v1/reminders?op=sms` (the exact URL
+  to set on the number): YES accepts all pending invites for that number and
+  replies, STOP opts out everywhere (Twilio sends the STOP confirmation),
+  START → pending with a "reply YES" note, HELP → `HELP_TEXT`.
+- Words are in `safety.js` only (`inviteText`, `acceptedText`, `HELP_TEXT`,
+  `alertText` now "Brokers Bestie safety alert: <agent> … Reply STOP to opt
+  out.", never he/she). `/sms` (`sms.html`, vercel rewrite) is the opt-in proof
+  page with screenshots in `sms/` (rendered by Playwright from the real form);
+  `test/sms-page.test.mjs` fails if its texts drift from safety.js.
+- Phone: the check-in form says "We'll text your contact once to confirm.
+  They can reply STOP anytime." and shows the contact's status with a
+  "Text <name> to confirm / again" button (`wireContactStat`,
+  `settings.contactStatus` cache); starting a check-in invites an unconfirmed
+  contact; the running check-in says plainly when the contact hasn't said YES.
+  Only shown when texting is on (`safetyAuto`). Privacy and terms have `#sms`
+  sections (consent never shared or sold for marketing). bb-v82.
