@@ -555,6 +555,20 @@ function sellerUpdateSheet(pid) {
 // second time it stays in Settings only (2026-10-28). An old one-time hide
 // from before counts as both.
 const SETUP_OLD = { profile: 'bb:profnudge', install: 'bb:installhide' };
+// Folding sections (Today's Active list): open unless the agent folded it,
+// kept per phone in bb:fold:<key>. A tap on the summary's link still opens it.
+function foldOpen(key) {
+  try { return localStorage.getItem('bb:fold:' + key) !== 'closed'; } catch { return true; }
+}
+function wireFolds(root) {
+  root.querySelectorAll('details.fold[data-fold]').forEach((d) => {
+    d.querySelectorAll('summary a').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
+    d.addEventListener('toggle', () => {
+      try { localStorage.setItem('bb:fold:' + d.dataset.fold, d.open ? 'open' : 'closed'); } catch { /* private window */ }
+    });
+  });
+}
+
 function setupHidden(key) {
   try {
     if (localStorage.getItem(SETUP_OLD[key]) === '1') return true;
@@ -1105,10 +1119,10 @@ function viewTodayFull() {
       </section>` : ''}
       ${!searchText && (!todos.length || !tours.length) ? html`<section class="sec"><div class="btns">${!tours.length ? html`<a class="btn" href="#/plan">${icon('mic', 18)}Plan a tour</a>` : ''}${!todos.length && !empty ? html`<button class="btn" type="button" id="addtodo">${icon('plus', 18)}Add a to-do</button>` : ''}</div></section>` : ''}
 
-      ${live.length ? html`<section class="sec">
-        <div class="sec-head"><div class="label">Active · ${live.length}</div><a class="small" style="color:var(--teal-text);font-weight:600" href="#/props">All properties →</a></div>
+      ${live.length ? html`<details class="sec fold" data-fold="active" ${foldOpen('active') ? 'open' : ''}>
+        <summary class="sec-head"><div class="label">Active · ${live.length}<span class="fold-ar" aria-hidden="true">›</span></div><a class="small" style="color:var(--teal-text);font-weight:600" href="#/props">All properties →</a></summary>
         <div class="card list">${live.slice(0, 8).map((p) => propRow(p))}</div>
-      </section>` : ''}
+      </details>` : ''}
 
       <section class="sec">
         <div class="btns"><a class="btn" href="#/contacts">${icon('person', 18)}Contacts</a><a class="btn" href="#/vendors">${icon('person', 18)}Vendors</a><a class="btn" href="#/miles">${icon('miles', 18)}Mileage</a><a class="btn" href="#/signs">${icon('sign', 18)}Signs</a><a class="btn" href="#/safety">${icon('shield', 18)}Safety check-in</a></div>
@@ -1119,6 +1133,7 @@ function viewTodayFull() {
     </main>`,
     mount(root) {
       wireInstall(root, { onHide: () => dismissSetup('install') });
+      wireFolds(root);
       root.querySelector('#profnot')?.addEventListener('click', () => { dismissSetup('profile'); root.querySelector('[data-profnudge]')?.remove(); });
       root.querySelectorAll('[data-fbask]').forEach((b) => b.addEventListener('click', () => askFeedback(b.getAttribute('data-fbask'))));
       root.querySelectorAll('[data-fblog]').forEach((b) => b.addEventListener('click', () => logFeedback(b.getAttribute('data-fblog'))));
@@ -4495,7 +4510,7 @@ function viewBilling() {
   return {
     form: true, // no Tell Bestie button over "Choose"
     repaint: true, // nothing to type here: repaint when the sign-in arrives (back from Stripe)
-    html: html`${header({ back: '#/settings', kicker: 'Brokers Bestie', title, sub: trial ? 'No card on file. Nothing is charged unless you pick a plan.' : '' })}
+    html: html`${header({ back: '#/settings', kicker: 'Brokers Bestie', title, sub: trial ? 'Nothing is charged during your free trial.' : '' })}
     <main class="wrap">
       ${done ? html`<div class="card pad sec" style="border-color:var(--done)"><b>Thank you!</b> Your plan is being set up. It can take a minute to show here.</div>` : ''}
       ${!signedIn ? html`<div class="card pad sec">Sign in first (Settings), then choose a plan for your team.</div>` : ''}

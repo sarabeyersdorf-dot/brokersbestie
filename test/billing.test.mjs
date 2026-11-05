@@ -164,7 +164,7 @@ test('plan screen: monthly costs, yearly first, one Choose button, trial-end sen
   assert.match(b.TRIAL_END_TEXT, /still see everything/);
   const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
   const view = app.slice(app.indexOf('function viewBilling()'), app.indexOf('function viewBilling()') + 6000);
-  for (const k of ['No card on file. Nothing is charged unless you pick a plan.', "'s'} left</b>", 'Works out to', 'Choose ${pick ? pick.label', 'anyone on the team can choose it here', 'SUPPORT_EMAIL']) assert.ok(view.includes(k), k);
+  for (const k of ['Nothing is charged during your free trial.', "'s'} left</b>", 'Works out to', 'Choose ${pick ? pick.label', 'anyone on the team can choose it here', 'SUPPORT_EMAIL']) assert.ok(view.includes(k), k);
   assert.doesNotMatch(view, /countdown|setInterval/);
 });
 
