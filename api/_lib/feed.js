@@ -49,6 +49,45 @@ function marketingOf(m) {
 // photos, directions and map pins are the agent's and are never in these rows.
 export const MAX_CONTACTS = 3000;
 
+// ---------- homes the CRM stopped sending ----------
+//
+// Sara, 2026-10-31: she connected Follow Up Boss for a morning, then went back
+// to the Legacy feed. Every home FUB had sent stayed in Bestie (26 of them,
+// duplicates of Legacy's homes under other spellings, and two July closings
+// still "in escrow" nagging as 100+ days overdue), because nothing ever took a
+// CRM home away. Her rule: a home the CRM no longer sends is REMOVED when
+// nothing of the agent's is on it, and KEPT when something is, with its CRM
+// dates ticked so nothing nags.
+//
+// "Something of the agent's" = a field only a person types (below), or a row
+// under it that the CRM did not make: a code, note, photo, to-do, drive,
+// expense, visitor, open house or share link, a person/date/appointment typed
+// on the phone, or a tour stop. Map coordinates are NOT on the list: Bestie
+// fills those in by itself.
+export const AGENT_FIELDS = ['occupancy', 'well', 'septic', 'hoa', 'solar', 'showing_notes', 'directions', 'disclosure_url', 'mls_url', 'gate_lat', 'heads_up'];
+
+export function hasAgentFields(p) {
+  return AGENT_FIELDS.some((k) => {
+    const v = p && p[k];
+    if (Array.isArray(v)) return v.length > 0;
+    return v !== null && v !== undefined && v !== '';
+  });
+}
+
+// leftovers: CRM homes no longer in the feed. used: ids of homes that have a
+// row of the agent's under them. -> { remove, keep } (ids).
+export function leftoverPlan(leftovers, used = new Set()) {
+  const remove = [], keep = [];
+  for (const p of leftovers || []) {
+    if (!p || !p.id) continue;
+    (used.has(p.id) || hasAgentFields(p) ? keep : remove).push(p.id);
+  }
+  return { remove, keep };
+}
+
+// A CRM home that is closed or cancelled has nothing left due.
+export const FINISHED_STATUSES = ['closed', 'cancelled'];
+
 export function mapFeed(feed, teamId) {
   if (!feed || feed.format !== 'bestie-feed/1') throw new Error('That link is not a Bestie feed');
   const props = (feed.properties || []).filter((p) => p && p.ext_id && p.address);

@@ -17,7 +17,7 @@ import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visi
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink, shareWhere, shareLink, stopShareLinks, tourLink, buyerFaces } from './push.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
-import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, codeTrust, headsUp, HEADS_UP, todayMode, listenLength, feedbackDue, taxYear, taxCsv } from './brief.js';
+import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, codeTrust, headsUp, HEADS_UP, todayMode, asksDidItClose, listenLength, feedbackDue, taxYear, taxCsv } from './brief.js';
 
 const $view = document.getElementById('view');
 const $nav = document.getElementById('nav');
@@ -26,8 +26,11 @@ const $fab = document.getElementById('fab');
 // ---------- vocabulary ----------
 
 const STATUS = {
-  listing: 'My listing', prep: 'Coming soon', escrow: 'In escrow', tour: "Other agent's", closed: 'Closed', cancelled: 'Canceled'
+  listing: 'My listing', prep: 'Coming soon', escrow: 'In escrow', tour: "Other agent's", shown: 'Done showing', closed: 'Closed', cancelled: 'Canceled'
 };
+// Not on the active list: a finished deal, or another agent's home you are
+// done showing (James, 2026-10-31).
+const DONE_STATUSES = ['shown', 'closed', 'cancelled'];
 const LIVE = ['listing', 'prep', 'escrow', 'tour'];
 
 // What can be added in one tap. `table` says where it is filed.
@@ -391,8 +394,45 @@ let searchText = '';
 let here = null;
 
 function pickups() {
-  const dead = new Set(props().filter((p) => p.status === 'closed' || p.status === 'cancelled').map((p) => p.id));
+  const dead = new Set(props().filter((p) => DONE_STATUSES.includes(p.status)).map((p) => p.id));
   return store.all('access').filter((a) => KINDS[a.kind]?.tracked && a.status === 'out' && dead.has(a.property_id));
+}
+
+// "Did it close?" — Not yet hides the question on this phone for 7 days.
+const CLOSE_ASK_KEY = (id) => 'bb:closeask:' + id;
+function closeAskHidden(id) {
+  try { return Number(localStorage.getItem(CLOSE_ASK_KEY(id)) || 0) > Date.now(); } catch { return false; }
+}
+function hideCloseAsk(id) {
+  try { localStorage.setItem(CLOSE_ASK_KEY(id), String(Date.now() + 7 * 86400e3)); } catch {}
+}
+// The row: a calm closing tag (never "Overdue", so never the red one on a
+// screen) and two answers.
+function closeAskRow(t) {
+  return html`<div class="row due-row close-ask"><span class="grow"><span class="kw">${ktag('closing', false)}</span><span class="t">${t.text}</span><span class="s">${t.sub}</span></span><span class="close-ask-btns"><button class="btn dark" type="button" data-closeyes="${t.id}">Yes, it closed</button><button class="btn" type="button" data-closenot="${t.id}">Not yet</button></span></div>`;
+}
+// Yes ticks the closing date (a CRM date goes back to the CRM like any tick;
+// a home the agent added, still marked In escrow, becomes Closed). Undo puts
+// both back.
+function wireCloseAsk(root) {
+  root.querySelectorAll('[data-closeyes]').forEach((b) => b.addEventListener('click', () => {
+    const id = b.getAttribute('data-closeyes');
+    const d = store.get('dates', id);
+    if (!d) return toast('That item is no longer here');
+    const p = prop(d.property_id);
+    const closeHome = p && p.source !== 'crm' && p.status === 'escrow';
+    store.save('dates', { id, done: true });
+    if (closeHome) store.save('properties', { id: p.id, status: 'closed' });
+    undoToast('Marked closed', () => {
+      store.save('dates', { id, done: false });
+      if (closeHome) store.save('properties', { id: p.id, status: 'escrow' });
+    });
+  }));
+  root.querySelectorAll('[data-closenot]').forEach((b) => b.addEventListener('click', () => {
+    hideCloseAsk(b.getAttribute('data-closenot'));
+    toast("I'll ask again in a week");
+    render();
+  }));
 }
 
 function todoItems() {
@@ -409,6 +449,13 @@ function todoItems() {
     // Due today or overdue only: the week ahead is in the briefing card, and a
     // closing 6 days out is not something to do today.
     if (n == null || n > 0) continue;
+    // A closing well past its day asks once, calmly, instead of sitting red
+    // forever (asksDidItClose in brief.js). "Not yet" hides it for a week.
+    if (asksDidItClose(d, t)) {
+      if (closeAskHidden(d.id)) continue;
+      items.push({ table: 'dates', id: d.id, ask: true, text: `Did ${street(addr(d.property_id)) || 'this home'} close?`, sub: `Closing date was ${niceDate(d.due)}`, pid: d.property_id, late: false, ck: 'closing', owner: prop(d.property_id)?.owner || null });
+      continue;
+    }
     items.push({ table: 'dates', id: d.id, text: `${d.label} · ${addr(d.property_id)}`, sub: n < 0 ? `${-n} days past · confirm it happened` : whenText(d.due), pid: d.property_id, late: n < 0, ck: itemKind({ kind: 'date', title: d.label }), owner: prop(d.property_id)?.owner || null });
   }
   for (const a of pickups()) {
@@ -784,6 +831,7 @@ function todoLine(t, routePids) {
   const inner = html`<span class="grow"><span class="kw">${ktag(t.ck, t.late)}</span><span class="t">${t.text}</span>${t.sub ? html`<span class="s">${t.sub}</span>` : ''}</span>${onRoute ? html`<span class="on-route">On your route</span>` : ''}`;
   if (t.pickup) return html`<a class="row due-row" href="#/signs">${inner}${icon('chev', 18)}</a>`;
   if (t.tour) return html`<a class="row due-row" href="#/tour/${t.tour}">${inner}${icon('chev', 18)}</a>`;
+  if (t.ask) return closeAskRow(t);
   return html`<button class="row due-row" type="button" data-done="${t.table}:${t.id}"><span class="check"></span>${inner}</button>`;
 }
 const todaysTours = () => store.all('tours').filter((x) => x.date === todayIso() && !x.finished);
@@ -978,6 +1026,7 @@ function wireTodayCommon(root) {
     store.save(table, table === 'tasks' ? { id, done: true, done_at: new Date().toISOString() } : { id, done: true });
     undoToast('Done', () => store.save(table, table === 'tasks' ? { id, done: false, done_at: null } : { id, done: false }));
   }));
+  wireCloseAsk(root);
   autoCrmSync();
   refreshBilling();
 }
@@ -1036,6 +1085,7 @@ function viewTodayFull() {
       ${todos.length ? html`<section class="sec">
         <div class="sec-head"><div class="label">To do today · ${shownTodos.length}</div><button class="btn ghost" type="button" id="addtodo" style="min-height:36px">+ Add</button></div>
         <div class="card list">${shownTodos.length ? shownTodos.map((t) => t.pickup ? html`<a class="row ${colorClass(t.ck, t.late)}" href="#/signs"><span class="check" style="border-color:var(--pending)"></span><span class="grow"><span class="t">${t.text}</span><span class="s">${ktag(t.ck, t.late)}${t.sub}</span></span>${icon('chev', 18)}</a>`
+          : t.ask ? closeAskRow(t)
           : t.tour ? html`<a class="row ${colorClass(t.ck, t.late)}" href="#/tour/${t.tour}"><span class="check" style="border-color:var(--pending)"></span><span class="grow"><span class="t">${t.text}</span><span class="s">${ktag(t.ck, t.late)}${t.sub}</span></span>${icon('chev', 18)}</a>`
           : html`<button class="row ${colorClass(t.ck, t.late)}" type="button" data-done="${t.table}:${t.id}"><span class="check"></span><span class="grow"><span class="t">${t.text}</span><span class="s ${t.late ? 'wait' : ''}">${ktag(t.ck, t.late)}${t.sub}</span></span></button>`) : html`<div class="empty">${todos.length ? 'Nothing of that kind today.' : 'Nothing due. Nice.'}</div>`}</div>
       </section>` : ''}
@@ -1107,6 +1157,7 @@ function viewTodayFull() {
         undoToast('Done', () => store.save(table, table === 'tasks' ? { id, done: false, done_at: null } : { id, done: false }));
         toast('Done');
       }));
+      wireCloseAsk(root);
     }
   };
 }
@@ -1141,7 +1192,7 @@ function addTaskSheet(pid) {
 
 let propFilter = 'live';
 function viewProps() {
-  const groups = { live: (p) => LIVE.includes(p.status), escrow: (p) => p.status === 'escrow', tour: (p) => p.status === 'tour', done: (p) => p.status === 'closed' || p.status === 'cancelled' };
+  const groups = { live: (p) => LIVE.includes(p.status), escrow: (p) => p.status === 'escrow', tour: (p) => p.status === 'tour', done: (p) => DONE_STATUSES.includes(p.status) };
   const sortBy = (() => { try { return localStorage.getItem('bb:propsort') || 'az'; } catch { return 'az'; } })();
   const list = sortProps(props().filter(groups[propFilter]).filter((p) => isWhose(p.owner, viewFilter.who)), sortBy);
   const tab = (k, l) => html`<button class="tab ${propFilter === k ? 'on' : ''}" type="button" data-f="${k}">${l}</button>`;
@@ -1149,7 +1200,7 @@ function viewProps() {
     html: html`${header({ kicker: 'Properties', title: `${props().filter(groups.live).length} active`, right: html`<a class="btn teal" href="#/p/new" style="min-height:40px">+ Add</a>` })}
     <main class="wrap">
       <a class="card row" href="#/sheet"><span class="tile" style="border:0;padding:0"><span class="ic t">${icon('sheet', 22)}</span></span><span class="grow"><span class="t">Snap an MLS sheet</span><span class="s">Bestie reads it and fills in the property card</span></span>${icon('chev', 18)}</a>
-      <div class="tabs">${tab('live', 'Active')}${tab('escrow', 'In escrow')}${tab('tour', "Other agent's")}${tab('done', 'Closed')}</div>
+      <div class="tabs">${tab('live', 'Active')}${tab('escrow', 'In escrow')}${tab('tour', "Other agent's")}${tab('done', 'Done')}</div>
       ${whoChips()}
       <label class="sortby">Sort<select id="propsort">${PROP_SORTS.map(([k, l]) => html`<option value="${k}" ${k === sortBy ? raw('selected') : ''}>${l}</option>`)}</select></label>
       <div class="card list">${list.length ? list.map(propRow) : buddy('Nothing here yet. Add a listing or a home you are showing.')}</div>
@@ -1362,7 +1413,9 @@ function viewHub(id) {
     </main>
     <div class="pbar">
       ${sellerUpd ? html`<button class="btn dark" type="button" id="sellerupd">${icon('text', 18)}Send seller update</button>` : ''}
-      <button class="btn ${sellerUpd ? '' : 'block'}" type="button" id="hubmore">More</button>
+      ${!sellerUpd && canFinish(p) ? html`<button class="btn dark" type="button" id="donehome">Done with this home</button>` : ''}
+      ${!sellerUpd && p.status === 'shown' && p.source !== 'crm' ? html`<button class="btn" type="button" id="showagain">Back to active</button>` : ''}
+      <button class="btn ${sellerUpd || canFinish(p) || (p.status === 'shown' && p.source !== 'crm') ? '' : 'block'}" type="button" id="hubmore">More</button>
     </div>`,
     mount(root) {
       wireMics(root);
@@ -1370,6 +1423,11 @@ function viewHub(id) {
       root.querySelector('#share').addEventListener('click', () => shareSheet(p));
       root.querySelector('#nextup').addEventListener('click', () => datesSheet(id));
       root.querySelector('#statchip')?.addEventListener('click', () => statusSheet(p));
+      root.querySelector('#donehome')?.addEventListener('click', () => doneHomeSheet(id));
+      root.querySelector('#showagain')?.addEventListener('click', () => {
+        store.save('properties', { id, status: 'tour' });
+        undoToast("Back on your active list", () => store.save('properties', { id, status: 'shown' }));
+      });
       root.querySelector('#headsup').addEventListener('click', () => headsUpSheet(id));
       root.querySelector('#gatepin').addEventListener('click', () => pinGate(id));
       root.querySelector('#gateoff')?.addEventListener('click', () => {
@@ -1467,10 +1525,58 @@ function headsUpSheet(id) {
 }
 
 // Tap the status chip in the header: pick one, saved with Undo.
+// "Done with this home" (James, 2026-10-31: "Rough and Ready was a showing to
+// Brian Duarte. He is not interested in that property. What do I do now with
+// this property on the app?"). Another agent's home you showed: say who saw it
+// and how they felt (both optional), and it moves to Done showing. The code
+// and notes stay; the buyer's reaction goes on their buyer page.
+const canFinish = (p) => p && p.status === 'tour' && p.source !== 'crm';
+function lastShowingOf(pid) {
+  let best = null;
+  for (const t of store.all('tours')) {
+    for (const s of t.stops || []) {
+      if (s.property_id !== pid || s.pickup) continue;
+      if (!best || String(t.date) >= String(best.tour.date)) best = { tour: t, stop: s };
+    }
+  }
+  return best;
+}
+function doneHomeSheet(id) {
+  const p = prop(id);
+  if (!p) return;
+  const last = lastShowingOf(id);
+  const buyer0 = p.shown_buyer || (last ? buyerOf(last.tour) : '') || '';
+  let pick = p.shown_reaction || (last && last.stop.reaction) || null;
+  openSheet(html`<div class="sec">
+    <div class="kicker" style="color:var(--teal-text)">Done with this home</div>
+    <div class="title mark-title">${street(p.address)}</div>
+    <div class="small">It leaves your active list. The code and notes stay here, under Properties · Done.</div>
+    <label class="field"><span>Who did you show it to?</span><input id="dbuyer" value="${buyer0}" placeholder="Buyer's name" autocomplete="off"></label>
+    <div class="small" style="margin-top:6px">How did they feel about it?</div>
+    <div class="react-grid" role="group" aria-label="Their reaction">${REACTIONS.map(([k, label]) => html`<button class="react" type="button" data-k="${k}" aria-pressed="${String(pick === k)}">${raw(reactionFace(k, { size: 40, label: '' }))}<span>${label}</span></button>`)}</div>
+    <label class="field"><span>Note (just for you)</span><textarea id="dnote" placeholder="Too far from town">${p.shown_note || ''}</textarea></label>
+    <button class="btn dark big block" type="button" id="ddone">Done · take it off active</button>
+  </div>`, (sh) => {
+    sh.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => {
+      const k = b.getAttribute('data-k');
+      pick = pick === k ? null : k;
+      sh.querySelectorAll('[data-k]').forEach((x) => x.setAttribute('aria-pressed', String(x.getAttribute('data-k') === pick)));
+    }));
+    sh.querySelector('#ddone').addEventListener('click', () => {
+      const was = { status: p.status, shown_buyer: p.shown_buyer || null, shown_reaction: p.shown_reaction || null, shown_note: p.shown_note || null, shown_at: p.shown_at || null };
+      const buyer = sh.querySelector('#dbuyer').value.trim();
+      const note = sh.querySelector('#dnote').value.trim();
+      store.save('properties', { id, status: 'shown', shown_buyer: buyer || null, shown_reaction: pick, shown_note: note || null, shown_at: new Date().toISOString() });
+      closeSheet();
+      undoToast('Done showing · off your active list', () => store.save('properties', { id, ...was }));
+    });
+  });
+}
+
 function statusSheet(p) {
   openSheet(html`<div class="sec">
     <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Status</div>
-    <div class="stat-opts">${['prep', 'listing', 'escrow', 'tour', 'closed', 'cancelled'].map((k) => html`<button type="button" class="stat-opt st-${k} ${p.status === k ? 'on' : ''}" data-status="${k}">${STATUS[k]}</button>`)}</div>
+    <div class="stat-opts">${['prep', 'listing', 'escrow', 'tour', 'shown', 'closed', 'cancelled'].map((k) => html`<button type="button" class="stat-opt st-${k} ${p.status === k ? 'on' : ''}" data-status="${k}">${STATUS[k]}</button>`)}</div>
   </div>`, (sh) => sh.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', () => {
     const next = b.getAttribute('data-status');
     closeSheet();
@@ -2738,35 +2844,35 @@ function viewTourDone(id) {
 // ======================================================================
 
 function viewBuyers() {
-  const list = buyers(store.all('tours'));
+  const list = buyers(store.all('tours'), store.all('properties'));
   return {
     html: html`${header({ back: '#/tours', kicker: 'Tours', title: 'Buyers' })}
     <main class="wrap">
       <div class="card list">${list.length ? list.map((b) => {
         const faces = b.homes.filter((h) => h.reaction).slice(0, 5);
-        return html`<a class="row" href="#/buyer/${encodeURIComponent(b.key)}"><span class="grow"><span class="t">${b.name}</span><span class="s">${b.homes.length} home${b.homes.length === 1 ? '' : 's'} seen · ${b.tours.length} tour${b.tours.length === 1 ? '' : 's'} · last ${niceDate(b.last)}</span></span><span class="face-row">${faces.map((h) => raw(reactionFace(h.reaction, { size: 22, label: '' })))}</span>${icon('chev', 18)}</a>`;
+        return html`<a class="row" href="#/buyer/${encodeURIComponent(b.key)}"><span class="grow"><span class="t">${b.name}</span><span class="s">${b.homes.length} home${b.homes.length === 1 ? '' : 's'} seen${b.tours.length ? ` · ${b.tours.length} tour${b.tours.length === 1 ? '' : 's'}` : ''} · last ${niceDate(b.last)}</span></span><span class="face-row">${faces.map((h) => raw(reactionFace(h.reaction, { size: 22, label: '' })))}</span>${icon('chev', 18)}</a>`;
       }) : buddy('No buyers yet. When you plan a tour, put the buyer\'s name in “Who is it for?”.')}</div>
     </main>`
   };
 }
 
 function viewBuyer(key) {
-  const b = buyers(store.all('tours')).find((x) => x.key === decodeURIComponent(key));
+  const b = buyers(store.all('tours'), store.all('properties')).find((x) => x.key === decodeURIComponent(key));
   if (!b) return notFound();
   const counts = REACTIONS.map(([k, label]) => [k, label, b.homes.filter((h) => h.reaction === k).length]).filter((r) => r[2]);
   return {
-    html: html`${header({ back: '#/buyers', kicker: 'Buyer', title: b.name, sub: `${b.homes.length} home${b.homes.length === 1 ? '' : 's'} seen on ${b.tours.length} tour${b.tours.length === 1 ? '' : 's'}` })}
+    html: html`${header({ back: '#/buyers', kicker: 'Buyer', title: b.name, sub: `${b.homes.length} home${b.homes.length === 1 ? '' : 's'} seen${b.tours.length ? ` on ${b.tours.length} tour${b.tours.length === 1 ? '' : 's'}` : ''}` })}
     <main class="wrap">
       ${counts.length ? html`<div class="face-tally">${counts.map(([k, label, n]) => html`<span class="tally">${raw(reactionFace(k, { size: 26, label: '' }))}<span>${label}</span><b class="num">${n}</b></span>`)}</div>` : ''}
       <section class="sec"><div class="label accent">Homes they saw</div>
       <div class="card list">${b.homes.length ? b.homes.map((h) => html`<div class="row buyer-home">
-        <button class="face-btn" type="button" data-react="${h.tour_id}|${h.stop_id}" aria-label="${h.reaction ? reactionLabel(h.reaction) + '. Tap to change' : 'Add their reaction'}">${h.reaction ? raw(reactionFace(h.reaction, { size: 40, label: '' })) : html`<span class="face-empty">+</span>`}</button>
+        <button class="face-btn" type="button" ${h.from_property ? raw(`data-propdone="${esc(h.property_id)}"`) : raw(`data-react="${esc(h.tour_id)}|${esc(h.stop_id)}"`)} aria-label="${h.reaction ? reactionLabel(h.reaction) + '. Tap to change' : 'Add their reaction'}">${h.reaction ? raw(reactionFace(h.reaction, { size: 40, label: '' })) : html`<span class="face-empty">+</span>`}</button>
         <span class="grow">${h.property_id ? html`<a class="t" href="#/p/${h.property_id}">${h.address}</a>` : html`<span class="t">${h.address}</span>`}
           <span class="s">${h.reaction ? html`<b>${reactionLabel(h.reaction)}</b> · ` : 'No reaction yet · '}${niceDate(h.date)}</span>
           ${h.note ? html`<span class="s">“${h.note}”</span>` : ''}</span></div>`) : html`<div class="empty">No homes marked shown yet.</div>`}</div></section>
-      ${b.homes.length ? html`<button class="btn dark big block" type="button" id="brecap">${icon('text', 18)}Send ${b.name.split(' ')[0]} every home they've seen</button>` : ''}
-      <section class="sec"><div class="label">Tours</div>
-      <div class="card list">${b.tours.map((t) => html`<a class="row" href="#/tour/${t.id}"><span class="grow"><span class="t">${t.name}</span><span class="s">${niceDate(t.date)} · ${(t.stops || []).length} stops</span></span>${icon('chev', 18)}</a>`)}</div></section>
+      ${b.homes.length && b.tours.length ? html`<button class="btn dark big block" type="button" id="brecap">${icon('text', 18)}Send ${b.name.split(' ')[0]} every home they've seen</button>` : ''}
+      ${b.tours.length ? html`<section class="sec"><div class="label">Tours</div>
+      <div class="card list">${b.tours.map((t) => html`<a class="row" href="#/tour/${t.id}"><span class="grow"><span class="t">${t.name}</span><span class="s">${niceDate(t.date)} · ${(t.stops || []).length} stops</span></span>${icon('chev', 18)}</a>`)}</div></section>` : ''}
     </main>`,
     mount(root) {
       // The recap goes to the newest tour's buyer contact, and is stamped there.
@@ -2776,6 +2882,7 @@ function viewBuyer(key) {
         const stop = (store.get('tours', tid)?.stops || []).find((x) => x.id === sid);
         reactionPicker(stop);
       }));
+      root.querySelectorAll('[data-propdone]').forEach((el) => el.addEventListener('click', () => doneHomeSheet(el.getAttribute('data-propdone'))));
     }
   };
 }
@@ -3808,6 +3915,7 @@ function viewSettings() {
           <label class="field"><span>Feed link (from your CRM)</span><input id="crmurl" type="url" autocomplete="off" placeholder="https://yourcrm.com/api/crm/bestie-feed"></label>
           <label class="field"><span>Feed key</span><input id="crmkey" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"></label>
           <button class="btn block" type="button" id="crmmake">Make a new key (copies it)</button>
+          <div class="hint" id="crmmakehint" hidden>Connected. Keep this key: a new one stops the sync until your CRM has the same new key.</div>
         </div>
         <fieldset class="field" id="crmcontacts" style="border:0;padding:0;margin:0"><span>Which contacts should come in?</span>
           <label class="switch"><input type="radio" name="crmc" value="deals">Just the people on my deals</label>
@@ -3938,6 +4046,7 @@ function viewSettings() {
       if (store.cloud.user) {
         const st = root.querySelector('#crmstate');
         const kind = root.querySelector('#crmkind');
+        let feedConnected = false;
         const pickKind = () => {
           const c = CRM_CHOICES.find((x) => x.id === kind.value) || {};
           const keyed = !c.soon && c.id !== 'feed';
@@ -3967,6 +4076,11 @@ function viewSettings() {
           connected = r.connected;
           if (r.connected && !known && !root.querySelector('#crmurl').value) root.querySelector('#crmurl').value = r.feed_url;
           root.querySelector('#crmoff').hidden = !r.connected;
+          // Once a feed link is connected, a new key cuts it off until the
+          // CRM has the same key (Sara, 2026-10-31: one tap broke the sync).
+          feedConnected = r.connected && !known;
+          root.querySelector('#crmmake').textContent = feedConnected ? 'Replace the key…' : 'Make a new key (copies it)';
+          root.querySelector('#crmmakehint').hidden = !feedConnected;
         };
         api('/api/crm-sync').then(show).catch((e) => { st.textContent = e.message; });
         const call = async (body, btn) => {
@@ -3981,6 +4095,7 @@ function viewSettings() {
           btn.disabled = false;
         };
         root.querySelector('#crmmake').addEventListener('click', async () => {
+          if (feedConnected && !confirm('Your CRM is connected with the key you have now. A new key stops the sync until your CRM has the same new key. Make a new key anyway?')) return;
           const bytes = crypto.getRandomValues(new Uint8Array(24));
           const key = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
           root.querySelector('#crmkey').value = key;
@@ -4309,7 +4424,7 @@ function planBanner() {
 
 // Your plan (2026-10-28, phase 8). A trial with no card says so plainly:
 // days left as a bar with the end date, the three plans each also as a
-// monthly cost, founding picked first, one "Choose" button. No countdowns.
+// monthly cost, yearly picked first, one "Choose" button. No countdowns.
 let billingPick = null;
 let billingAskedAt = 0;
 function viewBilling() {
@@ -4326,6 +4441,7 @@ function viewBilling() {
   const left = trial ? Math.max(0, Math.min(14, b.daysLeft)) : 0;
   return {
     form: true, // no Tell Bestie button over "Choose"
+    repaint: true, // nothing to type here: repaint when the sign-in arrives (back from Stripe)
     html: html`${header({ back: '#/settings', kicker: 'Brokers Bestie', title, sub: trial ? 'No card on file. Nothing is charged unless you pick a plan.' : '' })}
     <main class="wrap">
       ${done ? html`<div class="card pad sec" style="border-color:var(--done)"><b>Thank you!</b> Your plan is being set up. It can take a minute to show here.</div>` : ''}
@@ -4337,7 +4453,7 @@ function viewBilling() {
       </section>` : ''}
       ${signedIn && b && !trial ? html`<section class="card pad sec">
         <div style="font-size:18px;font-weight:600">${planSentence(b)}</div>
-        ${b.seats ? html`<div class="small">${b.seats} agent${b.seats === 1 ? '' : 's'} on your team. You pay per agent; the count follows your team.</div>` : ''}
+        ${b.seats ? html`<div class="small">${b.seats} agent${b.seats === 1 ? '' : 's'} on your team.${b.state === 'comped' ? '' : ' You pay per agent; the count follows your team.'}</div>` : ''}
         ${b.subscribed ? html`<button class="btn dark block" type="button" id="portal">Manage billing (card, plan, cancel)</button>` : ''}
       </section>` : ''}
       ${signedIn && !b ? html`<div class="small">Checking your plan…</div>` : ''}
@@ -4350,7 +4466,7 @@ function viewBilling() {
             ${p.note ? html`<span class="small">${p.note}</span>` : ''}</span>
           <span class="pp-price num">${p.price}<span class="small">/${p.per === 'year' ? 'yr' : 'mo'}</span></span>
         </button>`)}</div>
-        <div class="small">Per agent. ${trial ? 'Picking one now still charges nothing until your trial ends.' : ''}</div>
+        <div class="small">Per agent. ${trial ? `Stripe takes your card now, and nothing is charged until your trial ends${endDay ? ` on ${endDay}` : ''}.` : ''}</div>
         <button class="btn dark big block" type="button" id="choose" ${pick ? '' : raw('disabled')}>Choose ${pick ? pick.label : 'a plan'}</button>
         ${b && !b.payments ? html`<div class="small">Payments are not switched on yet.</div>` : ''}
       </section>` : ''}
@@ -4848,7 +4964,7 @@ window.addEventListener('hashchange', () => {
 // Never while a pop-up is open or on a screen with a form: repainting there
 // would wipe what the agent is typing. The pop-up repaints when it closes.
 store.onChange(() => {
-  if (document.querySelector('.sheet-back') || (current && current.form)) { pendingRender = true; return; }
+  if (document.querySelector('.sheet-back') || (current && current.form && !current.repaint)) { pendingRender = true; return; }
   render();
 });
 window.addEventListener('online', render);

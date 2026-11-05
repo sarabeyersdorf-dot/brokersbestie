@@ -59,7 +59,10 @@ export function billingFromSubscription(sub) {
     status: sub.status,
     seats: item.quantity || null,
     trial_ends_at: unix(sub.trial_end),
-    current_period_end: unix(sub.current_period_end || item.current_period_end),
-    cancel_at_period_end: !!sub.cancel_at_period_end
+    // Newer Stripe API versions (2026-09-30) record "cancel at the end of the
+    // period" from the Customer Portal as cancel_at = that date, with
+    // cancel_at_period_end false (seen in the sandbox, 2026-10-31). Read both.
+    current_period_end: unix(sub.cancel_at || sub.current_period_end || item.current_period_end),
+    cancel_at_period_end: !!(sub.cancel_at_period_end || sub.cancel_at)
   };
 }

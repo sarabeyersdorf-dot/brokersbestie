@@ -126,3 +126,33 @@ test('leave by: an old phone location falls back to home base, and with neither 
   const r = dueReminders({ tz: 'America/Los_Angeles', lead_minutes: 30 }, { events: [{ id: 'x', date: '2026-10-28', start_minutes: 620, title: 'Walk-through' }] }, now);
   assert.equal(r[0].title, 'Walk-through at 10:20 AM');
 });
+
+import { cleanTyped, SMS_DAILY_CAP, SMS_PER_NUMBER_CAP } from '../supabase/functions/reminders/safety.js';
+import { readFileSync as readSrc } from 'node:fs';
+
+test('safety texts: US and Canada numbers only, never a +1 Caribbean or overseas number', () => {
+  assert.equal(e164('209-555-1212'), '+12095551212');
+  assert.equal(e164('+1 (416) 555-1212'), '+14165551212'); // Canada
+  assert.equal(e164('787 555 1212'), '+17875551212'); // Puerto Rico is US
+  for (const bad of ['876 555 1212', '+1 809 555 1212', '+44 20 7946 0958', '011 44 20 7946 0958', '555-1212', '', '1 055 555 1212']) assert.equal(e164(bad), '', bad);
+});
+
+test('safety texts: typed words are short and carry no links', () => {
+  assert.equal(cleanTyped('Win $$$ at http://spam.example now www.x.co', 80), 'Win $$$ at now');
+  const t = alertText({ place: 'x'.repeat(500), meeting_name: 'Visit https://bad.example' }, { overdue: false });
+  assert.ok(!/bad\.example/.test(t));
+  assert.ok(t.length < 320, 'two text segments at most');
+  assert.ok(SMS_DAILY_CAP > 0 && SMS_PER_NUMBER_CAP > 0 && SMS_PER_NUMBER_CAP <= SMS_DAILY_CAP);
+});
+
+test('safety texts: the function sends only through the capped, logged path', () => {
+  const src = readSrc(new URL('../supabase/functions/reminders/index.ts', import.meta.url), 'utf8');
+  assert.equal((src.match(/sendSms\(/g) || []).length, 2, 'defined once, called once (inside safetyText)');
+  assert.match(src, /SMS_DAILY_CAP/);
+  assert.match(src, /from\('sms_log'\)\.insert/);
+});
+
+test('no second texting route on Vercel', () => {
+  const src = readSrc(new URL('../api/_lib/server.js', import.meta.url), 'utf8');
+  assert.ok(!/twilio/i.test(src));
+});

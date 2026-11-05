@@ -569,7 +569,8 @@ page (the app is at brokersbestie.vercel.app).
   `store.wipeLocal()` (localStorage `bb*` / `sb-*`, the `bb-photos` IndexedDB,
   local sign-out). Signed out, the card offers "Erase everything on this
   phone". `test/account-delete.test.mjs`.
-- **privacy.html / terms.html**: DRAFTS for a lawyer to review, plain words.
+- **privacy.html / terms.html**: plain words; Sara approved them as written
+  (2026-10-31: "the terms are fine"), so do not re-raise a lawyer review.
   Linked from Settings' footer, under the sign-in button ("By signing in you
   agree…") and on `oh.html` for open house visitors. Terms say plainly the
   safety check-in is not an emergency service. The legal name is just
@@ -753,9 +754,9 @@ the install card no longer carries the buddy.
 `viewBilling` (`#/billing`): in a trial with no plan the header reads **Free
 trial** / "No card on file. Nothing is charged unless you pick a plan.", then
 days left as a bar with the end date, then ONE sentence about what happens
-when the trial ends, which is a **clearly marked placeholder**
-(`TRIAL_END_TEXT`, `TRIAL_END_DECIDED = false` in billing.js) because Sara has
-not decided the wording; the app itself goes read-only (`entitlement`). Then
+when the trial ends (`TRIAL_END_TEXT` in billing.js, Sara 2026-10-31: "After
+14 days you can still see everything, but you'll need a plan to add or change
+anything."); the app itself goes read-only (`entitlement`). Then
 the three plans as radio cards, each with a monthly cost (`PLANS[].monthly`:
 founding "Works out to $5.75 a month" + badge "Until Dec 31", yearly $8.25,
 monthly "Billed every month"), founding picked first (`defaultPlan`; yearly
@@ -908,3 +909,136 @@ not every look. Now:
   Loved it" on each stop with **Use it** (sets the stop's face). Verified
   against the live function: save, pickup refused, bad link 404, no code in
   the reply.
+
+## Legacy feed key: kept, not remade (2026-10-31)
+
+Sara disconnected the Legacy feed to test Follow Up Boss, then could not
+reconnect: "The CRM refused the key". Three new keys later, the key Bestie
+held (Make a new key) and the one the live Legacy site used still differed.
+Legacy now also accepts a key whose SHA-256 is in its `integration_keys`
+table (Legacy db/155), so Bestie's current key works with no Vercel edit.
+Once a feed link is connected, Settings shows **Replace the key…** with a
+hint and a confirm instead of a plain "Make a new key": one tap used to cut
+the sync off. A replaced key needs its fingerprint added on the Legacy side
+(`encode(sha256(convert_to(feed_key,'UTF8')),'hex')` from `crm_links`, never
+the key itself). Legacy's feed now answers a refusal with a `reason`
+(unset / missing / wrong) and lengths; `runSync` still shows only "refused".
+
+## Homes the CRM stopped sending, and closed homes' dates (2026-10-31)
+
+Two July closings (7230 Latigo, 9985 Wendell) showed as 100+ days OVERDUE on
+Today. They were not from the Legacy feed: Sara connected Follow Up Boss that
+morning (FUB deal ids 127/130, still in an escrow stage there), then went back
+to the feed, and **nothing ever removed a CRM home that stops arriving** — 26
+FUB homes stayed, many duplicating Legacy's under other spellings. Her rules:
+- **A home the CRM no longer sends is removed when nothing of the agent's is on
+  it, kept otherwise with its CRM dates ticked** (`pruneProperties` in
+  `api/_lib/crm.js`, the rule is `leftoverPlan` / `AGENT_FIELDS` in feed.js).
+  "The agent's" = a typed field (occupancy, well, septic, HOA, solar, showing
+  notes, directions, links, gate pin, heads-up) or a row the CRM did not make
+  (code, note, to-do, drive, expense, visitor, open house / share link, a
+  phone-made person/date/appointment, a tour stop). Map coordinates do not
+  count (Bestie fills them in). Nothing is pruned when the CRM sends no homes
+  at all. `last_result` says "Removed N homes the CRM no longer sends."
+- **A CRM property that is closed or cancelled has its CRM dates ticked on
+  sync** — only ticks, never un-ticks, never a `crm_dirty` row.
+- **A closing 14+ days past asks "Did <street> close?" instead of showing
+  overdue** (Sara's pick over letting them vanish). `asksDidItClose` /
+  `CLOSE_ASK_DAYS` in brief.js; `closeAskRow` / `wireCloseAsk` in app.js. A
+  calm row (closing tag, never "Overdue", so never the one red item) with
+  **Yes, it closed** (ticks the date, Undo; a home the agent added that still
+  reads In escrow becomes Closed) and **Not yet** (hidden 7 days on this phone,
+  `bb:closeask:<id>`). Other deadlines keep the overdue look.
+Guarded by `test/crm-leftovers.test.mjs` and `test/close-ask.test.mjs`.
+
+## Done with this home (2026-10-31)
+
+James: *"Rough and Ready was a showing to Brian Duarte. He is not interested in
+that property. What do I do now with this property on the app?"* An "Other
+agent's" home stayed on the active list forever, and Canceled was the only
+way off it. Sara chose **Done with this home**: on any phone-made `tour`
+home, the property page's bottom bar has that button (`doneHomeSheet`):
+"Who did you show it to?" (prefilled from the latest tour stop there), the 8
+faces and a private note, all optional, then **Done · take it off active**
+(Undo). It sets status **`shown` = "Done showing"** (`DONE_STATUSES` with
+closed/cancelled: grey, off the active list, listed under Properties → Done,
+gear there counts for pick-up) and `shown_buyer` / `shown_reaction` /
+`shown_note` / `shown_at` (db/027, applied). `buyers(tours, properties)` adds
+those homes to the buyer's page even with no Bestie tour (the newer of a tour
+stop and this record wins); such a buyer has no recap button (nothing to
+stamp). **Back to active** sets it to `tour` again. CRM homes never get the
+button (the CRM owns status). bb-v76. Guarded by `test/buyers.test.mjs`.
+
+## Pre-launch audit fixes (2026-10-31)
+
+Sara: "audit brokers bestie to ensure everything works and I can start taking
+paying users", then "do the fixes".
+- **Joining a team brings everything** (db/028, applied). `bb_join_team` used
+  to move only the 11 tables of db/006, so contacts, vendors, profile,
+  visitors, open-house / share / tour links, faces, reminders and the CRM link
+  were stranded in a memberless team. It now moves EVERY public table with a
+  `team_id`, found at run time (except teams, team_members, team_invites,
+  billing; crm_links / cal_feeds move only if the joined team has none).
+  Storage files cannot be moved by SQL, so the old team stays as a shell with
+  `teams.merged_into`; the photos policy reads through `bb_can_files(folder)`
+  (own team or a team merged into yours); writes still need membership.
+  `api/account.js` deletes merged shells and their files with the team.
+  Verified against the live DB in a rolled-back block.
+- **Safety texts are capped** (`reminders` function version 7). Every text
+  goes through `safetyText`: US/Canada numbers only (`e164` refuses overseas
+  and the +1 Caribbean area codes, which bill as international), at most
+  `SMS_DAILY_CAP` (10) per team and `SMS_PER_NUMBER_CAP` (4) per number in
+  24 h, logged in `sms_log` (db/028, RLS on, no policies). Typed words in the
+  text are shortened and links removed (`cleanTyped`). Send help still opens
+  the agent's own Messages too, so a capped server text is never the only
+  alert. The old Vercel sender (`api/checkin.js`, `api/cron/checkins.js`,
+  `sendText`/`alertText` in server.js) is deleted: one sender only.
+- Still Sara's (Cowork prompt given): Stripe live mode + prices, webhook
+  endpoints (none existed, even in the sandbox), Vercel keys, a test
+  purchase, then `billing_enforced` = 'true'; lawyer review of terms/privacy.
+
+## The sandbox test purchase, and what it changed (2026-10-31)
+
+Cowork set up the Stripe sandbox ("Brokers Bestie sandbox", acct_1UVbZC8R2LiDEdT0;
+NOT the empty "Test mode" account acct_1UVbZ65X5XVV9GwC): webhook
+we_1UWhKZ8R2LiDEdT0XDzEJq4W with the 7 events, Customer Portal (card, cancel at
+period end, switch $99/yr <-> $12/mo). Sara put the sandbox keys in Vercel and
+bought Monthly as sarasellscalifornia+bbtest@gmail.com: every webhook answered
+200 and the `billing` row read trialing / bestie_monthly. Three fixes:
+- **No founding rate** (Sara: "no founding rate, $99"). The portal allows one
+  yearly price per product anyway. `plansOffered()` = PLANS not `retired`;
+  the $69 row stays only so a subscription on it would still read.
+- **Checkout always takes a card** (`payment_method_collection: 'always'`).
+  With `if_required` a plan was "picked" with no card and would quietly cancel
+  at trial end. The trial end date still carries over, so nothing is charged
+  early.
+- **A portal cancel arrives as `cancel_at`** (API 2026-09-30) with
+  `cancel_at_period_end` false. `billingFromSubscription` reads both and uses
+  `cancel_at` as the end date, so Your plan says "ending <date>".
+- **Back from Stripe the plan page looked signed out.** viewBilling is
+  `form: true` (to hide the mic), and the store's change listener never
+  repaints a form, so the sign-in arriving a moment after the page drew never
+  showed. `repaint: true` on a view = nothing to type, repaint freely.
+
+## One team per person (2026-10-31, db/029, applied)
+
+The second sandbox test account left an empty, memberless team after Delete
+my account: on first sign-in the phone asks for its team from two places at
+once (startCloud and the sign-in event both run syncNow), and each called
+`bb_create_team`. It now takes a per-person advisory lock and returns the
+team the person already has. `api/account.js` also deletes any other team the
+person is the only member of (with its files). The leftover was removed.
+
+## Live (2026-10-31)
+
+Stripe LIVE account acct_1UVbZ65X5XVV9GwC (verified): product
+prod_VXnqiJYpO8lEoC, prices bestie_standard_annual $99/yr and bestie_monthly
+$12/mo, webhook we_1UWiGG5X5XVV9GwCiHDsbx4A (the 7 events), portal configured
+with business name, support email and policy links. Sara put the live keys in
+Vercel; the secret key is a RESTRICTED key ("full access except sensitive
+operations", rk_live_) — if a Stripe call ever returns a permission error,
+check that first. **`billing_enforced` = 'true' since 2026-10-31**: verified
+in a rolled-back block that Sara and James (comped) can write, a new trial
+can, and a 15-day-old trial cannot. The comped plan card no longer says "You
+pay per agent". Stripe still lists "Management and ownership: Incomplete"
+for Sara to finish in the dashboard.

@@ -1,6 +1,15 @@
 {
   "redirects": [
-    { "source": "/demo", "destination": "/?demo=1", "permanent": false }
+    {
+      "source": "/demo",
+      "destination": "/?demo=1",
+      "permanent": false
+    },
+    {
+      "source": "/start",
+      "destination": "/welcome",
+      "permanent": false
+    }
   ],
   "crons": [
     {
@@ -34,6 +43,12 @@
           "value": "geolocation=(self), microphone=(self), camera=(self)"
         }
       ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/welcome",
+      "destination": "/welcome.html"
     }
   ]
 }

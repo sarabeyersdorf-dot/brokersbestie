@@ -51,14 +51,16 @@ export default async function handler(req, res) {
 
     if (body.op === 'checkout') {
       const plan = plansOffered().find((p) => p.id === body.plan);
-      if (!plan) return send(res, 400, { error: PLANS.some((p) => p.id === body.plan) ? 'The founding price closed on Dec 31, 2026.' : 'Pick a plan' });
+      if (!plan) return send(res, 400, { error: PLANS.some((p) => p.id === body.plan) ? 'That plan is no longer offered.' : 'Pick a plan' });
       if (billing && billing.stripe_subscription_id && ['trialing', 'active', 'past_due'].includes(billing.status)) return send(res, 400, { error: 'Your team already has a plan. Use Manage billing to change it.' });
       const prices = await stripe('/prices', { params: { lookup_keys: [plan.lookup], active: true } });
       const price = prices.data && prices.data[0];
       if (!price) return send(res, 500, { error: 'That plan is not set up in Stripe yet.' });
       // The free trial runs from the day the team started (no card needed to
       // begin). Choosing a plan during it keeps the same end date, so nothing
-      // is charged before then; a team that never adds a card is cancelled.
+      // is charged before then, but Checkout ALWAYS takes a card (Stripe test,
+      // 2026-10-31: when the card was optional, a plan could be picked with none,
+      // and it would quietly cancel itself when the trial ended).
       const ent = entitlement(billing, created, { enforced: true });
       const trialEnd = ent.trialEnd && new Date(ent.trialEnd) - Date.now() > 48 * 3600e3 ? Math.floor(new Date(ent.trialEnd) / 1000) : null;
       const params = {
@@ -67,7 +69,7 @@ export default async function handler(req, res) {
         client_reference_id: teamId,
         metadata: { team_id: teamId },
         subscription_data: { metadata: { team_id: teamId }, ...(trialEnd ? { trial_end: trialEnd, trial_settings: { end_behavior: { missing_payment_method: 'cancel' } } } : {}) },
-        ...(trialEnd ? { payment_method_collection: 'if_required' } : {}),
+        payment_method_collection: 'always',
         ...(billing && billing.stripe_customer_id ? { customer: billing.stripe_customer_id } : { customer_email: user.email }),
         allow_promotion_codes: true,
         success_url: `${origin(req)}/?billing=done#/billing`,
