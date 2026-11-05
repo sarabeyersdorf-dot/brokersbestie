@@ -37,7 +37,7 @@ Ignore two things in the long screenshots. The dark bottom bar and the "Tell Bes
 
 **Business:**
 - Sold to other brokers: $99/yr per agent, $69/yr founding price through Dec 31 2026, or $12/mo.
-- 14-day free trial, no card.
+- 14-day free trial. Cancel any time.
 - A home-screen web app (PWA) now; the App Store later.
 
 ## 2. Decisions already made (please design within these)

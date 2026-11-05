@@ -752,7 +752,7 @@ the install card no longer carries the buddy.
 ## Your plan screen (2026-10-28, phase 8)
 
 `viewBilling` (`#/billing`): in a trial with no plan the header reads **Free
-trial** / "No card on file. Nothing is charged unless you pick a plan.", then
+trial** / "Nothing is charged during your free trial.", then
 days left as a bar with the end date, then ONE sentence about what happens
 when the trial ends (`TRIAL_END_TEXT` in billing.js, Sara 2026-10-31: "After
 14 days you can still see everything, but you'll need a plan to add or change
@@ -1073,3 +1073,17 @@ verification (+1 833 528 1197) needs the person RECEIVING texts to have agreed.
   contact; the running check-in says plainly when the contact hasn't said YES.
   Only shown when texting is on (`safetyAuto`). Privacy and terms have `#sms`
   sections (consent never shared or sold for marketing). bb-v82.
+
+## Square chips, folding Active, no "no card" (2026-11-05)
+
+Sara: "update the showing bubbles to rectangles and make the active folder able
+to be collapsed." Every `.chip` (filter: Showings, Appointments...), `.tab`
+(Properties: Active / In escrow..., Calendar: From today...), `.stat-chip`,
+`.tally` and `.chip-clear` is a 6px-corner rectangle; only the kind dot inside
+stays round. Today's **Active** list is a `details.fold` (`foldOpen` /
+`wireFolds`, kept per phone in `bb:fold:active`, open by default; "All
+properties" in its header still opens Properties). Sara (via Cowork) stopped
+saying "no card": welcome.html says "14 days free. Cancel any time."; the plan
+screen in a trial says "Nothing is charged during your free trial." The flow is
+unchanged: a new agent is in the app with just an email; the card is asked for
+only at Choose a plan (`payment_method_collection: 'always'`).
