@@ -941,7 +941,7 @@ function viewTodayField(focus) {
       <section class="sec">
         <div class="tiles">${['gate', 'photo', 'note', 'receipt'].map((k) => html`<a class="tile" href="#/quick/${k}${pid ? '/' + pid : ''}"><span class="ic ${KINDS[k].y ? 'y' : ''}">${icon(KINDS[k].icon, 22)}</span>${KINDS[k].short || KINDS[k].label}</a>`)}</div>
       </section>
-      ${chk ? html`<section class="card sec safety-bar">${raw(okFace({ size: 40, label: '' }))}<a class="grow" href="#/safety"><span class="t">Safety check-in on · ${Math.max(0, Math.round((new Date(chk.due_at) - Date.now()) / 60000))} min left</span><span class="s">${safetyAuto() ? `Texts ${chk.contact_name || 'your contact'} if you don't check in` : `Opens a text to ${chk.contact_name || 'your contact'} if you don't check in`}</span></a><button class="btn dark" type="button" id="imok">I'm OK</button></section>` : ''}
+      ${chk ? html`<section class="card sec safety-bar">${raw(okFace({ size: 40, label: '' }))}<a class="grow" href="#/safety"><span class="t">Safety check-in on · ${Math.max(0, Math.round((new Date(chk.due_at) - Date.now()) / 60000))} min left</span><span class="s">${safetyAuto() ? `Texts ${chk.contact_name || 'your contact'} if you don't check in` : `Asks if you're OK when time is up`}</span></a><button class="btn dark" type="button" id="imok">I'm OK</button></section>` : ''}
       ${later.length ? html`<section class="sec"><div class="label">Later today</div><div class="card list">${later.map((x) => dayItemRow(x))}</div></section>` : ''}
       ${everythingLink()}
     </main>`,
@@ -3705,7 +3705,7 @@ function viewSafety() {
         <button class="btn green big block" type="button" id="ok">I'm OK · end check-in</button>
         <button class="btn block" type="button" id="extend">Add 15 minutes</button>
         <button class="btn red big block" type="button" id="help">Send help now</button>
-        <div class="${serverOn ? 'note-box' : 'warn-box'}">${serverOn ? html`<b>Automatic alert is on.</b> If the timer runs out and you don't answer, ${c.contact_name || 'your contact'} gets a text from Brokers Bestie with where you are and who you're with, even if your phone is off.` : html`<b>Phone-only mode.</b> If the timer runs out, this phone will buzz and open a text to ${c.contact_name || 'your contact'} for you to send. Keep this phone with you and the sound on.`}</div>
+        <div class="${serverOn ? 'note-box' : 'warn-box'}">${serverOn ? html`<b>Automatic alert is on.</b> If the timer runs out and you don't answer, ${c.contact_name || 'your contact'} gets a text from Brokers Bestie with where you are and who you're with, even if your phone is off.` : html`<b>Phone-only mode.</b> If the timer runs out, this phone buzzes and asks if you're OK. Nothing is sent on its own: tap Send help now and a text to ${c.contact_name || 'your contact'} opens, with where you are, for you to send. Keep this phone with you and the sound on.`}</div>
       </main>`,
       mount(root) {
         clearInterval(tick);
@@ -3740,7 +3740,7 @@ function viewSafety() {
       <div class="grid2">${fieldHtml({ name: 'contact_name', label: 'Name', placeholder: 'James' }, contact.name)}${fieldHtml({ name: 'contact_phone', label: 'Phone', type: 'tel' }, contact.phone)}</div>
       <div class="hint">They get where you are, who you're meeting and that person's phone number.</div>
       <button class="btn dark big block" type="submit">${icon('shield', 20)}Start check-in</button>
-      ${!serverOn ? html`<div class="warn-box"><b>Phone-only mode:</b> when time is up this phone buzzes and opens the text for you. Keep it with you with the sound on.</div>` : ''}
+      ${!serverOn ? html`<div class="warn-box"><b>Phone-only mode:</b> when time is up this phone buzzes and asks if you're OK. Nothing is sent on its own: tap Send help now to open the text. Keep it with you with the sound on.</div>` : ''}
     </form></main>`,
     mount(root) {
       let minutes = startMins;

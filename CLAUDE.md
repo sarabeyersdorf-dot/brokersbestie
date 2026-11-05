@@ -847,7 +847,7 @@ modes:
   right, and a "N seller updates ready to send · Review" row.
 - The safety check-in on Today is one dark row with the "You OK?" face and an
   **I'm OK** button (`endCheckin(c, 'ok')`). Its words say "Texts …" only
-  when the server alert is on, else "Opens a text to …".
+  when the server alert is on, else "Asks if you're OK when time is up" (2026-11-05: phone-only never opens Messages by itself; only Send help now does).
 
 ## The other mock-ups, matched (2026-10-29)
 

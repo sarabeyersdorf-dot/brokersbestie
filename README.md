@@ -27,7 +27,7 @@ Dropbox, read an MLS sheet into a listing, brokerage owner view, App Store versi
 ## Two modes
 
 - **On this phone** (works now, no setup): everything is saved on the phone. Nothing
-  leaves it. Safety check-in buzzes and opens a text for the agent to send.
+  leaves it. Safety check-in buzzes and asks "Are you OK?"; nothing is sent on its own, and "Send help now" opens a text for the agent to send.
 - **Team mode** (needs the three setup steps below): sign in by email link, data saved
   to the team's private database and shared with teammates, photos backed up, and
   safety alerts text the contact automatically even if the agent's phone is dead.
