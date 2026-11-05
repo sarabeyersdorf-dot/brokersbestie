@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Safety texts · Brokers Bestie</title>
+<meta name="description" content="How Brokers Bestie safety contacts agree to texts, what they receive, and how to stop them.">
+<link rel="icon" href="icons/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&family=Barlow:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* /sms (2026-11-05): how a safety contact agrees to texts, for carriers and
+     Twilio toll-free verification ("opt-in proof"). Same look as the legal
+     pages. The message texts here must match supabase/functions/reminders/
+     safety.js word for word; test/sms-page.test.mjs checks it. */
+  :root { --ink: #1f2326; --ink-2: #4a5154; --bg: #eef0ef; --card: #fff; --line: #d5dad8; --teal: #19c3b1; --teal-text: #0b7a6e; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 Barlow, system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  header { background: #202428; color: #fff; padding: 22px 16px 18px; border-bottom: 4px solid var(--teal); }
+  header .in, main { max-width: 760px; margin: 0 auto; }
+  header a { color: #2fd8c5; text-decoration: none; font-weight: 600; font-size: 15px; }
+  h1 { font: 700 34px/1.05 'Barlow Condensed', sans-serif; text-transform: uppercase; margin: 10px 0 4px; }
+  header p { margin: 0; color: #cfd6d3; font-size: 15px; }
+  main { padding: 20px 16px 60px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px 18px; margin: 0 0 14px; }
+  h2 { font: 700 21px/1.15 'Barlow Condensed', sans-serif; text-transform: uppercase; letter-spacing: .02em; margin: 16px 0 6px; }
+  p, li { color: var(--ink-2); }
+  ul { padding-left: 20px; }
+  li { margin: 4px 0; }
+  b { color: var(--ink); }
+  a { color: var(--teal-text); }
+  .foot { text-align: center; font-size: 14px; color: var(--ink-2); }
+
+  .shots { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 14px; }
+  figure { margin: 0; flex: 1 1 220px; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 12px; display: block; }
+  figcaption { font-size: 14px; color: var(--ink-2); margin-top: 6px; }
+  .thread { background: #f4f6f5; border-radius: 14px; padding: 12px; margin: 10px 0 14px; display: flex; flex-direction: column; gap: 8px; }
+  .msg { max-width: 86%; padding: 9px 13px; border-radius: 18px; font-size: 15px; line-height: 1.4; }
+  .msg.in { background: #e3e7e5; color: var(--ink); align-self: flex-start; border-bottom-left-radius: 5px; }
+  .msg.out { background: #1b7f72; color: #fff; align-self: flex-end; border-bottom-right-radius: 5px; }
+  .who { font-size: 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .06em; }
+  ol li { margin: 8px 0; }
+</style>
+</head>
+<body>
+<header><div class="in">
+  <a href="./">← Brokers Bestie</a>
+  <h1>Safety texts</h1>
+  <p>How a safety contact agrees to texts from Brokers Bestie, what they get, and how to stop.</p>
+</div></header>
+<main>
+  <section>
+    <h2>What this is</h2>
+    <p><b>Brokers Bestie</b> is a phone app for real estate agents. Before meeting a stranger at a property, an agent can start a <b>safety check-in</b>. If the agent doesn't check back in, or presses <b>Send help</b>, Bestie texts the one emergency contact the agent chose, with where the agent is and who they were meeting.</p>
+    <p>That's the only text Bestie sends. No marketing, no promotions, and nothing to the agent's clients.</p>
+  </section>
+
+  <section>
+    <h2>How a contact agrees (opt-in)</h2>
+    <ol>
+      <li><b>The agent adds the contact in the app.</b> On the safety check-in screen the agent enters the person's name and mobile number. The screen says: <i>“We'll text your contact once to confirm. They can reply STOP anytime.”</i></li>
+      <li><b>Bestie texts the contact once to ask.</b> Nothing else is ever sent until they answer.</li>
+      <li><b>The contact replies YES to agree</b>, or STOP to opt out. Alerts go <b>only</b> to a contact who replied YES. The app shows the agent whether the contact is waiting, has agreed, or opted out.</li>
+    </ol>
+    <div class="shots">
+      <figure><img src="sms/sms-optin-form.png" alt="Brokers Bestie safety check-in screen: the agent enters the contact's name and phone; the screen says Bestie will text the contact once to confirm and they can reply STOP anytime, with a button Text Pat Smith to confirm." width="390" loading="lazy"><figcaption>1. The agent adds a contact. The disclosure is right under the fields.</figcaption></figure>
+      <figure><img src="sms/sms-optin-pending.png" alt="The same screen after the confirmation text went out: Waiting for Pat Smith to reply YES. Until then, a missed check-in only buzzes this phone." width="390" loading="lazy"><figcaption>2. Waiting for the contact's YES. No alerts can go to them yet.</figcaption></figure>
+      <figure><img src="sms/sms-optin-accepted.png" alt="The same screen once the contact agreed: Pat Smith said YES to safety texts." width="390" loading="lazy"><figcaption>3. The contact said YES. Alerts are on for them.</figcaption></figure>
+    </div>
+    <p class="who">The confirmation text, and the reply to YES</p>
+    <div class="thread">
+      <div class="msg in">Brokers Bestie: Jane Smith added you as their safety contact. You'll only get a text if they miss a safety check-in or ask for help. Reply YES to accept or STOP to opt out. Msg &amp; data rates may apply.</div>
+      <div class="msg out">YES</div>
+      <div class="msg in">Brokers Bestie: thanks! You're Jane Smith's safety contact. You'll only hear from us if they miss a check-in or ask for help. Reply STOP anytime to opt out, HELP for help.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What an alert looks like</h2>
+    <div class="thread">
+      <div class="msg in">Brokers Bestie safety alert: Jane Smith started a safety check-in at 123 Main St, Angels Camp, CA and has not checked back in. They were meeting Tom. Location: https://maps.google.com/?q=38.0683,-120.5397 Please try to reach them now. If you can't, call 911. Reply STOP to opt out.</div>
+    </div>
+    <p>If the agent presses Send help, the alert says they pressed SEND HELP instead.</p>
+  </section>
+
+  <section>
+    <h2>Stop, help, rates</h2>
+    <ul>
+      <li><b>STOP</b> (or UNSUBSCRIBE, CANCEL, END, QUIT): no more texts from Brokers Bestie, for any agent.</li>
+      <li><b>HELP</b>: we reply: <i>“Brokers Bestie: safety check-in alerts for real estate agents, sent only when an agent you agreed to look out for misses a check-in or asks for help. Msg &amp; data rates may apply. Reply STOP to opt out. Help: support@brokersbestie.app”</i></li>
+      <li>Message frequency varies. Most contacts never get an alert. Message and data rates may apply. Carriers are not liable for delayed or undelivered messages.</li>
+      <li><b>Mobile numbers and SMS consent are never shared with or sold to third parties or affiliates for marketing or promotional purposes.</b></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>More</h2>
+    <p><a href="privacy.html#sms">Privacy policy</a> · <a href="terms.html#sms">Terms of use</a> · Questions: <a href="mailto:support@brokersbestie.app">support@brokersbestie.app</a></p>
+  </section>
+  <p class="foot">Brokers Bestie · brokersbestie.app</p>
+</main>
+</body>
+</html>

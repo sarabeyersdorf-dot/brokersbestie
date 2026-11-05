@@ -21,17 +21,66 @@ export function cleanTyped(v, n) {
   return String(v ?? '').replace(/https?:\/\/\S+|www\.\S+/gi, '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
 }
 
-// The words the contact receives.
+// Who the agent is, as the contact will read it.
+export function agentWords(c) { return cleanTyped(c && c.agent_name, 40) || 'The agent you look out for'; }
+
+// The words the contact receives. Every alert names the agent and ends with
+// how to opt out (carriers require it on toll-free numbers).
 export function alertText(c, { overdue: late }) {
   const where = cleanTyped(c.place, 80) || 'a showing';
   const name = cleanTyped(c.meeting_name, 40);
   const phone = cleanTyped(c.meeting_phone, 20);
-  const who = name ? ` meeting ${name}${phone ? ` (${phone})` : ''}` : '';
+  const who = name ? ` They were meeting ${name}${phone ? `, phone ${phone}` : ''}.` : '';
   const lat = Number(c.lat), lng = Number(c.lng);
-  const map = c.lat != null && Number.isFinite(lat) && Number.isFinite(lng) ? ` Map: https://maps.google.com/?q=${lat},${lng}` : '';
+  const map = c.lat != null && Number.isFinite(lat) && Number.isFinite(lng) ? ` Location: https://maps.google.com/?q=${lat},${lng}` : '';
+  const agent = agentWords(c);
   return late
-    ? `Brokers Bestie safety alert: your teammate started a check-in at ${where}${who} and has not checked back in. Please call them now. If you can't reach them, call 911.${map}`
-    : `Brokers Bestie: your teammate pressed SEND HELP at ${where}${who}. Call them now. If you can't reach them, call 911.${map}`;
+    ? `Brokers Bestie safety alert: ${agent} started a safety check-in at ${where} and has not checked back in.${who}${map} Please try to reach them now. If you can't, call 911. Reply STOP to opt out.`
+    : `Brokers Bestie safety alert: ${agent} pressed SEND HELP at ${where}.${who}${map} Call them now. If you can't reach them, call 911. Reply STOP to opt out.`;
+}
+
+// Safety contacts must agree before any alert is sent to them (carrier rules
+// for toll-free texting, 2026-11-05). The agent adds a contact; Bestie texts
+// them ONCE to ask; only a YES turns alerts on for that contact.
+export function inviteText(agentName) {
+  const agent = cleanTyped(agentName, 40) || 'A real estate agent';
+  return `Brokers Bestie: ${agent} added you as their safety contact. You'll only get a text if they miss a safety check-in or ask for help. Reply YES to accept or STOP to opt out. Msg & data rates may apply.`;
+}
+export function acceptedText(agentName) {
+  const agent = cleanTyped(agentName, 40);
+  return `Brokers Bestie: thanks! You're ${agent ? agent + "'s" : 'now a'} safety contact. You'll only hear from us if they miss a check-in or ask for help. Reply STOP anytime to opt out, HELP for help.`;
+}
+export const HELP_TEXT = 'Brokers Bestie: safety check-in alerts for real estate agents, sent only when an agent you agreed to look out for misses a check-in or asks for help. Msg & data rates may apply. Reply STOP to opt out. Help: support@brokersbestie.app';
+
+// What an incoming text means. Carrier-standard words; anything else is ignored.
+export function smsKeyword(body) {
+  const w = String(body || '').trim().toUpperCase().replace(/[^A-Z ]/g, '').split(/\s+/)[0] || '';
+  if (['YES', 'Y', 'ACCEPT', 'AGREE'].includes(w)) return 'yes';
+  if (['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT', 'REVOKE', 'OPTOUT'].includes(w)) return 'stop';
+  if (['START', 'UNSTOP', 'UNSTART'].includes(w)) return 'start';
+  if (['HELP', 'INFO'].includes(w)) return 'help';
+  return null;
+}
+
+// One contact's status from its rows (a number can be on more than one team).
+// A STOP anywhere wins; then the row for this team.
+export function contactStatus(rows, teamId) {
+  const list = rows || [];
+  if (list.some((r) => r.status === 'opted_out')) return 'opted_out';
+  const mine = list.filter((r) => r.team_id === teamId);
+  if (mine.some((r) => r.status === 'accepted')) return 'accepted';
+  if (mine.some((r) => r.status === 'pending')) return 'pending';
+  return 'none';
+}
+
+// Twilio's request signature (X-Twilio-Signature): HMAC-SHA1 of the full URL
+// followed by each POST parameter name and value, sorted by name, base64.
+export async function twilioSignature(authToken, url, params) {
+  const data = url + Object.keys(params).sort().map((k) => k + params[k]).join('');
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(authToken), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data)));
+  let bin = ''; for (const b of sig) bin += String.fromCharCode(b);
+  return btoa(bin);
 }
 
 // +1 area codes that are NOT the US or Canada (the Caribbean and Bermuda).

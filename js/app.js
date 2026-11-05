@@ -15,7 +15,7 @@ import { CONTACT_KINDS, parseContacts, planImport, contactsChoice, contactsMode 
 import { CRM_CHOICES } from './crmlist.js';
 import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText, feedbackRequestText, lateText, lateBuyerText, facesLinkText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
-import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, openHouseLink, shareWhere, shareLink, stopShareLinks, tourLink, buyerFaces } from './push.js';
+import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, contactCall, openHouseLink, shareWhere, shareLink, stopShareLinks, tourLink, buyerFaces } from './push.js';
 import { REACTIONS, reactionFace, reactionLabel, okFace, winkFace } from './faces.js';
 import { dayItems, agenda, briefing, briefingText, addDays, timeToMinutes, minutesToTime, COLOR_KINDS, itemKind, isLate, filterItems, PROP_SORTS, sortProps, isWhose, teamNames, firstName, bookedSummary, whenSaid, buyers, buyerOf, buyerKey, sellerStats, sellerUpdatesDue, sellerUpdatesPastDue, doorCodes, codeTrust, headsUp, HEADS_UP, todayMode, asksDidItClose, listenLength, feedbackDue, taxYear, taxCsv } from './brief.js';
 
@@ -3705,7 +3705,7 @@ function viewSafety() {
         <button class="btn green big block" type="button" id="ok">I'm OK · end check-in</button>
         <button class="btn block" type="button" id="extend">Add 15 minutes</button>
         <button class="btn red big block" type="button" id="help">Send help now</button>
-        <div class="${serverOn ? 'note-box' : 'warn-box'}">${serverOn ? html`<b>Automatic alert is on.</b> If the timer runs out and you don't answer, ${c.contact_name || 'your contact'} gets a text from Brokers Bestie with where you are and who you're with, even if your phone is off.` : html`<b>Phone-only mode.</b> If the timer runs out, this phone buzzes and asks if you're OK. Nothing is sent on its own: tap Send help now and a text to ${c.contact_name || 'your contact'} opens, with where you are, for you to send. Keep this phone with you and the sound on.`}</div>
+        <div class="${serverOn && contactStatusOf(c.contact_phone) === 'accepted' ? 'note-box' : 'warn-box'}">${serverOn && contactStatusOf(c.contact_phone) !== 'accepted' ? html`<b>${c.contact_name || 'Your contact'} hasn't replied YES yet.</b> Until they do, Bestie can't text them: if the timer runs out, this phone buzzes and asks if you're OK, and Send help now opens a text for you to send.` : serverOn ? html`<b>Automatic alert is on.</b> If the timer runs out and you don't answer, ${c.contact_name || 'your contact'} gets a text from Brokers Bestie with where you are and who you're with, even if your phone is off.` : html`<b>Phone-only mode.</b> If the timer runs out, this phone buzzes and asks if you're OK. Nothing is sent on its own: tap Send help now and a text to ${c.contact_name || 'your contact'} opens, with where you are, for you to send. Keep this phone with you and the sound on.`}</div>
       </main>`,
       mount(root) {
         clearInterval(tick);
@@ -3738,7 +3738,8 @@ function viewSafety() {
       <div class="tabs" id="mins">${[30, 45, 60, 90].map((m) => html`<button class="tab ${m === startMins ? 'on' : ''}" type="button" data-m="${m}">${m} min</button>`)}</div>
       <div class="label" style="margin-top:6px">If I don't answer, text</div>
       <div class="grid2">${fieldHtml({ name: 'contact_name', label: 'Name', placeholder: 'James' }, contact.name)}${fieldHtml({ name: 'contact_phone', label: 'Phone', type: 'tel' }, contact.phone)}</div>
-      <div class="hint">They get where you are, who you're meeting and that person's phone number.</div>
+      <div class="hint">They get where you are, who you're meeting and that person's phone number.${serverOn ? ' We\'ll text your contact once to confirm. They can reply STOP anytime.' : ''}</div>
+      ${serverOn ? html`<div class="contact-stat" id="cstat" aria-live="polite">${contactStatHtml(contact.name, contactStatusOf(contact.phone))}</div>` : ''}
       <button class="btn dark big block" type="submit">${icon('shield', 20)}Start check-in</button>
       ${!serverOn ? html`<div class="warn-box"><b>Phone-only mode:</b> when time is up this phone buzzes and asks if you're OK. Nothing is sent on its own: tap Send help now to open the text. Keep it with you with the sound on.</div>` : ''}
     </form></main>`,
@@ -3750,6 +3751,7 @@ function viewSafety() {
         root.querySelectorAll('[data-m]').forEach((x) => x.classList.toggle('on', x === b));
       }));
       if (!n) locate({ quiet: true }).then((f) => { const near = nearest(f); const el = root.querySelector('[name=place]'); if (near && el && !el.value) el.value = near.p.address; });
+      if (serverOn) wireContactStat(root);
       root.querySelector('#sf').addEventListener('submit', async (e) => {
         e.preventDefault();
         const v = Object.fromEntries(new FormData(e.target).entries());
@@ -3757,8 +3759,9 @@ function viewSafety() {
         store.saveSettings({ checkinContact: { name: v.contact_name, phone: v.contact_phone } });
         const fix = await locate({ quiet: true });
         const now = Date.now();
-        const row = store.save('checkins', { ...v, minutes, status: 'active', started_at: new Date(now).toISOString(), due_at: new Date(now + minutes * 60000).toISOString(), lat: fix?.lat ?? null, lng: fix?.lng ?? null });
+        const row = store.save('checkins', { ...v, agent_name: agentFullName(), minutes, status: 'active', started_at: new Date(now).toISOString(), due_at: new Date(now + minutes * 60000).toISOString(), lat: fix?.lat ?? null, lng: fix?.lng ?? null });
         serverCheckin('start', row);
+        if (serverOn && contactStatusOf(v.contact_phone) !== 'accepted') inviteContact(v.contact_name, v.contact_phone).catch(() => {});
         if (typeof Notification !== 'undefined' && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
         render();
       });
@@ -3769,6 +3772,56 @@ function viewSafety() {
 // Automatic texts are on when signed in to a team AND the server says texting
 // is set up (Twilio in the Supabase function). Otherwise: phone-only, said plainly.
 function safetyAuto() { return !!(store.cloud.enabled && store.cloud.user && store.settings().safetySms === true); }
+
+// ---- safety contacts must say YES first (2026-11-05, carrier rules) ----
+// Statuses are cached in settings.contactStatus by the phone's last 10 digits,
+// so the screens tell the truth offline too.
+const phoneKey = (p) => digits(p).slice(-10);
+function contactStatusOf(phone) { return (store.settings().contactStatus || {})[phoneKey(phone)] || 'none'; }
+function keepContactStatus(map) {
+  const cur = { ...(store.settings().contactStatus || {}) };
+  for (const [p, st] of Object.entries(map || {})) cur[phoneKey(p)] = st;
+  store.saveSettings({ contactStatus: cur });
+}
+function agentFullName() {
+  const p = myProfile();
+  const n = (p && p.full_name) || store.settings().myName || '';
+  return n ? n.replace(/\b\w/g, (m) => m.toUpperCase()) : '';
+}
+function contactStatHtml(name, st) {
+  const who = name || 'your contact';
+  if (st === 'accepted') return html`<span class="ok">✓ ${who} said YES to safety texts.</span>`;
+  if (st === 'pending') return html`<span>Waiting for ${who} to reply YES. Until then, a missed check-in only buzzes this phone.</span> <button class="btn small" type="button" data-cinvite>Text ${who} again</button>`;
+  if (st === 'opted_out') return html`<span class="bad">${who} replied STOP, so Bestie can't text them. Pick someone else.</span>`;
+  return html`<span>Not confirmed yet.</span> <button class="btn small" type="button" data-cinvite>Text ${who} to confirm</button>`;
+}
+async function inviteContact(name, phone) {
+  const r = await contactCall('invite', { name, phone, agent_name: agentFullName() });
+  if (r.status) keepContactStatus({ [phone]: r.status });
+  return r;
+}
+function wireContactStat(root) {
+  const box = root.querySelector('#cstat');
+  const nameEl = root.querySelector('[name=contact_name]'), phoneEl = root.querySelector('[name=contact_phone]');
+  if (!box || !phoneEl) return;
+  const paint = () => { box.innerHTML = digits(phoneEl.value).length >= 10 ? str(contactStatHtml(nameEl.value, contactStatusOf(phoneEl.value))) : ''; };
+  const check = async () => {
+    paint();
+    if (digits(phoneEl.value).length < 10 || !navigator.onLine) return;
+    try { const r = await contactCall('status', { phones: [phoneEl.value] }); keepContactStatus(r.statuses); paint(); } catch {}
+  };
+  phoneEl.addEventListener('change', check);
+  nameEl.addEventListener('input', paint);
+  box.addEventListener('click', async (e) => {
+    if (!e.target.closest('[data-cinvite]')) return;
+    try {
+      const r = await inviteContact(nameEl.value, phoneEl.value);
+      toast(r.sent ? `Texted ${nameEl.value || 'your contact'}. They need to reply YES.` : r.status === 'accepted' ? 'Already confirmed.' : r.reason === 'asked within the last hour' ? 'Already asked in the last hour. Give them a little time.' : `Not sent: ${r.reason || 'try again'}`);
+    } catch (err) { toast(err.message); }
+    paint();
+  });
+  check();
+}
 async function serverCheckin(op, row) {
   if (!(store.cloud.enabled && store.cloud.user)) return;
   try { await store.syncNow(); await safetyCall(op, row); }

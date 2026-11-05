@@ -86,7 +86,7 @@ test('safety: only active, un-alerted check-ins past the 2-minute grace are over
     { id: 'd', status: 'ok', due_at: '2026-10-28T16:50:00Z' }
   ], now);
   assert.deepEqual(list.map((c) => c.id), ['a']);
-  assert.match(alertText({ place: '9 Oak St', meeting_name: 'Ann', lat: 38, lng: -120 }, { overdue: true }), /9 Oak St meeting Ann and has not checked back in.*maps\.google\.com\/\?q=38,-120/);
+  assert.match(alertText({ place: '9 Oak St', meeting_name: 'Ann', agent_name: 'Jo Lee', lat: 38, lng: -120 }, { overdue: true }), /Jo Lee started a safety check-in at 9 Oak St and has not checked back in\. They were meeting Ann\..*maps\.google\.com\/\?q=38,-120.*Reply STOP to opt out\.$/);
   assert.equal(e164('(209) 555-1212'), '+12095551212');
 });
 
@@ -155,4 +155,45 @@ test('safety texts: the function sends only through the capped, logged path', ()
 test('no second texting route on Vercel', () => {
   const src = readSrc(new URL('../api/_lib/server.js', import.meta.url), 'utf8');
   assert.ok(!/twilio/i.test(src));
+});
+
+import { inviteText, acceptedText, HELP_TEXT, smsKeyword, contactStatus, twilioSignature } from '../supabase/functions/reminders/safety.js';
+
+test('safety contact opt-in: the invite says who, why, YES/STOP and rates', () => {
+  const t = inviteText('Jane Smith');
+  for (const k of ['Jane Smith', 'safety contact', 'Reply YES', 'STOP', 'Msg & data rates may apply']) assert.ok(t.includes(k), k);
+  assert.ok(inviteText('').startsWith('Brokers Bestie: A real estate agent'));
+  assert.match(acceptedText('Jane Smith'), /Jane Smith's safety contact.*STOP/);
+  assert.match(HELP_TEXT, /support@brokersbestie\.app/);
+  assert.match(HELP_TEXT, /STOP/);
+  assert.ok(t.length <= 320 && HELP_TEXT.length <= 320);
+});
+
+test('safety alerts name the agent, never a gender, and end with STOP', () => {
+  for (const late of [true, false]) {
+    const t = alertText({ place: '1 A St', agent_name: 'Jane Smith', lat: 1, lng: 2 }, { overdue: late });
+    assert.match(t, /^Brokers Bestie safety alert: Jane Smith /);
+    assert.match(t, /Reply STOP to opt out\.$/);
+    assert.doesNotMatch(t, /\b(she|her|he|him|his)\b/i);
+  }
+});
+
+test('incoming words: YES / STOP / START / HELP, anything else ignored', () => {
+  assert.equal(smsKeyword('yes'), 'yes'); assert.equal(smsKeyword(' Yes! '), 'yes'); assert.equal(smsKeyword('Y'), 'yes');
+  assert.equal(smsKeyword('STOP'), 'stop'); assert.equal(smsKeyword('unsubscribe'), 'stop'); assert.equal(smsKeyword('Cancel'), 'stop');
+  assert.equal(smsKeyword('start'), 'start'); assert.equal(smsKeyword('help'), 'help'); assert.equal(smsKeyword('info'), 'help');
+  assert.equal(smsKeyword('who is this?'), null); assert.equal(smsKeyword(''), null);
+});
+
+test('contact status: a STOP anywhere wins; otherwise this team\'s row', () => {
+  assert.equal(contactStatus([], 't1'), 'none');
+  assert.equal(contactStatus([{ team_id: 't1', status: 'pending' }], 't1'), 'pending');
+  assert.equal(contactStatus([{ team_id: 't1', status: 'accepted' }], 't1'), 'accepted');
+  assert.equal(contactStatus([{ team_id: 't2', status: 'accepted' }], 't1'), 'none');
+  assert.equal(contactStatus([{ team_id: 't1', status: 'accepted' }, { team_id: 't2', status: 'opted_out' }], 't1'), 'opted_out');
+});
+
+test('Twilio signature matches Twilio\'s published example', async () => {
+  const sig = await twilioSignature('12345', 'https://mycompany.com/myapp.php?foo=1&bar=2', { CallSid: 'CA1234567890ABCDE', Caller: '+12349013030', Digits: '1234', From: '+12349013030', To: '+18005551212' });
+  assert.equal(sig, '0/KCTR6DLpKmkAf8muzZqo1nDgQ=');
 });
