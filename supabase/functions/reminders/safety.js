@@ -22,7 +22,7 @@ export function cleanTyped(v, n) {
 }
 
 // Who the agent is, as the contact will read it.
-export function agentWords(c) { return cleanTyped(c && c.agent_name, 40) || 'Your agent contact'; }
+export function agentWords(c) { return cleanTyped(c && c.agent_name, 40) || 'The agent you look out for'; }
 
 // The words the contact receives. Every alert names the agent and ends with
 // how to opt out (carriers require it on toll-free numbers).
