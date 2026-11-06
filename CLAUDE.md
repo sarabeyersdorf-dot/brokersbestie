@@ -1252,3 +1252,22 @@ service): no prices, plans or ways to pay inside the app.
   production). `supabase/functions/apns-check` re-checks it without sending
   anything: POST with header `x-cron-token` = `push_config.cron_token` (via
   pg_net); `keyOk: true` = good key. Redeploy with apns.js beside it.
+## Open house sign-ins reach the CRM (2026-11-06)
+
+Sara: "I have an open house sign in in brokers bestie already" — it had never
+reached the Legacy CRM. Now each visitor who ticked "may contact me" at an
+open house on a **CRM listing** is sent once by the CRM sync as a third change
+type, `visitor` (`pushChanges` in `api/_lib/feed.js`; kiosk and QR sign-ins
+alike, since both are `visitors` rows). `push()` in `api/_lib/crm.js` reads
+unsent ones from the last 31 days and stamps `crm_sent_at` / `crm_ext` (the
+CRM's contact id) on success (db/027, applied, server-written only).
+No consent, a Bestie-only property, a sign-in over 30 days old
+(`VISITOR_DAYS`) or no email and phone: never sent. **Agent: end open house**
+on a CRM listing sends them at once (`sendVisitorsToCrm`). Key-connected CRMs
+(FUB, Lofty, kvCORE) are pull-only, so their visitors stay in Bestie.
+Legacy files them in `api/_lib/open-house-visitor.js`. Guarded in
+`test/feed.test.mjs`. **Merged into the old default branch
+(`claude/charming-babbage-zcj9gf`) on 2026-11-06, not `main`, so it never
+shipped; brought onto `main` on 2026-11-14 when that branch was retired.
+`main` is the default branch now.** db/027_visitors_to_crm was applied on
+2026-11-06 and sits beside main's own 027_done_showing.

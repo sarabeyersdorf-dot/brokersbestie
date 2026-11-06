@@ -41,11 +41,14 @@ const quoteList = (ids) => ids.map((id) => `"${id.replace(/"/g, '')}"`).join(','
 
 // Send what the phones changed. Returns { sent, failed, note }.
 async function push(teamId, link) {
-  const [dates, events] = await Promise.all([
+  const since = new Date(Date.now() - 31 * 86400000).toISOString();
+  const [dates, events, visitors] = await Promise.all([
     db(`dates?team_id=eq.${teamId}&crm_dirty=is.true&select=*`),
-    db(`events?team_id=eq.${teamId}&crm_dirty=is.true&select=*`)
+    db(`events?team_id=eq.${teamId}&crm_dirty=is.true&select=*`),
+    // Open house sign-ins not yet sent (pushChanges keeps the CRM listings' ones).
+    db(`visitors?team_id=eq.${teamId}&crm_sent_at=is.null&consent=is.true&created_at=gte.${encodeURIComponent(since)}&select=*`)
   ]);
-  const changes = pushChanges({ dates, events });
+  const changes = pushChanges({ dates, events, visitors });
   // Rows marked dirty that the CRM has no use for (not linked to it): clear.
   const linked = new Set(changes.map((c) => c._id));
   for (const r of [...dates.map((x) => ['dates', x]), ...events.map((x) => ['events', x])]) {
@@ -70,7 +73,9 @@ async function push(teamId, link) {
     sent++;
     // Only clear the flag if the row has not changed again since it was read.
     const same = `id=eq.${encodeURIComponent(c._id)}&updated_at=eq.${encodeURIComponent(c._row.updated_at)}`;
-    if (c._table === 'events' && c.cancelled) {
+    if (c._table === 'visitors') {
+      await db(`visitors?id=eq.${encodeURIComponent(c._id)}`, { method: 'PATCH', body: { crm_sent_at: new Date().toISOString(), crm_ext: res.ext_id || null } });
+    } else if (c._table === 'events' && c.cancelled) {
       await db(`events?${same}`, { method: 'DELETE' });
     } else if (c._table === 'events' && !c.ext_id && res.ext_id) {
       // A new appointment now has a CRM id: it becomes the CRM's row, so the
