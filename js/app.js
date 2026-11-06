@@ -591,9 +591,9 @@ function doTiles(tours) {
   const tour = tours[0];
   const due = sellerDueCount();
   const late = due ? sellerPastDueCount() : 0;
-  const tile = (attrs, ic, label, cls = '') => html`<${raw(attrs.href ? 'a' : 'button')} class="tile do" ${raw(attrs.href ? `href="${attrs.href}"` : `type="button" id="${attrs.id}"`)}><span class="ic ${cls}">${icon(ic, 26)}</span>${label}</${raw(attrs.href ? 'a' : 'button')}>`;
+  const tile = (attrs, ic, label, cls = '', main = false) => html`<${raw(attrs.href ? 'a' : 'button')} class="tile do ${main ? 'main' : ''}" ${raw(attrs.href ? `href="${attrs.href}"` : `type="button" id="${attrs.id}"`)}><span class="ic ${cls}">${icon(ic, 26)}</span>${label}</${raw(attrs.href ? 'a' : 'button')}>`;
   return html`<section class="sec"><div class="tiles three do-tiles">
-    ${tile({ href: tour ? `#/tour/${tour.id}` : '#/plan' }, 'route', tour ? "Today's tour" : 'Show homes', 't')}
+    ${tile({ href: tour ? `#/tour/${tour.id}` : '#/plan' }, 'route', tour ? "Today's tour" : 'Plan a tour', 't', !tour)}
     ${tile({ id: 'findme' }, 'pin', 'At a property', 'y')}
     ${tile({ id: 'ohpick' }, 'person', 'Open house')}
     ${tile({ href: '#/updates' }, 'text', html`Seller updates${due ? html` <span class="badge ${late ? 'late' : ''}" title="${late ? `${late} past due` : `${due} due this week`}">${due}</span>` : ''}`)}
@@ -812,8 +812,8 @@ function doRow(tours) {
   const due = sellerDueCount();
   const late = due ? sellerPastDueCount() : 0;
   return html`<div class="chips do-row">
+    <a class="chip ${tour ? '' : 'on'}" href="${tour ? `#/tour/${tour.id}` : '#/plan'}">${icon('route', 16)}${tour ? "Today's tour" : 'Plan a tour'}</a>
     <button class="chip" type="button" id="findme">${icon('pin', 16)}At a property</button>
-    <a class="chip" href="${tour ? `#/tour/${tour.id}` : '#/plan'}">${icon('route', 16)}${tour ? "Today's tour" : 'Show homes'}</a>
     <a class="chip" href="#/updates">${icon('text', 16)}Seller updates${due ? html` <span class="badge ${late ? 'late' : ''}">${due}</span>` : ''}</a>
     <button class="chip" type="button" id="ohpick">${icon('person', 16)}Open house</button>
     <a class="chip" href="#/p/new">${icon('plus', 16)}Add a property</a>
@@ -898,7 +898,7 @@ function viewTodayPlan() {
       ${hereCard()}
       ${upnext}
       ${todos.length ? html`<section class="sec">
-        <div class="sec-head"><div class="label">Due today · ${todos.length}</div>${todos.length > 3 ? html`<a class="small" href="#/all" style="color:var(--teal-text);font-weight:600">See all ›</a>` : ''}</div>
+        <div class="sec-head"><div class="label">Due today · ${todos.length}</div><span style="display:flex;gap:14px;align-items:center">${todos.length > 3 ? html`<a class="small" href="#/all" style="color:var(--teal-text);font-weight:600">See all ›</a>` : ''}<button class="btn ghost" type="button" id="addtodo" style="min-height:36px">+ Add</button></span></div>
         <div class="card list">${todos.slice(0, 3).map((t) => todoLine(t, routePidsOf(tours)))}${sellerDue ? html`<a class="row due-row" href="#/updates"><span class="grow"><span class="kw"><span class="ktag" style="--k:var(--s-listing)">Seller updates</span></span><span class="t">${sellerDue} seller update${sellerDue === 1 ? '' : 's'} ready to send</span></span><span class="on-route">Review</span></a>` : ''}</div>
       </section>` : sellerDue ? html`<section class="sec"><div class="label">Due today</div><div class="card list"><a class="row due-row" href="#/updates"><span class="grow"><span class="kw"><span class="ktag" style="--k:var(--s-listing)">Seller updates</span></span><span class="t">${sellerDue} seller update${sellerDue === 1 ? '' : 's'} ready to send</span></span><span class="on-route">Review</span></a></div></section>` : ''}
       ${setupCards()}
@@ -1014,6 +1014,7 @@ function viewTodayWrap() {
 // ticks, the briefing, and the once-a-session syncs.
 function wireTodayCommon(root) {
   wireInstall(root, { onHide: () => dismissSetup('install') });
+  root.querySelector('#addtodo')?.addEventListener('click', () => addTaskSheet());
   root.querySelector('#profnot')?.addEventListener('click', () => { dismissSetup('profile'); root.querySelector('[data-profnudge]')?.remove(); });
   const q = root.querySelector('#q');
   q?.addEventListener('input', () => {
@@ -1096,7 +1097,7 @@ function viewTodayFull() {
         </a>
       </section>` : ''}
 
-      ${todos.length ? html`<section class="sec">
+      ${!searchText && !empty ? html`<section class="sec">
         <div class="sec-head"><div class="label">To do today · ${shownTodos.length}</div><button class="btn ghost" type="button" id="addtodo" style="min-height:36px">+ Add</button></div>
         <div class="card list">${shownTodos.length ? shownTodos.map((t) => t.pickup ? html`<a class="row ${colorClass(t.ck, t.late)}" href="#/signs"><span class="check" style="border-color:var(--pending)"></span><span class="grow"><span class="t">${t.text}</span><span class="s">${ktag(t.ck, t.late)}${t.sub}</span></span>${icon('chev', 18)}</a>`
           : t.ask ? closeAskRow(t)
@@ -1117,7 +1118,6 @@ function viewTodayFull() {
         <div class="sec-head"><div class="label">Tours today · ${tours.length}</div><a class="small" style="color:var(--teal-text);font-weight:600" href="#/plan">Plan a tour →</a></div>
         <div class="card list">${tours.map((t) => html`<a class="row" href="#/tour/${t.id}">${(t.stops || []).length ? '' : html`<span class="num" style="font-size:20px;width:70px">${t.start_minutes != null ? formatClock(t.start_minutes) : ''}</span>`}<span class="grow"><span class="t">${t.name || 'Tour'}</span><span class="s">${(t.stops || []).length} stops · ${(t.stops || []).filter((x) => x.confirmed).length} confirmed</span>${(t.stops || []).length ? html`<span class="tour-stops">${t.stops.map((x) => html`<span class="tour-stop ${x.shown ? 'done' : ''}">${x.arrive != null ? html`<span class="num">${formatClock(x.arrive)}</span>` : ''}<span class="a">${String(x.address || '').split(',')[0]}</span>${occBadge(x.occ)}</span>`)}</span>` : ''}</span>${icon('chev', 18)}</a>`)}</div>
       </section>` : ''}
-      ${!searchText && (!todos.length || !tours.length) ? html`<section class="sec"><div class="btns">${!tours.length ? html`<a class="btn" href="#/plan">${icon('mic', 18)}Plan a tour</a>` : ''}${!todos.length && !empty ? html`<button class="btn" type="button" id="addtodo">${icon('plus', 18)}Add a to-do</button>` : ''}</div></section>` : ''}
 
       ${live.length ? html`<details class="sec fold" data-fold="active" ${foldOpen('active') ? 'open' : ''}>
         <summary class="sec-head"><div class="label">Active · ${live.length}<span class="fold-ar" aria-hidden="true">›</span></div><a class="small" style="color:var(--teal-text);font-weight:600" href="#/props">All properties →</a></summary>

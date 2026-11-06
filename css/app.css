@@ -900,3 +900,6 @@ details.fold > summary { list-style: none; cursor: pointer; }
 details.fold > summary::-webkit-details-marker { display: none; }
 details.fold > summary .fold-ar { display: inline-block; margin-left: 6px; transition: transform .15s; }
 details.fold[open] > summary .fold-ar { transform: rotate(90deg); }
+/* Plan a tour is the main job on Today (Sara 2026-11-06): dark tile, first chip. */
+.tile.do.main { background: var(--ink); border-color: var(--ink); color: #fff; }
+.tile.do.main .ic { background: var(--teal); color: var(--ink); }
