@@ -104,10 +104,14 @@ export function mapFeed(feed, teamId) {
 
 // ---------- the way back: phone changes -> the CRM ----------
 //
-// POST { format: 'bestie-feed/1', changes } to the same feed link. Two kinds:
+// POST { format: 'bestie-feed/1', changes } to the same feed link. Three kinds:
 //   { type: 'date', ext_id, done }
 //   { type: 'event', ext_id (null = new), property_ext, title, kind, date,
 //     start, minutes, location, notes, cancelled }
+//   { type: 'visitor', ext_id, property_ext, first_name, last_name, phone,
+//     email, has_agent, agent_name, also_selling, timeframe, consent, date }
+//     (an open house sign-in; sent once, only with "may contact me" ticked,
+//     only on a CRM listing. The CRM answers ext_id = its contact id.)
 // The CRM answers { results: [{ ok, ext_id?, error? }] } in the same order.
 
 // "crm:<team>:<kind>:<ext>" -> "<ext>", or null for a row that is not the CRM's.
@@ -118,7 +122,9 @@ export function extOf(id, kind) {
 
 // Rows marked crm_dirty -> the changes to send. Each keeps _id/_table/_row so
 // the result can be matched back; those are stripped before sending.
-export function pushChanges({ dates = [], events = [] }) {
+export const VISITOR_DAYS = 30; // an older sign-in is not sent (too late to be a lead)
+
+export function pushChanges({ dates = [], events = [], visitors = [] }, now = Date.now()) {
   const out = [];
   for (const d of dates) {
     const ext = d.source === 'crm' ? extOf(d.id, 'd') : null;
@@ -134,6 +140,20 @@ export function pushChanges({ dates = [], events = [] }) {
       date: e.date, start: e.start_minutes ?? null, minutes: e.minutes ?? null, location: e.location || '',
       notes: ext ? undefined : (e.notes || ''), cancelled: !!e.cancelled,
       _id: e.id, _table: 'events', _row: e
+    });
+  }
+  for (const v of visitors) {
+    const prop = extOf(v.property_id, 'p');
+    if (!prop || v.consent !== true || v.crm_sent_at) continue;
+    if (!v.email && !v.phone) continue;
+    const at = Date.parse(v.created_at || v.oh_date || '');
+    if (Number.isFinite(at) && now - at > VISITOR_DAYS * 86400000) continue;
+    out.push({
+      type: 'visitor', ext_id: v.id, property_ext: prop,
+      first_name: v.first_name || '', last_name: v.last_name || '', phone: v.phone || '', email: v.email || '',
+      has_agent: v.has_agent === true, agent_name: v.agent_name || '', also_selling: v.also_selling === true,
+      timeframe: v.timeframe || '', consent: true, date: v.oh_date || null,
+      _id: v.id, _table: 'visitors', _row: v
     });
   }
   return out;

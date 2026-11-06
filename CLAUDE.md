@@ -908,3 +908,19 @@ not every look. Now:
   Loved it" on each stop with **Use it** (sets the stop's face). Verified
   against the live function: save, pickup refused, bad link 404, no code in
   the reply.
+
+## Open house sign-ins reach the CRM (2026-11-06)
+
+Sara: "I have an open house sign in in brokers bestie already" — it had never
+reached the Legacy CRM. Now each visitor who ticked "may contact me" at an
+open house on a **CRM listing** is sent once by the CRM sync as a third change
+type, `visitor` (`pushChanges` in `api/_lib/feed.js`; kiosk and QR sign-ins
+alike, since both are `visitors` rows). `push()` in `api/_lib/crm.js` reads
+unsent ones from the last 31 days and stamps `crm_sent_at` / `crm_ext` (the
+CRM's contact id) on success (db/027, applied, server-written only).
+No consent, a Bestie-only property, a sign-in over 30 days old
+(`VISITOR_DAYS`) or no email and phone: never sent. **Agent: end open house**
+on a CRM listing sends them at once (`sendVisitorsToCrm`). Key-connected CRMs
+(FUB, Lofty, kvCORE) are pull-only, so their visitors stay in Bestie.
+Legacy files them in `api/_lib/open-house-visitor.js`. Guarded in
+`test/feed.test.mjs`.

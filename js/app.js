@@ -2974,7 +2974,11 @@ function viewOpenHouse(pid) {
         ohThanks = val('first_name');
         render();
       });
-      root.querySelector('#ohend').addEventListener('click', () => { if (confirm('End the open house and see who signed in?')) location.hash = `#/visitors/${pid}`; });
+      root.querySelector('#ohend').addEventListener('click', () => {
+        if (!confirm('End the open house and see who signed in?')) return;
+        sendVisitorsToCrm(pid);
+        location.hash = `#/visitors/${pid}`;
+      });
       root.querySelector('#ohqr').addEventListener('click', () => qrSheet(pid));
     }
   };
@@ -4407,6 +4411,17 @@ store.onCrmChange(() => {
     } catch { /* stays marked; the next sync sends it */ }
   }, 5000);
 });
+
+// Ending an open house on a CRM listing sends its sign-ins (those who ticked
+// "may contact me") to the CRM now rather than at the next hourly sync.
+async function sendVisitorsToCrm(pid) {
+  const p = prop(pid);
+  if (!p || p.source !== 'crm' || !store.cloud.user || !navigator.onLine) return;
+  try {
+    await store.syncNow();
+    await api('/api/crm-sync', { method: 'POST', body: JSON.stringify({ op: 'run' }) });
+  } catch { /* the next sync sends them */ }
+}
 
 // Properties that came from the CRM have no map pin; find a few each time.
 const pinTried = new Set();
