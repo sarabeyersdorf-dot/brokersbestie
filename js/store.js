@@ -7,13 +7,16 @@
 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
-export const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'events', 'tours', 'trips', 'expenses', 'checkins', 'profiles', 'visitors', 'vendors', 'contacts'];
+export const TABLES = ['properties', 'access', 'people', 'notes', 'tasks', 'dates', 'events', 'tours', 'trips', 'expenses', 'checkins', 'profiles', 'visitors', 'vendors', 'contacts', 'preps', 'prep_items'];
 const KEY = (t) => `bb:${t}`;
 const DELETED = 'bb:_deleted';
 const SETTINGS = 'bb:settings';
 
 const listeners = new Set();
-const OWNED = ['properties', 'events', 'tasks', 'tours', 'visitors', 'profiles', 'contacts'];
+const OWNED = ['properties', 'events', 'tasks', 'tours', 'visitors', 'profiles', 'contacts', 'preps'];
+// Listing Prep rows carry who made them (db/031): only that agent and the
+// broker can read them back.
+const MAKER = ['preps', 'prep_items'];
 const data = {};
 
 function readJson(key, fallback) {
@@ -122,6 +125,7 @@ export function save(table, row, { quiet = false } = {}) {
   if (!existing) next.created_at = now;
   // Whose it is, for the Mine / <name> filter: whoever made it on this phone.
   if (!existing && OWNED.includes(table) && !next.owner && settings().myName) next.owner = settings().myName;
+  if (!existing && MAKER.includes(table) && !next.user_id && cloud.user) next.user_id = cloud.user.id;
   data[table] = existing ? all(table).map((r) => (r.id === next.id ? next : r)) : [next, ...all(table)];
   writeJson(KEY(table), data[table]);
   if (!quiet) emit();
@@ -160,8 +164,11 @@ export function remove(table, id) {
 // went, so Undo can put it all back.
 export function removeProperty(id) {
   const gone = [];
-  for (const t of ['access', 'people', 'notes', 'tasks', 'dates', 'events', 'expenses']) {
-    for (const r of where(t, 'property_id', id)) gone.push(remove(t, r.id));
+  for (const t of ['access', 'people', 'notes', 'tasks', 'dates', 'events', 'expenses', 'preps']) {
+    for (const r of where(t, 'property_id', id)) {
+      if (t === 'preps') for (const i of where('prep_items', 'prep_id', r.id)) gone.push(remove('prep_items', i.id));
+      gone.push(remove(t, r.id));
+    }
   }
   gone.push(remove('properties', id));
   return gone.filter(Boolean);
@@ -195,7 +202,7 @@ function photoDb() {
   return dbPromise;
 }
 
-export async function putPhoto(id, blob) {
+async function keepOnPhone(id, blob) {
   const db = await photoDb();
   await new Promise((resolve, reject) => {
     const tx = db.transaction('photos', 'readwrite');
@@ -203,11 +210,71 @@ export async function putPhoto(id, blob) {
     tx.oncomplete = resolve;
     tx.onerror = () => reject(tx.error);
   });
+}
+async function fromPhone(id) {
+  try {
+    const db = await photoDb();
+    return await new Promise((resolve) => {
+      const req = db.transaction('photos').objectStore('photos').get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch { return null; }
+}
+
+export async function putPhoto(id, blob) {
+  await keepOnPhone(id, blob);
   uploadPhoto(id, blob);
 }
 
+// ---------- Listing Prep photos (db/031) ----------
+// Saved on the phone FIRST, and kept there until the team has it: a walk
+// through a foothill listing often has no signal, and no photo may be lost.
+// Uploads go to the private prep-photos bucket at <team>/<maker>/<id>.jpg,
+// where only the agent who took them and the broker can read them. A failed
+// upload is simply tried again on the next sync, on coming back online, or
+// the next time a photo is taken.
+export async function putPrepPhoto(id, blob) {
+  await keepOnPhone(id, blob);
+  uploadPrepPhotos();
+}
+
+export const prepWaiting = () => all('prep_items').filter((i) => i.photo_id && !i.photo_path && !i.deleted_at && !i.sample);
+export const prepUpload = { busy: false, failed: 0 };
+
+let prepUploading = false;
+export async function uploadPrepPhotos() {
+  if (prepUploading || !cloud.user || !cloud.teamId || !navigator.onLine) return;
+  prepUploading = true;
+  prepUpload.busy = true;
+  prepUpload.failed = 0;
+  emit();
+  try {
+    for (const item of prepWaiting()) {
+      if (item.user_id && item.user_id !== cloud.user.id) continue; // another agent's: their phone uploads it
+      const blob = await fromPhone(item.photo_id);
+      if (!blob) continue;
+      const path = `${cloud.teamId}/${cloud.user.id}/${item.photo_id}.jpg`;
+      const { error } = await cloud.client.storage.from('prep-photos').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+      if (error) { prepUpload.failed++; console.warn('Listing Prep photo upload failed; it is still on this phone and will be tried again', error); continue; }
+      save('prep_items', { id: item.id, photo_path: path }, { quiet: true });
+    }
+  } finally {
+    prepUploading = false;
+    prepUpload.busy = false;
+    emit();
+  }
+}
+
+// Ask the phone to keep Bestie's saved photos even when it runs short of
+// space. iPhones can clear storage for a website that is not on the home
+// screen; the Listing Prep screen warns about that separately.
+export async function keepStorage() {
+  try { return navigator.storage && navigator.storage.persist ? await navigator.storage.persist() : false; } catch { return false; }
+}
+
 const urlCache = new Map();
-export async function photoUrl(id, remotePath) {
+export async function photoUrl(id, remotePath, bucket = 'photos') {
   if (urlCache.has(id)) return urlCache.get(id);
   try {
     const db = await photoDb();
@@ -223,7 +290,7 @@ export async function photoUrl(id, remotePath) {
     }
   } catch {}
   if (remotePath && cloud.client) {
-    const { data: signed } = await cloud.client.storage.from('photos').createSignedUrl(remotePath, 3600);
+    const { data: signed } = await cloud.client.storage.from(bucket).createSignedUrl(remotePath, 3600);
     if (signed) {
       urlCache.set(id, signed.signedUrl);
       return signed.signedUrl;
@@ -233,14 +300,22 @@ export async function photoUrl(id, remotePath) {
 }
 
 // Phone cameras make 4MB photos. 1600px JPEG is plenty to find a lockbox.
-export async function shrinkPhoto(file, max = 1600) {
-  const img = await createImageBitmap(file);
+// Drawing onto a canvas also turns an iPhone HEIC photo into a JPEG that every
+// browser and the MLS can open. Some browsers cannot hand a HEIC file to
+// createImageBitmap; an <img> decodes it there.
+export async function shrinkPhoto(file, max = 1600, quality = 0.82) {
+  const img = await createImageBitmap(file).catch(() => new Promise((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = reject;
+    el.src = URL.createObjectURL(file);
+  }));
   const scale = Math.min(1, max / Math.max(img.width, img.height));
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(img.width * scale);
   canvas.height = Math.round(img.height * scale);
   canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
 }
 
 // ---------- team mode (Supabase) ----------
@@ -424,6 +499,7 @@ export async function syncNow() {
       writeJson(KEY(t), data[t]);
     }
     cloud.status = 'synced';
+    setTimeout(uploadPrepPhotos, 0);
   } catch (e) {
     console.warn('Sync failed; will retry', e);
     cloud.status = 'error';

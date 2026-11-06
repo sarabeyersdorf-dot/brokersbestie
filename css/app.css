@@ -903,3 +903,21 @@ details.fold[open] > summary .fold-ar { transform: rotate(90deg); }
 /* Plan a tour is the main job on Today (Sara 2026-11-06): dark tile, first chip. */
 .tile.do.main { background: var(--ink); border-color: var(--ink); color: #fff; }
 .tile.do.main .ic { background: var(--teal); color: var(--ink); }
+
+/* Listing Prep (2026-11-06): photo cards on a walk */
+.chips.wrapchips { flex-wrap: wrap; overflow: visible; }
+.big-switch { font-weight: 600; }
+.capture-btn { min-height: 64px; font-size: 18px; }
+.pitems { display: flex; flex-direction: column; gap: 10px; }
+.pitem { display: flex; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; min-width: 0; }
+.pthumb { position: relative; width: 104px; height: 104px; flex: none; border-radius: 8px; overflow: hidden; background: var(--bg); }
+.pthumb img { width: 100%; height: 100%; object-fit: cover; }
+.ptag { position: absolute; left: 4px; bottom: 4px; font: 700 10px/1 var(--sans); letter-spacing: .04em; text-transform: uppercase; padding: 3px 5px; border-radius: 3px; background: var(--teal-on-dark); color: var(--ink); }
+.ptag.cond { background: var(--k-deadline); color: #fff; }
+.pbody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pbody textarea { width: 100%; min-height: 52px; font: inherit; font-size: 15px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.prow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.prow select { flex: 1; min-width: 120px; min-height: 40px; }
+.prow .switch { min-height: 40px; font-size: 14px; }
+.seg.small-seg button { min-height: 38px; font-size: 13px; border-radius: 8px; }
+@media (max-width: 380px) { .pitem { flex-direction: column; } .pthumb { width: 100%; height: 180px; } }

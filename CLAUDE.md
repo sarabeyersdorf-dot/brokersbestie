@@ -1087,3 +1087,46 @@ saying "no card": welcome.html says "14 days free. Cancel any time."; the plan
 screen in a trial says "Nothing is charged during your free trial." The flow is
 unchanged: a new agent is in the app with just an email; the card is asked for
 only at Choose a plan (`payment_method_collection: 'always'`).
+
+## Listing Prep, step 1: the room-by-room walk (2026-11-06)
+
+Sara's Listing Walk-Through (Cowork, `20261106_CWtoCC_property-organizer.md`)
+and James's Walkthrough spec (`SPEC_Bestie_Walkthrough_Reports.md`, from
+Property Photo Notes) are ONE feature, **Listing Prep** (Sara: "combine them
+into one feature, call it Listing Prep"). One walk, three results: the
+seller's Listing Prep Report (James), the agent's notes for the AVID (Sara),
+the MetroList sheet (`docs/listing-prep/metrolist-residential.md`, keyed by
+MetroList Field IDs). Built in 5 steps: 1 capture + offline, 2 To-Do list +
+Quick Items, 3 reports + AVID notes, 4 MLS sheet, 5 markup + Recently Deleted.
+- **Never "disclosure" or "AVID" on screen** (James's legal guardrail):
+  the AVID output is "your notes for the AVID", never the form itself, no
+  signature block. A test reads the screens.
+- **Who sees it: the agent who made the walk and the broker only** (Sara:
+  "only the broker should see their agents stuff"). The ONE exception to
+  team-shared Bestie, enforced by db/031: `preps` / `prep_items` carry
+  `user_id` (default `auth.uid()`, ON DELETE SET NULL so a leaving agent's
+  walks stay with the broker), RLS `bb_prep_visible` = maker or
+  `bb_is_broker` (team_members.role = 'owner'). Photos are in their own
+  private bucket **prep-photos** at `<team>/<maker>/<id>.jpg`, never the
+  team-shared `photos` bucket. Verified live in a rolled-back block: James
+  sees only his, Sara sees both and can edit his, James cannot edit Sara's or
+  forge a row as her.
+- `js/prep.js` is the one definition (pure, `test/prep.test.mjs`): AVID
+  `SECTIONS` order, `defaultAreas` (beds/baths, land), `EXTRA_AREAS` (rural
+  ones), `QUICK_TAPS`, James's `CATEGORIES`, Listing vs Condition photo
+  (condition never goes to the MLS), `prepSummary`, `waitingPhotos`.
+- **No photo may be lost on no signal.** `addPrepPhotos` shrinks to 2048px
+  (sharp enough for MLS; the canvas also turns HEIC into JPEG, with an
+  `<img>` fallback when createImageBitmap can't read it), stores the blob in
+  IndexedDB (`putPrepPhoto`) BEFORE saving the row, then `uploadPrepPhotos`
+  sends every waiting one; a failure stays waiting and is retried after every
+  sync and on coming online. "N photos waiting to upload" on the walk.
+  `keepStorage()` asks for persistent storage; the walk warns when Bestie is
+  not on the home screen (iOS can clear a website's storage).
+- Screens: property → More → **Listing Prep** (`#/prep/<pid>`), the walk
+  `#/walk/<id>` (areas in AVID order, add Bedroom/Bath/Other/rural areas,
+  details, another unit on a multi-unit), an area `#/walk/<id>/a/<key>`
+  (Nothing observed, notes + quick taps + mic, photos with Listing/Condition,
+  note, category, Follow up), **Quick capture** `#/walk/<id>/capture` (area
+  stays picked, "Save & take another"). Photo cards save quietly on change.
+- Account delete also empties prep-photos (`removePrepFiles`, two levels).

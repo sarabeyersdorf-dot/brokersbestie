@@ -13,6 +13,7 @@ import { planShowings, ACTION_WORDS } from './showings.js';
 import { plansOffered, planSentence, defaultPlan, TRIAL_END_TEXT, TRIAL_END_DECIDED } from './billing.js';
 import { CONTACT_KINDS, parseContacts, planImport, contactsChoice, contactsMode } from './contacts.js';
 import { CRM_CHOICES } from './crmlist.js';
+import { defaultAreas, sortAreas, addArea, canRemoveArea, areaStatus, prepSummary, waitingWords, addTap, takenAt, prepsFor, nextUnit, EXTRA_AREAS, QUICK_TAPS, CATEGORIES, OCCUPANTS, PROPERTY_TYPES } from './prep.js';
 import { feedbackText, requestGroups, requestText, recapText, ohThanksText, visitorsCsv, signOff, licenseText, sellerUpdateText, feedbackRequestText, lateText, lateBuyerText, facesLinkText } from './messages.js';
 import { installCard, wireInstall, isInstalled, feedbackLink } from './install.js';
 import { pushState, currentSub, turnOn, turnOff, sendTest, LEADS, serverStatus, safetyCall, contactCall, openHouseLink, shareWhere, shareLink, stopShareLinks, tourLink, buyerFaces } from './push.js';
@@ -1632,9 +1633,12 @@ function hubMoreSheet(p) {
   const id = p.id;
   const sheetNote = store.where('notes', 'property_id', id).some((n) => n.source === 'mls_sheet');
   const visitors = store.all('visitors').filter((v) => v.property_id === id).length;
+  const walk = prepsFor(store.all('preps'), id)[0];
+  const walkSum = walk ? prepSummary(walk, prepItems(walk.id)) : null;
   openSheet(html`<div class="sec">
     <div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">More</div>
     <div class="card list">
+      <a class="row" href="#/prep/${id}">${icon('photo', 20)}<span class="grow"><span class="t">Listing Prep</span><span class="s">${walk ? `${walkSum.done} of ${walkSum.areas} areas · ${walkSum.photos} photo${walkSum.photos === 1 ? '' : 's'}` : 'Walk it room by room with photos and notes'}</span></span>${icon('chev', 18)}</a>
       <a class="row" href="#/p/${id}/edit">${icon('edit', 20)}<span class="grow"><span class="t">Edit details</span></span>${icon('chev', 18)}</a>
       ${sheetNote ? html`<button class="row" type="button" id="moresheet">${icon('sheet', 20)}<span class="grow"><span class="t">MLS sheet</span><span class="s">In Notes & files</span></span>${icon('chev', 18)}</button>` : html`<a class="row" href="#/sheet/${id}">${icon('sheet', 20)}<span class="grow"><span class="t">Snap MLS sheet</span></span>${icon('chev', 18)}</a>`}
       <a class="row" href="#/quick">${icon('plus', 20)}<span class="grow"><span class="t">Quick add</span></span>${icon('chev', 18)}</a>
@@ -1653,7 +1657,7 @@ function safeUrl(u) {
 
 function loadPhotos(root) {
   root.querySelectorAll('img[data-photo]').forEach(async (img) => {
-    const url = await store.photoUrl(img.getAttribute('data-photo'), img.getAttribute('data-path'));
+    const url = await store.photoUrl(img.getAttribute('data-photo'), img.getAttribute('data-path'), img.getAttribute('data-bucket') || 'photos');
     if (url) img.src = url;
   });
 }
@@ -4911,6 +4915,350 @@ async function runCommand(s, focus) {
 }
 
 // ======================================================================
+// LISTING PREP (2026-11-06, step 1 of 5): the room-by-room walk
+// ======================================================================
+// One walk per listing (one per unit on a duplex to fourplex). Areas follow
+// the AVID's order (js/prep.js is the one definition). Photos are shrunk and
+// saved on the phone first, then uploaded to the private prep-photos bucket;
+// "N photos waiting to upload" until the team has them. Only the agent who
+// made the walk and the broker can see it (db/031). Never call it a
+// "disclosure" or "AVID" on screen: these are the agent's own notes.
+
+const PREP_KIND_KEY = 'bb:prepkind';
+const prepKind = () => { try { return localStorage.getItem(PREP_KIND_KEY) === 'condition' ? 'condition' : 'listing'; } catch { return 'listing'; } };
+const setPrepKind = (k) => { try { localStorage.setItem(PREP_KIND_KEY, k); } catch {} };
+const prepItems = (prepId) => store.where('prep_items', 'prep_id', prepId).filter((i) => !i.deleted_at)
+  .sort((a, b) => String(a.photo_taken_at || a.created_at || '').localeCompare(String(b.photo_taken_at || b.created_at || '')));
+const prepOf = (id) => store.get('preps', id);
+const prepTitle = (pr) => street(addr(pr.property_id)) + (pr.unit ? ` · ${pr.unit}` : '');
+const whoseWalk = (pr) => (pr.owner && firstName(store.settings().myName) && pr.owner !== store.settings().myName ? `${cap1(pr.owner)}'s walk` : '');
+
+const PREP_FIELDS = [
+  { name: 'property_type', label: 'Property type', type: 'select', options: PROPERTY_TYPES },
+  { name: 'unit', label: 'Unit (duplex to fourplex: one walk per unit)', placeholder: 'Unit 1' },
+  { name: 'list_price', label: 'List price', type: 'number', placeholder: '799000' },
+  { name: 'list_date', label: 'Listing date', type: 'date' },
+  { name: 'expiration_date', label: 'Expiration date', type: 'date' },
+  { name: 'seller_name', label: 'Seller name' },
+  { name: 'occupant', label: 'Occupant', type: 'select', options: [['', 'Not known'], ...OCCUPANTS] },
+  { name: 'apn', label: 'APN', placeholder: '060-012-003' },
+  { name: 'county', label: 'County', placeholder: 'Calaveras' },
+  { name: 'inspected_at', label: 'Walk-through date and time', type: 'datetime-local' },
+  { name: 'weather', label: 'Weather', placeholder: 'Clear, dry' },
+  { name: 'present', label: 'Others present', placeholder: 'Seller, stager' }
+];
+const localDateTime = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+// Saved photos: the walk's own bucket, shown from the phone when they are here.
+function prepThumb(i) {
+  return html`<img alt="" data-photo="${i.photo_id}" data-path="${i.photo_path || ''}" data-bucket="prep-photos">`;
+}
+
+// The walks on a property (from the property page's More sheet).
+function viewPrepList(pid) {
+  const p = prop(pid);
+  if (!p) return notFound();
+  const walks = prepsFor(store.all('preps'), pid);
+  if (!walks.length) return viewPrepStart(pid);
+  if (walks.length === 1 && !walks[0].unit) { setTimeout(() => location.replace(`#/walk/${walks[0].id}`), 0); return { html: '' }; }
+  return {
+    html: html`${header({ back: `#/p/${pid}`, kicker: 'Listing Prep', title: street(p.address), sub: 'One walk per unit' })}
+    <main class="wrap"><section class="sec"><div class="card list">${walks.map((w) => {
+      const s = prepSummary(w, prepItems(w.id));
+      return html`<a class="row" href="#/walk/${w.id}"><span class="grow"><span class="t">${w.unit || 'Whole property'}</span><span class="s">${s.done} of ${s.areas} areas · ${s.photos} photo${s.photos === 1 ? '' : 's'}${whoseWalk(w) ? ` · ${whoseWalk(w)}` : ''}</span></span>${icon('chev', 18)}</a>`;
+    })}</div>
+    <a class="btn block" href="#/prep/${pid}/new">${icon('plus', 18)}Another unit</a></section></main>`
+  };
+}
+
+// Start a walk (or change its details).
+function viewPrepStart(pid, prepId) {
+  const p = prop(pid);
+  const pr = prepId ? prepOf(prepId) : null;
+  if (!p || (prepId && !pr)) return notFound();
+  const seller = store.where('people', 'property_id', pid).find((m) => /seller|owner/i.test(m.role || ''));
+  const others = prepsFor(store.all('preps'), pid);
+  const values = pr ? { ...pr, inspected_at: pr.inspected_at ? localDateTime(new Date(pr.inspected_at)) : '' } : {
+    property_type: 'sfr', unit: others.length ? nextUnit(others) : '', list_price: p.price ?? '', list_date: p.list_date || '',
+    seller_name: seller ? seller.name : '', occupant: p.occupancy === 'V' ? 'vacant' : '', inspected_at: localDateTime()
+  };
+  const prof = myProfile();
+  return {
+    form: true,
+    html: html`${header({ back: pr ? `#/walk/${pr.id}` : `#/p/${pid}`, kicker: 'Listing Prep', title: pr ? 'Walk details' : 'Start the walk', sub: street(p.address) })}
+    <main class="wrap"><form id="pf" class="sec" novalidate>
+      ${pr ? '' : html`<div class="hint">Walk the house room by room. Everything is saved on this phone as you go, even with no signal.</div>
+      <div class="grid2">${fieldHtml({ name: 'beds', label: 'Bedrooms', type: 'number' }, 3)}${fieldHtml({ name: 'baths', label: 'Baths', type: 'number' }, 2)}</div>
+      <div class="hint">You can add or remove rooms as you walk.</div>`}
+      ${PREP_FIELDS.map((f) => fieldHtml(f, values[f.name]))}
+      <div class="note-box">${prof && prof.full_name ? html`Walked by <b>${prof.full_name}</b>${prof.brokerage ? html`, ${prof.brokerage}` : ''}` : html`Your name and brokerage come from <a href="#/profile">your profile</a>.`}</div>
+      <button class="btn dark block big" type="submit">${pr ? 'Save' : 'Start the walk'}</button>
+    </form></main>`,
+    mount(root) {
+      const form = root.querySelector('#pf');
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const v = readForm(form, PREP_FIELDS);
+        const row = { ...v, inspected_at: v.inspected_at ? new Date(v.inspected_at).toISOString() : null, list_date: v.list_date || null, expiration_date: v.expiration_date || null };
+        if (pr) { store.save('preps', { id: pr.id, ...row }); toast('Saved'); location.hash = `#/walk/${pr.id}`; return; }
+        const beds = Number(form.elements.beds.value || 0);
+        const baths = Number(form.elements.baths.value || 0);
+        const made = store.save('preps', { property_id: pid, ...row, areas: defaultAreas({ beds, baths, type: v.property_type }) });
+        store.keepStorage();
+        location.hash = `#/walk/${made.id}`;
+      });
+    }
+  };
+}
+
+function prepStatusLine(pr) {
+  const s = prepSummary(pr, prepItems(pr.id));
+  const waiting = store.prepWaiting().filter((i) => i.prep_id === pr.id).length;
+  const up = store.prepUpload;
+  return html`<div class="${waiting && (up.failed || !navigator.onLine) ? 'warn-box' : 'note-box'}" id="prepstat">
+    <b>${s.done} of ${s.areas} areas</b> · ${s.photos} photo${s.photos === 1 ? '' : 's'} (${s.listing} listing, ${s.condition} condition)
+    ${waiting ? html`<br>${waitingWords(waiting)}${!store.cloud.user ? ' (sign in to send them to your account)' : !navigator.onLine ? ' when you have signal. They are safe on this phone.' : up.busy ? ' · uploading now…' : up.failed ? ' · will try again' : ''}` : s.photos && store.cloud.user ? html`<br>All photos are saved to your account ✓` : ''}
+  </div>`;
+}
+
+function viewWalk(id) {
+  const pr = prepOf(id);
+  if (!pr) return notFound();
+  const items = prepItems(id);
+  const areas = sortAreas(pr.areas || []);
+  const p = prop(pr.property_id) || {};
+  return {
+    html: html`${header({ back: `#/p/${pr.property_id}`, kicker: 'Listing Prep', title: prepTitle(pr), sub: whoseWalk(pr) || (p.city || '') })}
+    <main class="wrap">
+      ${isInstalled() ? '' : html`<div class="warn-box"><b>Put Bestie on your home screen before a walk.</b> A phone can clear photos saved by a website that isn't on the home screen. <a href="#/settings">How</a></div>`}
+      ${prepStatusLine(pr)}
+      <a class="btn dark block big" href="#/walk/${id}/capture">${icon('photo', 20)}Quick capture</a>
+      <section class="sec"><div class="label">Rooms and areas</div>
+        <div class="card list">${areas.map((a) => {
+          const st = areaStatus(a, items);
+          return html`<a class="row" href="#/walk/${id}/a/${a.key}"><span class="grow"><span class="t">${a.name}</span><span class="s">${st.nothing ? 'Nothing observed' : st.done ? [st.photos ? `${st.photos} photo${st.photos === 1 ? '' : 's'}` : '', st.notes ? 'notes' : ''].filter(Boolean).join(' · ') : 'Not done yet'}</span></span>${st.done ? icon('check', 18) : ''}${icon('chev', 18)}</a>`;
+        })}</div>
+        <div class="btns"><button class="btn" type="button" data-addarea="bedroom">${icon('plus', 16)}Bedroom</button><button class="btn" type="button" data-addarea="bath">${icon('plus', 16)}Bath</button></div>
+        <div class="btns"><button class="btn" type="button" data-addarea="other">${icon('plus', 16)}Other area</button><button class="btn" type="button" id="morearea">${icon('plus', 16)}Well, septic, roof…</button></div>
+      </section>
+      <section class="sec"><div class="card list">
+        <a class="row" href="#/walk/${id}/details">${icon('edit', 20)}<span class="grow"><span class="t">Walk details</span><span class="s">${[pr.seller_name, pr.occupant ? cap1(pr.occupant) : '', pr.inspected_at ? niceDate(pr.inspected_at) : ''].filter(Boolean).join(' · ') || 'Price, dates, seller, occupant'}</span></span>${icon('chev', 18)}</a>
+        ${pr.property_type === 'multi' ? html`<a class="row" href="#/prep/${pr.property_id}/new">${icon('plus', 20)}<span class="grow"><span class="t">Walk another unit</span></span>${icon('chev', 18)}</a>` : ''}
+        <button class="row" type="button" id="delwalk">${icon('trash', 20)}<span class="grow"><span class="t">Delete this walk</span></span></button>
+      </div></section>
+    </main>`,
+    mount(root) {
+      root.querySelectorAll('[data-addarea]').forEach((b) => b.addEventListener('click', () => {
+        const next = addArea(pr.areas, b.getAttribute('data-addarea'));
+        store.save('preps', { id, areas: next });
+        toast(`Added ${next[next.length - 1].name}`);
+      }));
+      root.querySelector('#morearea').addEventListener('click', () => {
+        const have = new Set((pr.areas || []).map((a) => a.name.toLowerCase()));
+        openSheet(html`<div class="sec"><div class="title" style="font-family:var(--tall);font-weight:700;font-size:24px;text-transform:uppercase">Add an area</div>
+          <div class="chips wrapchips">${EXTRA_AREAS.filter((x) => !have.has(x.name.toLowerCase())).map((x) => html`<button class="chip" type="button" data-extra="${x.name}">${x.name}</button>`)}</div>
+          <label class="field"><span>Or type one</span><input id="custarea" placeholder="Wine cellar"></label>
+          <button class="btn dark block" type="button" id="addcust">Add</button></div>`, (sh) => {
+          const add = (name) => { const next = addArea(prepOf(id).areas, name); store.save('preps', { id, areas: next }); closeSheet(); toast(`Added ${next[next.length - 1].name}`); };
+          sh.querySelectorAll('[data-extra]').forEach((b) => b.addEventListener('click', () => add(b.getAttribute('data-extra'))));
+          sh.querySelector('#addcust').addEventListener('click', () => { const v = sh.querySelector('#custarea').value.trim(); if (v) add(v); });
+        });
+      });
+      root.querySelector('#delwalk').addEventListener('click', () => {
+        if (!confirm(`Delete this walk and its ${items.length} photo${items.length === 1 ? '' : 's'} and notes?`)) return;
+        const gone = [...store.where('prep_items', 'prep_id', id).map((i) => store.remove('prep_items', i.id)), store.remove('preps', id)].filter(Boolean);
+        undoToast('Walk deleted', () => store.restore(gone));
+        location.hash = `#/p/${pr.property_id}`;
+      });
+    }
+  };
+}
+
+// Shrink, keep on the phone, then file. The photo is stored BEFORE its row,
+// so a row never points at a photo that is not there.
+async function addPrepPhotos(prepId, area, files, kind) {
+  const made = [];
+  for (const file of [...files]) {
+    if (!/^image\//.test(file.type || 'image/') && !/\.(heic|heif)$/i.test(file.name || '')) continue;
+    const blob = await store.shrinkPhoto(file, 2048, 0.8).catch(() => null);
+    if (!blob) { toast("That photo couldn't be read. Try taking it again."); continue; }
+    const photo_id = store.uid();
+    await store.putPrepPhoto(photo_id, blob);
+    made.push(store.save('prep_items', {
+      prep_id: prepId, area, photo_kind: kind, photo_id, photo_taken_at: takenAt(file),
+      category: kind === 'condition' ? 'repair' : 'listing_prep', note: '', follow_up: false
+    }, { quiet: true }));
+  }
+  const pr = prepOf(prepId);
+  if (made.length && pr) store.save('preps', { id: prepId, sticky_area: area, areas: (pr.areas || []).map((a) => (a.key === area ? { ...a, nothing: false } : a)) }, { quiet: true });
+  return made;
+}
+
+function prepItemCard(i) {
+  return html`<div class="pitem" data-item="${i.id}">
+    <div class="pthumb">${prepThumb(i)}<span class="ptag ${i.photo_kind === 'condition' ? 'cond' : ''}">${i.photo_kind === 'condition' ? 'Condition' : 'Listing'}</span></div>
+    <div class="pbody">
+      <div class="seg small-seg"><button type="button" data-pk="listing" class="${i.photo_kind !== 'condition' ? 'on' : ''}">Listing photo</button><button type="button" data-pk="condition" class="${i.photo_kind === 'condition' ? 'on' : ''}">Condition photo</button></div>
+      <textarea data-pnote rows="2" placeholder="Note: what this shows">${i.note || ''}</textarea>
+      <div class="prow"><select data-pcat aria-label="Kind of note">${CATEGORIES.map((c) => html`<option value="${c.id}" ${i.category === c.id ? raw('selected') : ''}>${c.label}</option>`)}</select>
+        <label class="switch"><input type="checkbox" data-pfu ${i.follow_up ? raw('checked') : ''}>Follow up</label>
+        <button class="icon-btn" type="button" data-pdel aria-label="Remove this photo">${icon('trash', 16)}</button></div>
+      ${i.photo_kind === 'condition' ? html`<div class="hint">Condition photos stay in your file. They never go in the MLS photos.</div>` : ''}
+    </div>
+  </div>`;
+}
+
+// Every box on a photo card saves quietly when it changes (no redraw, so
+// nothing being typed is lost).
+function wirePrepItems(root, onChange) {
+  root.querySelectorAll('[data-item]').forEach((card) => {
+    const id = card.getAttribute('data-item');
+    const put = (patch) => { store.save('prep_items', { id, ...patch }, { quiet: true }); };
+    card.querySelectorAll('[data-pk]').forEach((b) => b.addEventListener('click', () => {
+      const k = b.getAttribute('data-pk');
+      put({ photo_kind: k });
+      card.querySelectorAll('[data-pk]').forEach((x) => x.classList.toggle('on', x === b));
+      const tag = card.querySelector('.ptag'); tag.textContent = k === 'condition' ? 'Condition' : 'Listing'; tag.classList.toggle('cond', k === 'condition');
+    }));
+    const note = card.querySelector('[data-pnote]');
+    note.addEventListener('change', () => put({ note: note.value.trim() }));
+    note.addEventListener('blur', () => put({ note: note.value.trim() }));
+    card.querySelector('[data-pcat]').addEventListener('change', (e) => put({ category: e.target.value }));
+    card.querySelector('[data-pfu]').addEventListener('change', (e) => put({ follow_up: e.target.checked }));
+    card.querySelector('[data-pdel]').addEventListener('click', () => {
+      put({ deleted_at: new Date().toISOString() });
+      card.remove();
+      undoToast('Photo removed', () => { store.save('prep_items', { id, deleted_at: null }); });
+      if (onChange) onChange();
+    });
+  });
+}
+
+function viewWalkArea(id, key) {
+  const pr = prepOf(id);
+  const area = pr && (pr.areas || []).find((a) => a.key === key);
+  if (!pr || !area) return notFound();
+  const order = sortAreas(pr.areas);
+  const at = order.findIndex((a) => a.key === key);
+  const prev = order[at - 1];
+  const next = order[at + 1];
+  const items = prepItems(id).filter((i) => i.area === key);
+  const kind = prepKind();
+  return {
+    form: true,
+    html: html`${header({ back: `#/walk/${id}`, kicker: `Listing Prep · ${prepTitle(pr)}`, title: area.name })}
+    <main class="wrap">
+      <section class="sec">
+        <label class="switch big-switch"><input type="checkbox" id="nothing" ${area.nothing ? raw('checked') : ''}>Nothing observed here</label>
+        <label class="field"><span>Notes</span><textarea id="anotes" rows="3" placeholder="What you see in this room">${area.notes || ''}</textarea></label>
+        <div class="chips wrapchips">${QUICK_TAPS.map((t) => html`<button class="chip" type="button" data-tap="${t}">${t}</button>`)}</div>
+        <button class="btn" type="button" data-mic="anotes">${icon('mic', 18)}Talk instead of typing</button>
+      </section>
+      <section class="sec"><div class="label">Photos · ${items.length}</div>
+        <div class="small">New photos are:</div>
+        <div class="seg"><button type="button" data-newkind="listing" class="${kind === 'listing' ? 'on' : ''}">Listing photo</button><button type="button" data-newkind="condition" class="${kind === 'condition' ? 'on' : ''}">Condition photo</button></div>
+        <div class="btns">
+          <label class="btn dark">${icon('photo', 18)}Take a photo<input type="file" accept="image/*" capture="environment" data-shot hidden></label>
+          <label class="btn">${icon('plus', 18)}From photos<input type="file" accept="image/*" multiple data-shot hidden></label>
+        </div>
+        <div class="pitems">${items.map(prepItemCard)}</div>
+      </section>
+      <div class="btns">
+        ${prev ? html`<a class="btn" href="#/walk/${id}/a/${prev.key}">‹ ${prev.name}</a>` : html`<span></span>`}
+        ${next ? html`<a class="btn dark" href="#/walk/${id}/a/${next.key}">${next.name} ›</a>` : html`<a class="btn dark" href="#/walk/${id}">Done ›</a>`}
+      </div>
+      ${canRemoveArea(area, prepItems(id)) ? html`<button class="btn ghost block" type="button" id="rmarea">${icon('trash', 18)}Remove ${area.name} from this walk</button>` : ''}
+    </main>`,
+    mount(root) {
+      wireMics(root);
+      loadPhotos(root);
+      const notes = root.querySelector('#anotes');
+      const saveArea = (patch) => { const cur = prepOf(id); store.save('preps', { id, areas: cur.areas.map((a) => (a.key === key ? { ...a, ...patch } : a)) }, { quiet: true }); };
+      const saveNotes = () => saveArea({ notes: notes.value.trim(), ...(notes.value.trim() ? { nothing: false } : {}) });
+      notes.addEventListener('change', saveNotes);
+      notes.addEventListener('blur', saveNotes);
+      root.querySelectorAll('[data-tap]').forEach((b) => b.addEventListener('click', () => {
+        notes.value = addTap(notes.value, b.getAttribute('data-tap'));
+        root.querySelector('#nothing').checked = false;
+        saveNotes();
+      }));
+      root.querySelector('#nothing').addEventListener('change', (e) => saveArea({ nothing: e.target.checked }));
+      root.querySelectorAll('[data-newkind]').forEach((b) => b.addEventListener('click', () => {
+        setPrepKind(b.getAttribute('data-newkind'));
+        root.querySelectorAll('[data-newkind]').forEach((x) => x.classList.toggle('on', x === b));
+      }));
+      root.querySelectorAll('[data-shot]').forEach((input) => input.addEventListener('change', async () => {
+        if (!input.files.length) return;
+        saveNotes();
+        const n = input.files.length;
+        toast(n > 1 ? `Saving ${n} photos…` : 'Saving…');
+        await addPrepPhotos(id, key, input.files, prepKind());
+        input.value = '';
+        render();
+      }));
+      wirePrepItems(root);
+      root.querySelector('#rmarea')?.addEventListener('click', () => {
+        const cur = prepOf(id);
+        store.save('preps', { id, areas: cur.areas.filter((a) => a.key !== key) });
+        undoToast(`Removed ${area.name}`, () => store.save('preps', { id, areas: [...prepOf(id).areas, area] }));
+        location.hash = `#/walk/${id}`;
+      });
+    }
+  };
+}
+
+// Quick capture (James's PPN flow): the area stays picked between shots, so
+// an agent can work room by room one-handed: shoot, a word, take another.
+function viewWalkCapture(id) {
+  const pr = prepOf(id);
+  if (!pr) return notFound();
+  const areas = sortAreas(pr.areas || []);
+  const sticky = areas.some((a) => a.key === pr.sticky_area) ? pr.sticky_area : (areas[0] || {}).key;
+  const items = prepItems(id);
+  const last = [...items].reverse().find((i) => i.photo_id && i.area === sticky);
+  const count = items.filter((i) => i.area === sticky && i.photo_id).length;
+  const kind = prepKind();
+  return {
+    form: true,
+    html: html`${header({ back: `#/walk/${id}`, kicker: `Listing Prep · ${prepTitle(pr)}`, title: 'Quick capture' })}
+    <main class="wrap">
+      ${prepStatusLine(pr)}
+      <section class="sec"><div class="label">Area</div>
+        <div class="chips">${areas.map((a) => html`<button class="chip ${a.key === sticky ? 'on' : ''}" type="button" data-area="${a.key}">${a.name}</button>`)}</div>
+      </section>
+      <div class="small">New photos are:</div>
+      <div class="seg"><button type="button" data-newkind="listing" class="${kind === 'listing' ? 'on' : ''}">Listing photo</button><button type="button" data-newkind="condition" class="${kind === 'condition' ? 'on' : ''}">Condition photo</button></div>
+      <label class="btn dark block big capture-btn">${icon('photo', 24)}${last ? 'Save & take another' : 'Take a photo'}<input type="file" accept="image/*" capture="environment" data-shot hidden></label>
+      <label class="btn block">${icon('plus', 18)}Add from photos<input type="file" accept="image/*" multiple data-shot hidden></label>
+      ${last ? html`<section class="sec"><div class="label">Last photo · ${count} in ${(areas.find((a) => a.key === sticky) || {}).name}</div><div class="pitems">${prepItemCard(last)}</div></section>` : html`<div class="hint">Pick the area, then take photos. The area stays picked until you change it.</div>`}
+      <a class="btn block" href="#/walk/${id}/a/${sticky}">Open ${(areas.find((a) => a.key === sticky) || {}).name}: notes and all photos</a>
+    </main>`,
+    mount(root) {
+      loadPhotos(root);
+      wirePrepItems(root, render);
+      root.querySelectorAll('[data-area]').forEach((b) => b.addEventListener('click', () => {
+        store.save('preps', { id, sticky_area: b.getAttribute('data-area') }, { quiet: true });
+        render();
+      }));
+      root.querySelectorAll('[data-newkind]').forEach((b) => b.addEventListener('click', () => {
+        setPrepKind(b.getAttribute('data-newkind'));
+        root.querySelectorAll('[data-newkind]').forEach((x) => x.classList.toggle('on', x === b));
+      }));
+      root.querySelectorAll('[data-shot]').forEach((input) => input.addEventListener('change', async () => {
+        if (!input.files.length) return;
+        // A note typed on the last photo is kept before the next one.
+        const note = root.querySelector('[data-pnote]');
+        if (note && last) store.save('prep_items', { id: last.id, note: note.value.trim() }, { quiet: true });
+        await addPrepPhotos(id, sticky, input.files, prepKind());
+        input.value = '';
+        render();
+        setTimeout(() => root.querySelector('[data-pnote]')?.focus(), 50);
+      }));
+    }
+  };
+}
+
+// ======================================================================
 // ROUTER
 // ======================================================================
 
@@ -4944,7 +5292,13 @@ const ROUTES = [
   [/^#\/settings$/, () => viewSettings(), 'today'],
   [/^#\/profile$/, () => viewProfile(), 'today'],
   [/^#\/openhouse\/([^/]+)$/, (m) => viewOpenHouse(m[1]), 'kiosk'],
-  [/^#\/visitors\/([^/]+)$/, (m) => viewVisitors(m[1]), 'props']
+  [/^#\/visitors\/([^/]+)$/, (m) => viewVisitors(m[1]), 'props'],
+  [/^#\/prep\/([^/]+)\/new$/, (m) => viewPrepStart(m[1]), 'props'],
+  [/^#\/prep\/([^/]+)$/, (m) => viewPrepList(m[1]), 'props'],
+  [/^#\/walk\/([^/]+)$/, (m) => viewWalk(m[1]), 'props'],
+  [/^#\/walk\/([^/]+)\/details$/, (m) => { const pr = prepOf(m[1]); return pr ? viewPrepStart(pr.property_id, pr.id) : notFound(); }, 'props'],
+  [/^#\/walk\/([^/]+)\/capture$/, (m) => viewWalkCapture(m[1]), 'props'],
+  [/^#\/walk\/([^/]+)\/a\/([^/]+)$/, (m) => viewWalkArea(m[1], m[2]), 'props']
 ];
 
 let current = null;

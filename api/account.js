@@ -34,6 +34,32 @@ export async function removeTeamFiles(teamId, fetchImpl = fetch) {
   return gone;
 }
 
+// Listing Prep photos (db/031) sit one folder deeper, <team>/<agent>/<file>,
+// in their own private bucket.
+export async function removePrepFiles(teamId, fetchImpl = fetch) {
+  const r = await fetchImpl(`${STORAGE()}/object/list/prep-photos`, { method: 'POST', headers: admin(), body: JSON.stringify({ prefix: teamId, limit: 1000, offset: 0 }) });
+  if (!r.ok) throw new Error(`storage list ${r.status}`);
+  const folders = (await r.json()).map((o) => o.name).filter(Boolean);
+  let gone = 0;
+  for (const f of folders) gone += await removeFolder('prep-photos', `${teamId}/${f}`, fetchImpl);
+  return gone;
+}
+async function removeFolder(bucket, prefix, fetchImpl) {
+  let gone = 0;
+  for (let round = 0; round < 50; round++) {
+    const r = await fetchImpl(`${STORAGE()}/object/list/${bucket}`, { method: 'POST', headers: admin(), body: JSON.stringify({ prefix, limit: 1000, offset: 0 }) });
+    if (!r.ok) throw new Error(`storage list ${r.status}`);
+    const names = (await r.json()).map((o) => o.name).filter(Boolean);
+    if (!names.length) break;
+    const d = await fetchImpl(`${STORAGE()}/object/${bucket}`, { method: 'DELETE', headers: admin(), body: JSON.stringify({ prefixes: names.map((n) => `${prefix}/${n}`) }) });
+    if (!d.ok) throw new Error(`storage delete ${d.status}`);
+    gone += names.length;
+    if (names.length < 1000) break;
+  }
+  return gone;
+}
+const removeAllFiles = async (teamId) => (await removeTeamFiles(teamId)) + (await removePrepFiles(teamId));
+
 export default async function handler(req, res) {
   if (!env('SUPABASE_URL') || !env('SUPABASE_SERVICE_ROLE_KEY')) return send(res, 503, { error: 'Accounts are not set up on the server' });
   const user = await caller(req);
@@ -59,7 +85,7 @@ export default async function handler(req, res) {
       if (other === teamId) continue;
       const people = await db(`team_members?team_id=eq.${other}&select=user_id`);
       if ((people || []).length > 1) { await db(`team_members?team_id=eq.${other}&user_id=eq.${uid}`, { method: 'DELETE' }); continue; }
-      files += await removeTeamFiles(other);
+      files += await removeAllFiles(other);
       await db(`teams?id=eq.${other}`, { method: 'DELETE' });
     }
     if (teamId && !teammates) {
@@ -67,10 +93,10 @@ export default async function handler(req, res) {
       // hold that person's files under their old folder: remove them too.
       const shells = await db(`teams?merged_into=eq.${teamId}&select=id`);
       for (const s of shells || []) {
-        files += await removeTeamFiles(s.id);
+        files += await removeAllFiles(s.id);
         await db(`teams?id=eq.${s.id}`, { method: 'DELETE' });
       }
-      files += await removeTeamFiles(teamId);
+      files += await removeAllFiles(teamId);
       await db(`teams?id=eq.${teamId}`, { method: 'DELETE' });
     } else if (teamId) {
       await db(`team_members?team_id=eq.${teamId}&user_id=eq.${uid}`, { method: 'DELETE' });
