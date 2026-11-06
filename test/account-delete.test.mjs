@@ -15,7 +15,11 @@ function run(members, body) {
     if (u.endsWith('/auth/v1/user')) return json({ id: 'me' });
     if (u.includes('team_members?user_id=')) return json([{ team_id: 't1' }]);
     if (u.includes('team_members?team_id=') && m === 'GET') return json(members.map((id) => ({ user_id: id })));
-    if (u.includes('/object/list/photos')) return json(calls.filter((c) => c.includes('/object/list')).length === 1 ? [{ name: 'a.jpg' }, { name: 'b.pdf' }] : []);
+    if (u.includes('/object/list/photos')) return json(calls.filter((c) => c.includes('/object/list/photos')).length === 1 ? [{ name: 'a.jpg' }, { name: 'b.pdf' }] : []);
+    if (u.includes('/object/list/prep-photos')) {
+      const n = calls.filter((c) => c.includes('/object/list/prep-photos')).length;
+      return json(n === 1 ? [{ name: 'me' }] : n === 2 ? [{ name: 'p1.jpg' }] : []);
+    }
     return new Response('', { status: 200 });
   };
   const res = { statusCode: 0, headers: {}, setHeader() {}, end(b) { this.body = JSON.parse(b); } };
@@ -26,7 +30,8 @@ test('alone on the team: files, then the whole team, then the sign-in', async ()
   const { res, calls } = await run(['me'], { op: 'delete', confirm: 'DELETE' });
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.team_deleted, true);
-  assert.equal(res.body.files, 2);
+  assert.equal(res.body.files, 3, 'shared photos and Listing Prep photos');
+  assert.ok(calls.some((c) => c.startsWith('DELETE /storage/v1/object/prep-photos')));
   const i = (s) => calls.findIndex((c) => c.startsWith(s));
   assert.ok(i('DELETE /storage/v1/object/photos') > -1);
   assert.ok(i('DELETE /storage/v1/object/photos') < i('DELETE /rest/v1/teams?id=eq.t1'), 'files before the rows that point at them');
