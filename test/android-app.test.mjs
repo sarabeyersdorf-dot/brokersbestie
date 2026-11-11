@@ -43,3 +43,13 @@ test('the public delete-account page is served and says how', () => {
   assert.match(page, /support@brokersbestie\.app/);
   assert.match(page, /30 days/);
 });
+
+test('assetlinks.json lets app.brokersbestie open full screen, with both keys', () => {
+  const links = JSON.parse(readFileSync(new URL('../.well-known/assetlinks.json', import.meta.url), 'utf8'));
+  const t = links[0].target;
+  assert.deepEqual(links[0].relation, ['delegate_permission/common.handle_all_urls']);
+  assert.equal(t.namespace, 'android_app');
+  assert.equal(t.package_name, 'app.brokersbestie');
+  assert.equal(t.sha256_cert_fingerprints.length, 2, 'Play app signing key + upload key');
+  for (const f of t.sha256_cert_fingerprints) assert.match(f, /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+});
