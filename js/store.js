@@ -372,6 +372,19 @@ export async function verifyCode(email, code) {
   return cloud.user;
 }
 
+// Password sign-in (2026-11-11) exists for ONE account: the Google Play
+// reviewer (playreview@brokersbestie.app), who cannot receive an emailed
+// code. Every other account has no password, so this simply says no for them;
+// their sign-in stays the emailed code.
+export async function signInPassword(email, password) {
+  const c = await client();
+  const { data, error } = await c.auth.signInWithPassword({ email: String(email || '').trim(), password: String(password || '') });
+  if (error) throw new Error(/invalid|credentials/i.test(`${error.code || ''} ${error.message || ''}`) ? 'That email and password did not match. Most accounts sign in with an emailed code instead.' : authMessage(error));
+  cloud.user = data.user || data.session?.user || null;
+  emit();
+  return cloud.user;
+}
+
 export function authMessage(e) {
   const m = `${e?.code || ''} ${e?.message || e || ''}`;
   if (/rate|429|over_email/i.test(m)) return 'Too many sign-in emails in the last hour. Use the code in the last email you got, or try again in an hour.';

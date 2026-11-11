@@ -602,6 +602,22 @@ function doTiles(tours) {
     ${tile({ href: '#/miles' }, 'miles', 'Log a drive')}
   </div></section>`;
 }
+// Password sign-in, for the one account that has a password (the Google Play
+// reviewer, db/032). Small and folded away: real agents use the emailed code.
+function pwSignInHtml(prefix) {
+  return html`<details class="pw-signin"><summary class="small">Sign in with a password</summary>
+    <label class="field"><span>Password</span><input id="${prefix}pw" type="password" autocomplete="current-password"></label>
+    <button class="btn block" type="button" id="${prefix}pwgo">Sign in with password</button>
+  </details>`;
+}
+function wirePwSignIn(root, prefix, emailSel) {
+  root.querySelector(`#${prefix}pwgo`)?.addEventListener('click', async () => {
+    const email = (root.querySelector(emailSel)?.value || '').trim();
+    const pw = root.querySelector(`#${prefix}pw`).value;
+    if (!email || !pw) return toast('Type your email and password');
+    try { await store.signInPassword(email, pw); store.saveSettings({ pendingEmail: '' }); toast('Signed in'); render(); } catch (e) { toast(e.message); }
+  });
+}
 function openHousePicker() {
   const me = firstName(store.settings().myName) || null;
   const list = props().filter((p) => ['listing', 'prep'].includes(p.status) && isWhose(p.owner, me));
@@ -688,7 +704,8 @@ function viewSetup() {
         <div id="sx_codebox" ${s.pendingEmail ? '' : raw('hidden')}>
           <label class="field"><span>Code from the email</span><input id="sx_otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10" class="codein"></label>
           <button class="btn teal big block" type="button" id="sx_verify">Sign in</button>
-        </div>`, c.user ? 'Code came from noreply@send.brokersbestie.app' : 'An email code, no password')}
+        </div>
+        ${pwSignInHtml('sx_')}`, c.user ? 'Code came from noreply@send.brokersbestie.app' : 'An email code, no password')}
 
       ${step('name', 2, prof.full_name ? `${prof.full_name}${prof.license ? ' · ' + licenseText(prof.license) : ''}` : 'Your name & license number', html`
         <label class="field"><span>Your full name</span><input id="sx_name" value="${prof.full_name || ''}" placeholder="Sara Cooper" autocomplete="name"></label>
@@ -728,6 +745,7 @@ function viewSetup() {
         try { await store.signIn(email); store.saveSettings({ pendingEmail: email }); root.querySelector('#sx_codebox').hidden = false; root.querySelector('#sx_otp').focus(); toast('Check your email for the code'); }
         catch (e) { if (/Too many/.test(e.message)) { store.saveSettings({ pendingEmail: email }); root.querySelector('#sx_codebox').hidden = false; } toast(e.message); }
       });
+      wirePwSignIn(root, 'sx_', '#sx_email');
       root.querySelector('#sx_verify')?.addEventListener('click', async () => {
         const email = root.querySelector('#sx_email').value.trim() || store.settings().pendingEmail;
         const code = root.querySelector('#sx_otp').value.trim();
@@ -3952,7 +3970,8 @@ function viewSettings() {
               <button class="btn teal big block" type="button" id="verify">Sign in</button>
               <div class="hint">Type the code here, in Bestie. Don't tap the link in the email on an iPhone: it signs in Safari, not this app.</div>
             </div>
-            <div class="hint">With an invite code, you join that team as soon as you sign in.</div>`
+            <div class="hint">With an invite code, you join that team as soon as you sign in.</div>
+            ${pwSignInHtml('st_')}`
           : html`<div>Signed in as <b>${c.user.email}</b>. ${c.status === 'synced' ? 'Everything is saved to your team.' : c.status === 'error' ? 'Last save did not go through; it will retry.' : ''}</div>
             <div class="btns"><button class="btn" type="button" id="syncnow">Save now</button><button class="btn" type="button" id="invite">Invite a teammate</button></div>
             <label class="field"><span>Join a team with a code</span><input id="joincode" autocomplete="off" placeholder="ABC123"></label>
@@ -4075,6 +4094,7 @@ function viewSettings() {
           toast(e.message);
         }
       });
+      wirePwSignIn(root, 'st_', '#email');
       root.querySelector('#verify')?.addEventListener('click', async () => {
         const email = root.querySelector('#email').value.trim() || store.settings().pendingEmail;
         const code = root.querySelector('#otp').value.trim();
