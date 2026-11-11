@@ -1166,3 +1166,34 @@ email; never put the plain password in a file or a commit.
   got nothing asking for Legacy's homes, and a caller with no sign-in was
   refused; Sara's team sees none of the review rows.
 - Guarded by `test/review-account.test.mjs`. bb-v86.
+
+## The Google Play app: no prices inside it, a public delete page (2026-11-11)
+
+From Cowork (`20261111_CWtoCC_android-play-build.md`). The Android app is the
+website wrapped as a Trusted Web Activity, package **app.brokersbestie**
+(permanent), start URL **https://brokersbestie.app/?source=twa**. Sara's rule:
+Stripe on the website stays; **inside the Android app there are no prices,
+plans, Subscribe buttons, Stripe checkout or payment links** (Google requires
+Play Billing otherwise, and she chose not to use it). Agents subscribe on the
+website, then sign in.
+- `js/twa.js` is the one rule: `isAndroidApp()` = the `?source=twa` start URL,
+  or the referrer `android-app://app.brokersbestie`, then remembered on the
+  phone (`bb:twa`). `appAccountWords(b)` = what the app says instead of a plan:
+  "Your account is active" / complimentary / "Your account isn't active yet…"
+  with no price and no link.
+- Inside the app: `#/billing` shows `viewAccountApp` (status only), Settings
+  shows a "Your account" line instead of the Your plan link, the Today banner
+  appears only when the account is not active (no link), and the read-only
+  toast does not say "choose a plan". terms.html still states the prices (a
+  legal page, linked from Settings).
+- **brokersbestie.app/delete-account** (`delete-account.html`, vercel rewrite):
+  the public page Google's Data safety form asks for. In-app steps (Settings →
+  Delete my account → type DELETE), the email route, what is deleted, the
+  30-day backup line from privacy.html.
+- `/.well-known/assetlinks.json` gets `application/json` + no-cache headers in
+  vercel.json; the FILE is added once both SHA-256 fingerprints are known (the
+  upload key from PWABuilder and the Play App Signing key from Play Console →
+  App integrity). Without it the app shows a browser bar.
+- The .aab is made by Sara/Cowork on PWABuilder.com so the signing key file
+  never passes through Claude Code; it lives in Sara's Dropbox and password
+  manager. Guarded by `test/android-app.test.mjs`. bb-v87.
