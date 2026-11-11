@@ -1190,10 +1190,14 @@ website, then sign in.
   the public page Google's Data safety form asks for. In-app steps (Settings →
   Delete my account → type DELETE), the email route, what is deleted, the
   30-day backup line from privacy.html.
-- `/.well-known/assetlinks.json` gets `application/json` + no-cache headers in
-  vercel.json; the FILE is added once both SHA-256 fingerprints are known (the
-  upload key from PWABuilder and the Play App Signing key from Play Console →
-  App integrity). Without it the app shows a browser bar.
+- **`/.well-known/assetlinks.json`** (added 2026-11-11, `application/json` +
+  no-cache in vercel.json) lists app.brokersbestie with BOTH SHA-256
+  fingerprints: the Play App Signing key (`06:31:6B:…:A2:17`, what testers
+  install) and the PWABuilder upload key (`C4:34:59:…:0E:CA`). Without it the
+  app shows a browser bar. A new upload key or app = add its fingerprint here.
+  Internal testing: release 1.0.0 (1), target SDK 36, tester link
+  https://play.google.com/apps/internaltest/4700816430288415795 . The signing
+  zip is in Sara's Dropbox `/Brokers Bestie/Android signing/`.
 - The .aab is made by Sara/Cowork on PWABuilder.com so the signing key file
   never passes through Claude Code; it lives in Sara's Dropbox and password
   manager. Guarded by `test/android-app.test.mjs`. bb-v87.

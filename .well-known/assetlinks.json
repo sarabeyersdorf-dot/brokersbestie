@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.brokersbestie",
+      "sha256_cert_fingerprints": [
+        "06:31:6B:90:39:91:FA:68:49:F6:D7:3A:75:0B:EE:4F:E8:96:CA:52:C8:28:AC:4E:1E:91:EA:89:39:8C:A2:17",
+        "C4:34:59:55:A5:4E:03:99:F1:B0:C8:38:AF:5A:14:08:53:54:C6:65:9D:D0:EA:A5:E8:91:4B:33:C8:ED:0E:CA"
+      ]
+    }
+  }
+]
