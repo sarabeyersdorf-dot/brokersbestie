@@ -1130,3 +1130,39 @@ Quick Items, 3 reports + AVID notes, 4 MLS sheet, 5 markup + Recently Deleted.
   note, category, Follow up), **Quick capture** `#/walk/<id>/capture` (area
   stays picked, "Save & take another"). Photo cards save quietly on change.
 - Account delete also empties prep-photos (`removePrepFiles`, two levels).
+
+## The Google Play reviewer account (2026-11-11)
+
+Google Play needs a way for its reviewers to get past sign-in, and they cannot
+receive the emailed code. So ONE account signs in with a password:
+**playreview@brokersbestie.app**. The password is not in the repo or here:
+Sara has it (her password manager, and Play Console → App access). To change
+it, make a new bcrypt hash and update `auth.users.encrypted_password` for that
+email; never put the plain password in a file or a commit.
+- **Sign-in:** Settings (and the setup checklist's Sign in step) has a small
+  folded **Sign in with a password** link under the code form
+  (`pwSignInHtml` / `wirePwSignIn` in app.js, `store.signInPassword`). Every
+  other account has no password, so it just says no for them; their sign-in
+  stays the emailed code.
+- **Its own team** "Google Play review (demo data)" (`bb_config.review_team`,
+  `review_user`), never Legacy's; the account is its only member, role owner.
+  `billing.comped = true`, like Sara and James's.
+- **Demo data, reset every night** (db/032): `review_seed` holds the /demo
+  story (js/sample.js, ids `review-*`, generated for a 9:00 AM tour) plus a
+  profile (Alex Demo, Demo Realty) and a Listing Prep walk on 100 Sample Ridge
+  Rd. `bb_reset_review_team()` wipes the team and puts it back with every date
+  moved to today; pg_cron `bestie-review-reset` runs it at 3:10 AM Pacific, so
+  a reviewer always finds today's tour and nothing a previous reviewer typed.
+  It refuses to run if anyone else ever joins that team. Changing the demo
+  story = regenerate the rows and update `review_seed` (base_date = the day
+  they were generated for).
+- **It can never text anyone:** `teams.sms_blocked` (db/032) is checked in
+  `cappedText`, the one place the `reminders` function sends a text (v10).
+  Verified live: an invite from the review account answered "texting is off
+  for this team" and `sms_log` stayed empty. "Send help now" still opens the
+  reviewer's OWN Messages app, as for every agent; Bestie sends nothing.
+- Verified 2026-11-11: password sign-in returned a session from the live auth
+  server; with it the account read only its own 5 homes, 8 codes and 1 walk,
+  got nothing asking for Legacy's homes, and a caller with no sign-in was
+  refused; Sara's team sees none of the review rows.
+- Guarded by `test/review-account.test.mjs`. bb-v86.

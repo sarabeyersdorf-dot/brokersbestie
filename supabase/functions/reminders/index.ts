@@ -42,6 +42,10 @@ async function sendSms(to: string, body: string) {
 async function cappedText(teamId: string, userId: string | null, toRaw: string, body: string, kind: string, checkinId: string | null) {
   const to = e164(toRaw);
   if (!to) return 'not a US or Canada number';
+  // A team with texting switched off (the Google Play review team, db/032)
+  // never sends a text, whatever is pressed. A failed check also refuses.
+  const { data: tm, error: tmErr } = await db.from('teams').select('sms_blocked').eq('id', teamId).maybeSingle();
+  if (tmErr || !tm || tm.sms_blocked) return 'texting is off for this team';
   const since = new Date(Date.now() - 24 * 3600e3).toISOString();
   const [{ count: team }, { count: number }] = await Promise.all([
     db.from('sms_log').select('id', { count: 'exact', head: true }).eq('team_id', teamId).gte('sent_at', since),
