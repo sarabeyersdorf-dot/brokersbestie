@@ -1,6 +1,7 @@
 // Brokers Bestie: every screen. Hash routes (#/, #/p/<id>, #/tours …) so the
 // back button, bookmarks and a home-screen launch all land where expected.
 
+import { isAndroidApp, appAccountWords } from './twa.js';
 import * as store from './store.js';
 import { APP_VERSION, SUPPORT_EMAIL } from './config.js';
 import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLink, mapLink, todayIso, daysFrom, niceDate, whenText, toast, undoToast, copy } from './ui.js';
@@ -3979,7 +3980,8 @@ function viewSettings() {
             <button class="btn ghost block" type="button" id="signout">Sign out</button>`}
       </section>
 
-      ${c.user ? html`<a class="card row sec" href="#/billing"><span class="grow"><span class="t">Your plan</span><span class="s">${s.billing ? planSentence(s.billing) : 'Plans and billing'}</span></span>${icon('chev', 18)}</a>` : ''}
+      ${c.user && isAndroidApp() ? html`<div class="card row sec"><span class="grow"><span class="t">Your account</span><span class="s">${appAccountWords(s.billing).text}</span></span></div>` : ''}
+      ${c.user && !isAndroidApp() ? html`<a class="card row sec" href="#/billing"><span class="grow"><span class="t">Your plan</span><span class="s">${s.billing ? planSentence(s.billing) : 'Plans and billing'}</span></span>${icon('chev', 18)}</a>` : ''}
 
       <section class="card pad sec" id="pushcard">
         <div class="label accent">Reminders on this phone</div>
@@ -4498,13 +4500,18 @@ let roToastAt = 0;
 store.onReadOnlyBlock(() => {
   if (Date.now() - roToastAt < 4000) return;
   roToastAt = Date.now();
-  toast('Your plan has ended, so changes are paused. Choose a plan under Settings → Your plan.');
+  toast(isAndroidApp() ? "Your account isn't active yet, so changes are paused." : 'Your plan has ended, so changes are paused. Choose a plan under Settings → Your plan.');
 });
 
 // The banner at the top of Today: only when there is something to do.
 function planBanner() {
   const b = store.settings().billing;
   if (!b || !store.cloud.user) return '';
+  // Android app: no plans and no way to pay (Google Play rule); only say it.
+  if (isAndroidApp()) {
+    const w = appAccountWords(b);
+    return w.active ? '' : html`<div class="card pad sec plan-banner bad"><div class="label">Account</div><div>${w.text}</div></div>`;
+  }
   const urgent = b.state === 'lapsed' && b.enforced;
   const soon = b.state === 'trial' && !b.subscribed && b.daysLeft <= 3;
   if (!urgent && !soon && b.state !== 'past_due') return '';
@@ -4514,12 +4521,25 @@ function planBanner() {
     <div>${planSentence(b)}</div><div class="small" style="font-weight:700">See plans →</div></a>`;
 }
 
+// The Android app's account screen: a status, never a price or a way to pay.
+function viewAccountApp() {
+  const w = appAccountWords(store.settings().billing);
+  return {
+    repaint: true,
+    html: html`${header({ back: '#/settings', kicker: 'Brokers Bestie', title: 'Your account' })}
+    <main class="wrap"><section class="card pad sec"><div style="font-size:18px;font-weight:600">${store.cloud.user ? w.text : 'Sign in first (Settings).'}</div></section>
+      <p class="small muted">Questions: <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p></main>`,
+    mount() { if (store.cloud.user) refreshBilling(true).then((fresh) => { if (fresh && location.hash === '#/billing') render(); }); }
+  };
+}
+
 // Your plan (2026-10-28, phase 8). A trial with no card says so plainly:
 // days left as a bar with the end date, the three plans each also as a
 // monthly cost, yearly picked first, one "Choose" button. No countdowns.
 let billingPick = null;
 let billingAskedAt = 0;
 function viewBilling() {
+  if (isAndroidApp()) return viewAccountApp();
   const b = store.settings().billing;
   const signedIn = !!store.cloud.user;
   const done = /[?&]billing=done/.test(location.search);
