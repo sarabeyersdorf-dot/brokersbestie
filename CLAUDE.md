@@ -1234,3 +1234,17 @@ service): no prices, plans or ways to pay inside the app.
   `APNS_KEY_P8` (the whole .p8 text), `APNS_KEY_ID`, `APNS_TEAM_ID` (from James).
 - Guarded by `test/iphone-app.test.mjs` (incl. a real ES256 sign/verify with a
   throwaway key). bb-v88.
+
+## iPhone app: the shared status page, and step 4 in the store apps (2026-11-12)
+
+- **Read `/_LEGACY/Legacy Cowork/Bestie_iPhone_STATUS.md` before any iPhone
+  app work.** It is the one short status page for James, Sara, James's Claude
+  and Sara's Claude Code. Claude Code's Dropbox connection can only CREATE
+  files, not edit, so Claude Code puts its status lines in its dated
+  `_from_ClaudeCode/` reply and asks James's Claude to copy them onto the page.
+- First-run checklist step 4 inside a store app (`isStoreApp()`) is **Turn on
+  reminders** (done = `settings.pushOn`, a button to Settings), never "Bestie
+  is on your home screen" (James: the reviewer reads that as "website").
+  Safari / Chrome still get the home-screen step. bb-v89.
+- The Apple push key: Key ID 5A35MV6V4K, Team ID A9445B3WUP (not secret); the
+  .p8 itself is pasted into Supabase secrets by a person, never through notes.

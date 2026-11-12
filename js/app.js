@@ -670,7 +670,9 @@ function setupSteps() {
     { key: 'signin', done: !c.enabled || !!c.user },
     { key: 'name', done: !!(prof && prof.full_name) },
     { key: 'prop', done: ownProps().length > 0 },
-    { key: 'home', done: isInstalled() }
+    // Inside the Play / App Store app there is no home screen to add Bestie to:
+    // step 4 is turning reminders on instead (James, 2026-11-12).
+    { key: 'home', done: isStoreApp() ? !!store.settings().pushOn : isInstalled() }
   ];
 }
 let setupOpen = null; // a later step the agent tapped open
@@ -719,7 +721,9 @@ function viewSetup() {
         <div class="btns"><button class="btn" type="button" data-mic="sx_prop">${icon('mic', 18)}Say it</button><button class="btn dark" type="button" id="sx_addprop">Save it</button></div>
         <a class="small" href="#/sheet" style="color:var(--teal-text);font-weight:700">Or snap a photo of an MLS sheet ›</a>`, 'Say it or type it, with the gate code')}
 
-      ${step('home', 4, isInstalled() ? 'Bestie is on your home screen' : 'Put Bestie on your home screen', html`
+      ${isStoreApp() ? step('home', 4, s.pushOn ? 'Reminders are on' : 'Turn on reminders', html`
+        <div class="small">A tap on your phone before each showing and appointment, and a 7:30 list of what's due.</div>
+        <a class="btn dark block" href="#/settings">Turn on reminders in Settings</a>`, 'Before showings, and at 7:30') : step('home', 4, isInstalled() ? 'Bestie is on your home screen' : 'Put Bestie on your home screen', html`
         <div class="small">Reminders only work from the home screen app.</div>
         <div class="ios-share">On iPhone: tap <span class="share-ic">${icon('share', 18)}</span> Share at the bottom of Safari, then <b>Add to Home Screen</b>.</div>
         ${installCard({ slim: true })}`, 'Reminders only work from there')}

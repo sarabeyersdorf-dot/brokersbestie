@@ -105,3 +105,12 @@ test('sendApns: right host per build, right headers, payload with the url, dead 
   r = await sendApns({ apns_token: 'x', apns_env: 'production' }, msg, env, { fetchImpl: fake(429, { reason: 'TooManyRequests' }), now: 1_900_000_000_000 });
   assert.equal(r.gone, false);
 });
+
+test('first-run step 4 inside a store app is "Turn on reminders", not "home screen"', () => {
+  assert.match(app, /\{ key: 'home', done: isStoreApp\(\) \? !!store\.settings\(\)\.pushOn : isInstalled\(\) \}/);
+  const at = app.indexOf("${isStoreApp() ? step('home', 4,");
+  assert.ok(at > 0, 'step 4 has a store-app version');
+  const storeStep = app.slice(at, app.indexOf(": step('home', 4,", at));
+  assert.match(storeStep, /Turn on reminders/);
+  assert.doesNotMatch(storeStep, /home screen/i);
+});
