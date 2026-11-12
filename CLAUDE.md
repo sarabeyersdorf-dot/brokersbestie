@@ -1248,3 +1248,7 @@ service): no prices, plans or ways to pay inside the app.
   Safari / Chrome still get the home-screen step. bb-v89.
 - The Apple push key: Key ID 5A35MV6V4K, Team ID A9445B3WUP (not secret); the
   .p8 itself is pasted into Supabase secrets by a person, never through notes.
+- **The APNs key is in and Apple accepts it** (2026-11-12, both sandbox and
+  production). `supabase/functions/apns-check` re-checks it without sending
+  anything: POST with header `x-cron-token` = `push_config.cron_token` (via
+  pg_net); `keyOk: true` = good key. Redeploy with apns.js beside it.
