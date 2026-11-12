@@ -10,7 +10,31 @@ import { platform, isInstalled } from './install.js';
 const FN = `${SUPABASE_URL}/functions/v1/reminders`;
 export const LEADS = [[15, '15 minutes'], [30, '30 minutes'], [60, '1 hour']];
 
+// The iPhone App Store app (2026-11-12): web push does not work inside an
+// app's web view, so the native app delivers reminders through Apple (APNs).
+// The bridge (agreed with James's Claude, who builds the native half):
+//   page -> app:  window.webkit.messageHandlers.bestie.postMessage({ op: 'push-register' | 'push-unregister' })
+//   app -> page:  window.bestieNative.onPushToken({ token, env })   env = 'sandbox' | 'production'
+//                 window.bestieNative.onPushError({ message })
+// The token is saved in push_subs as kind 'apns' (db/033); the reminders
+// function sends to Apple for those rows and to web push for the rest.
+export const nativeBridge = () => (typeof window !== 'undefined' && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.bestie) || null;
+let tokenWait = null;
+if (typeof window !== 'undefined') {
+  window.bestieNative = window.bestieNative || {};
+  window.bestieNative.onPushToken = (r) => { const w = tokenWait; tokenWait = null; if (w) (r && r.token ? w.ok(r) : w.no(new Error('The phone did not give a reminder address.'))); };
+  window.bestieNative.onPushError = (r) => { const w = tokenWait; tokenWait = null; if (w) w.no(new Error((r && r.message) || 'Notifications are off for Bestie. Turn them on in your iPhone Settings → Bestie → Notifications, then try again.')); };
+}
+function nativeToken() {
+  return new Promise((ok, no) => {
+    tokenWait = { ok, no };
+    setTimeout(() => { if (tokenWait) { tokenWait = null; no(new Error('The phone did not answer. Try again.')); } }, 60000);
+    nativeBridge().postMessage({ op: 'push-register' });
+  });
+}
+
 export function pushState() {
+  if (nativeBridge()) return 'ready';
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
     return platform().os === 'ios' && !isInstalled() ? 'install' : 'unsupported';
   }
@@ -20,6 +44,7 @@ export function pushState() {
 }
 
 export async function currentSub() {
+  if (nativeBridge()) { const s = store.settings(); return s.pushOn && s.pushSubId ? { native: true, id: s.pushSubId } : null; }
   try { const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); } catch { return null; }
 }
 
@@ -32,6 +57,16 @@ async function idFor(endpoint) {
 export async function turnOn(lead = 30) {
   const c = store.cloud;
   if (!c.user || !c.teamId) throw new Error('Sign in first (Team mode, above).');
+  if (nativeBridge()) {
+    const t = await nativeToken();
+    const row = { id: await idFor(`apns:${t.token}`), kind: 'apns', apns_token: t.token, apns_env: t.env === 'sandbox' ? 'sandbox' : 'production', endpoint: null, p256dh: null, auth: null,
+      team_id: c.teamId, owner: (store.settings().myName || '').toLowerCase() || null, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, lead_minutes: lead, updated_at: new Date().toISOString(),
+      base_lat: store.settings().homeBase?.lat ?? null, base_lng: store.settings().homeBase?.lng ?? null };
+    const { error } = await c.client.from('push_subs').upsert(row);
+    if (error) throw new Error(error.message);
+    store.saveSettings({ pushLead: lead, pushOn: true, pushSubId: row.id });
+    return row;
+  }
   if ((await Notification.requestPermission()) !== 'granted') throw new Error('Notifications are off for Bestie. Turn them on in your phone\'s Settings, then try again.');
   const res = await fetch(`${FN}?op=key`, { headers: { apikey: SUPABASE_ANON_KEY } });
   const { publicKey } = await res.json();
@@ -43,11 +78,18 @@ export async function turnOn(lead = 30) {
     base_lat: store.settings().homeBase?.lat ?? null, base_lng: store.settings().homeBase?.lng ?? null };
   const { error } = await c.client.from('push_subs').upsert(row);
   if (error) throw new Error(error.message);
-  store.saveSettings({ pushLead: lead, pushOn: true });
+  store.saveSettings({ pushLead: lead, pushOn: true, pushSubId: row.id });
   return row;
 }
 
 export async function turnOff() {
+  if (nativeBridge()) {
+    const id = store.settings().pushSubId;
+    if (id) { try { await store.cloud.client?.from('push_subs').delete().eq('id', id); } catch {} }
+    try { nativeBridge().postMessage({ op: 'push-unregister' }); } catch {}
+    store.saveSettings({ pushOn: false, pushSubId: null });
+    return;
+  }
   const sub = await currentSub();
   if (sub) {
     const id = await idFor(sub.endpoint);
@@ -117,7 +159,7 @@ export async function shareWhere(fix) {
   try {
     const sub = await currentSub();
     if (!sub) return;
-    await store.cloud.client.from('push_subs').update({ from_lat: fix.lat, from_lng: fix.lng, from_at: new Date().toISOString(), base_lat: store.settings().homeBase?.lat ?? null, base_lng: store.settings().homeBase?.lng ?? null }).eq('id', await idFor(sub.endpoint));
+    await store.cloud.client.from('push_subs').update({ from_lat: fix.lat, from_lng: fix.lng, from_at: new Date().toISOString(), base_lat: store.settings().homeBase?.lat ?? null, base_lng: store.settings().homeBase?.lng ?? null }).eq('id', sub.native ? sub.id : await idFor(sub.endpoint));
   } catch {}
 }
 

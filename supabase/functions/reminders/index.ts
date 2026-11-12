@@ -22,10 +22,14 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { makeVapidKeys, sendPush } from './webpush.js';
 import { dueReminders } from './due.js';
+import { apnsReady, sendApns } from './apns.js';
 import { overdue, alertText, e164, cleanVisit, SMS_DAILY_CAP, SMS_PER_NUMBER_CAP, inviteText, acceptedText, HELP_TEXT, smsKeyword, contactStatus, twilioSignature } from './safety.js';
 
 const TW = { sid: Deno.env.get('TWILIO_ACCOUNT_SID'), tok: Deno.env.get('TWILIO_AUTH_TOKEN'), from: Deno.env.get('TWILIO_FROM') };
 const texting = () => !!(TW.sid && TW.tok && TW.from);
+// iPhone App Store app reminders go through Apple (db/033, apns.js). The key is
+// James's APNs key, pasted by Sara into this function's secrets.
+const APNS = { APNS_KEY_P8: Deno.env.get('APNS_KEY_P8'), APNS_KEY_ID: Deno.env.get('APNS_KEY_ID'), APNS_TEAM_ID: Deno.env.get('APNS_TEAM_ID') };
 async function sendSms(to: string, body: string) {
   if (!texting()) throw new Error('texting is not set up');
   const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TW.sid}/Messages.json`, {
@@ -143,6 +147,12 @@ async function config() {
 
 async function deliver(sub: any, msg: any, vapid: any) {
   try {
+    if (sub.kind === 'apns') {
+      if (!apnsReady(APNS)) return 'apns not set up';
+      const r = await sendApns(sub, { ...msg, tag: msg.key }, APNS);
+      if (r.gone) await db.from('push_subs').delete().eq('id', sub.id);
+      return r.status === 200 ? 201 : (r.reason || r.status); // 201 = delivered, as for web push
+    }
     const status = await sendPush(sub, { title: msg.title, body: msg.body, url: msg.url, tag: msg.key }, vapid);
     if (status === 404 || status === 410) await db.from('push_subs').delete().eq('id', sub.id);
     return status;
@@ -200,7 +210,7 @@ Deno.serve(async (req) => {
   const cfg = await config();
   if (!cfg) return json({ error: 'not set up' }, 500);
   const url = new URL(req.url);
-  if (req.method === 'GET' && url.searchParams.get('op') === 'key') return json({ publicKey: cfg.public_key, safetySms: texting() });
+  if (req.method === 'GET' && url.searchParams.get('op') === 'key') return json({ publicKey: cfg.public_key, safetySms: texting(), apns: apnsReady(APNS) });
   if (req.method === 'GET' && url.searchParams.get('op') === 'oh') {
     const link = await ohLink(url.searchParams.get('t'));
     if (!link) return json({ error: 'This sign-in link has ended. Please ask the agent.' }, 404);

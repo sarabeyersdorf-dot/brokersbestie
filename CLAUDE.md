@@ -1201,3 +1201,36 @@ website, then sign in.
 - The .aab is made by Sara/Cowork on PWABuilder.com so the signing key file
   never passes through Claude Code; it lives in Sara's Dropbox and password
   manager. Guarded by `test/android-app.test.mjs`. bb-v87.
+
+## The iPhone App Store app: website side (2026-11-12)
+
+From James's note (`20261111_JamesToCC_bestie-iphone-app.md`). James's Claude
+builds the native iPhone app (bundle **app.brokersbestie**, James's Apple
+developer account) showing this site in a web view; it opens
+`https://brokersbestie.app/?source=ios` and adds **`BrokersBestieiOS`** to the
+user agent. Apple's rule is **3.1.3(f)** (free companion app to a paid web
+service): no prices, plans or ways to pay inside the app.
+- `js/twa.js`: `detectIos` / `isIosApp()` (start URL, user agent, or stored
+  `bb:ios`) and **`isStoreApp()` = Android OR iPhone**. Every no-prices place
+  in app.js uses `isStoreApp()` (a test fails on `isAndroidApp()` there).
+- Inside either store app: `isInstalled()` is true and `installCard()` draws
+  nothing (no "Add to Home Screen" help); in-app Terms links go to
+  `terms.html?app=1` (`termsHref()`), and terms.html removes its
+  `[data-prices]` paragraph for `?app=1`, the iOS user agent, or a stored
+  `bb:twa` / `bb:ios` mark. Website visitors see the full terms and the
+  install help as before.
+- **Reminders through Apple (APNs).** Web push does not work in an app's web
+  view. The bridge: page → app `window.webkit.messageHandlers.bestie.postMessage({op:'push-register'|'push-unregister'})`;
+  app → page `window.bestieNative.onPushToken({token, env})` / `onPushError({message})`
+  (`js/push.js`, `nativeBridge()`; `pushState()` is 'ready' when the bridge
+  exists; the row id is kept in `settings.pushSubId`). db/033 (applied):
+  `push_subs.kind` ('web' | 'apns'), `apns_token`, `apns_env`
+  ('sandbox' | 'production'), web columns nullable, a CHECK per kind.
+  `reminders` function v11: `deliver()` sends `kind = 'apns'` rows through
+  `apns.js` (ES256 JWT from the .p8, `apns-topic: app.brokersbestie`,
+  sandbox/production host per row, dead tokens deleted); `?op=key` reports
+  `apns: true|false`. **Secrets**, never in the repo, pasted by Sara in
+  Supabase → Brokers Bestie project → Edge Functions → Secrets:
+  `APNS_KEY_P8` (the whole .p8 text), `APNS_KEY_ID`, `APNS_TEAM_ID` (from James).
+- Guarded by `test/iphone-app.test.mjs` (incl. a real ES256 sign/verify with a
+  throwaway key). bb-v88.
