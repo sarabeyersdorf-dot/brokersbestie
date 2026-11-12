@@ -1,7 +1,7 @@
 // Brokers Bestie: every screen. Hash routes (#/, #/p/<id>, #/tours …) so the
 // back button, bookmarks and a home-screen launch all land where expected.
 
-import { isAndroidApp, appAccountWords } from './twa.js';
+import { isStoreApp, appAccountWords } from './twa.js';
 import * as store from './store.js';
 import { APP_VERSION, SUPPORT_EMAIL } from './config.js';
 import { html, raw, str, esc, icon, money, fullMoney, digits, prettyPhone, smsLink, mapLink, todayIso, daysFrom, niceDate, whenText, toast, undoToast, copy } from './ui.js';
@@ -3965,7 +3965,7 @@ function viewSettings() {
             <label class="field"><span>Email</span><input id="email" type="email" autocomplete="email" placeholder="you@brokerage.com" value="${s.pendingEmail || ''}"></label>
             <label class="field"><span>Invite code from your team (if you have one)</span><input id="precode" autocomplete="off" autocapitalize="characters" placeholder="ABC123" value="${s.pendingInvite || ''}"></label>
             <button class="btn dark block" type="button" id="signin">Email me a sign-in code</button>
-            <div class="hint">By signing in you agree to the <a href="terms.html">terms</a> and <a href="privacy.html">privacy policy</a>.</div>
+            <div class="hint">By signing in you agree to the <a href="${termsHref()}">terms</a> and <a href="privacy.html">privacy policy</a>.</div>
             <div id="codebox" ${s.pendingEmail ? '' : raw('hidden')} class="sec">
               <label class="field"><span>Code from the email</span><input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456" class="codein"></label>
               <button class="btn teal big block" type="button" id="verify">Sign in</button>
@@ -3980,8 +3980,8 @@ function viewSettings() {
             <button class="btn ghost block" type="button" id="signout">Sign out</button>`}
       </section>
 
-      ${c.user && isAndroidApp() ? html`<div class="card row sec"><span class="grow"><span class="t">Your account</span><span class="s">${appAccountWords(s.billing).text}</span></span></div>` : ''}
-      ${c.user && !isAndroidApp() ? html`<a class="card row sec" href="#/billing"><span class="grow"><span class="t">Your plan</span><span class="s">${s.billing ? planSentence(s.billing) : 'Plans and billing'}</span></span>${icon('chev', 18)}</a>` : ''}
+      ${c.user && isStoreApp() ? html`<div class="card row sec"><span class="grow"><span class="t">Your account</span><span class="s">${appAccountWords(s.billing).text}</span></span></div>` : ''}
+      ${c.user && !isStoreApp() ? html`<a class="card row sec" href="#/billing"><span class="grow"><span class="t">Your plan</span><span class="s">${s.billing ? planSentence(s.billing) : 'Plans and billing'}</span></span>${icon('chev', 18)}</a>` : ''}
 
       <section class="card pad sec" id="pushcard">
         <div class="label accent">Reminders on this phone</div>
@@ -4073,7 +4073,7 @@ function viewSettings() {
       </section>
 
       ${installCard()}
-      <div class="small" style="text-align:center;color:var(--muted, #7a8582)"><a href="privacy.html" style="color:inherit">Privacy</a> · <a href="terms.html" style="color:inherit">Terms</a> · <a href="mailto:${SUPPORT_EMAIL}" style="color:inherit">${SUPPORT_EMAIL}</a></div>
+      <div class="small" style="text-align:center;color:var(--muted, #7a8582)"><a href="privacy.html" style="color:inherit">Privacy</a> · <a href="${termsHref()}" style="color:inherit">Terms</a> · <a href="mailto:${SUPPORT_EMAIL}" style="color:inherit">${SUPPORT_EMAIL}</a></div>
       <div class="small" style="text-align:center;color:var(--muted, #7a8582)">Version ${APP_VERSION}</div>
     </main>`,
     mount(root) {
@@ -4500,7 +4500,7 @@ let roToastAt = 0;
 store.onReadOnlyBlock(() => {
   if (Date.now() - roToastAt < 4000) return;
   roToastAt = Date.now();
-  toast(isAndroidApp() ? "Your account isn't active yet, so changes are paused." : 'Your plan has ended, so changes are paused. Choose a plan under Settings → Your plan.');
+  toast(isStoreApp() ? "Your account isn't active yet, so changes are paused." : 'Your plan has ended, so changes are paused. Choose a plan under Settings → Your plan.');
 });
 
 // The banner at the top of Today: only when there is something to do.
@@ -4508,7 +4508,7 @@ function planBanner() {
   const b = store.settings().billing;
   if (!b || !store.cloud.user) return '';
   // Android app: no plans and no way to pay (Google Play rule); only say it.
-  if (isAndroidApp()) {
+  if (isStoreApp()) {
     const w = appAccountWords(b);
     return w.active ? '' : html`<div class="card pad sec plan-banner bad"><div class="label">Account</div><div>${w.text}</div></div>`;
   }
@@ -4520,6 +4520,9 @@ function planBanner() {
     ${soon ? html`<span class="banner-buddy">${raw(winkFace({ size: 40, label: '' }))}</span>` : ''}<div class="label">${urgent ? 'Read-only' : b.state === 'past_due' ? 'Payment problem' : 'Free trial'}</div>
     <div>${planSentence(b)}</div><div class="small" style="font-weight:700">See plans →</div></a>`;
 }
+
+// The terms page without its price paragraph inside a store app.
+function termsHref() { return isStoreApp() ? 'terms.html?app=1' : 'terms.html'; }
 
 // The Android app's account screen: a status, never a price or a way to pay.
 function viewAccountApp() {
@@ -4539,7 +4542,7 @@ function viewAccountApp() {
 let billingPick = null;
 let billingAskedAt = 0;
 function viewBilling() {
-  if (isAndroidApp()) return viewAccountApp();
+  if (isStoreApp()) return viewAccountApp();
   const b = store.settings().billing;
   const signedIn = !!store.cloud.user;
   const done = /[?&]billing=done/.test(location.search);
@@ -4582,7 +4585,7 @@ function viewBilling() {
         <button class="btn dark big block" type="button" id="choose" ${pick ? '' : raw('disabled')}>Choose ${pick ? pick.label : 'a plan'}</button>
         ${b && !b.payments ? html`<div class="small">Payments are not switched on yet.</div>` : ''}
       </section>` : ''}
-      <p class="small muted">On a team, one plan covers everyone: anyone on the team can choose it here, and it bills per agent. Questions: <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>. Payments are handled by Stripe. <a href="terms.html">Terms</a></p>
+      <p class="small muted">On a team, one plan covers everyone: anyone on the team can choose it here, and it bills per agent. Questions: <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>. Payments are handled by Stripe. <a href="${termsHref()}">Terms</a></p>
     </main>`,
     async mount(root) {
       root.querySelectorAll('[data-plan]').forEach((el) => el.addEventListener('click', () => { billingPick = el.dataset.plan; render(); }));

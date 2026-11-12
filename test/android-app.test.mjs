@@ -25,12 +25,12 @@ test('the account words never carry a price or a way to pay', () => {
 });
 
 test('every way to the plan screen checks for the Android app first', () => {
-  assert.match(app, /function viewBilling\(\) \{\n  if \(isAndroidApp\(\)\) return viewAccountApp\(\);/);
+  assert.match(app, /function viewBilling\(\) \{\n  if \(isStoreApp\(\)\) return viewAccountApp\(\);/);
   const at = app.indexOf('function planBanner()');
   const banner = app.slice(at, app.indexOf('\nfunction ', at + 10));
   assert.ok(banner.includes('href="#/billing"'));
-  assert.ok(banner.indexOf('isAndroidApp()') < banner.indexOf('href="#/billing"'));
-  assert.match(app, /c\.user && !isAndroidApp\(\) \? html`<a class="card row sec" href="#\/billing">/);
+  assert.ok(banner.indexOf('isStoreApp()') < banner.indexOf('href="#/billing"'));
+  assert.match(app, /c\.user && !isStoreApp\(\) \? html`<a class="card row sec" href="#\/billing">/);
   const acct = app.slice(app.indexOf('function viewAccountApp'), app.indexOf('// Your plan (2026-10-28'));
   assert.doesNotMatch(acct, /checkout|portal|\$\d|Choose/);
 });

@@ -6,6 +6,7 @@ import { SUPPORT_EMAIL } from './config.js';
 // "doesn't work" on iPhone: the link opened inside Gmail, Messages' preview or
 // another app, whose share sheet has no Add to Home Screen.
 import { html, raw, icon } from './ui.js';
+import { isStoreApp } from './twa.js';
 
 let deferred = null;
 const listeners = new Set();
@@ -16,6 +17,8 @@ if (typeof window !== 'undefined') {
 export const onInstallChange = (f) => listeners.add(f);
 
 export function isInstalled() {
+  // Inside the Google Play or App Store app there is nothing to install.
+  if (isStoreApp()) return true;
   try { return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; } catch { return false; }
 }
 
@@ -49,6 +52,7 @@ export function installSteps(p) {
 }
 
 export function installCard({ dismissable = false, slim = false } = {}) {
+  if (isStoreApp()) return ''; // a real app: no "add to home screen" help at all
   if (slim && !isInstalled()) {
     // One line on Today; the steps open on a tap (Today cleanup, 2026-10-27).
     const p = platform();

@@ -28,6 +28,33 @@ export function isAndroidApp() {
   return cached;
 }
 
+// The iPhone App Store app (2026-11-12, James's note
+// 20261111_JamesToCC_bestie-iphone-app.md): a native app (bundle
+// app.brokersbestie) that shows this site in a web view. It opens
+// https://brokersbestie.app/?source=ios and adds "BrokersBestieiOS" to the
+// browser's user agent, so it is still recognised after the hash routes drop
+// the query string. Apple's rule 3.1.3(f) (a free companion app to a paid web
+// service) needs the same thing as Google: no prices or ways to pay inside it.
+const IOS_KEY = 'bb:ios';
+export function detectIos({ search = '', ua = '', stored = null } = {}) {
+  if (/[?&]source=ios\b/.test(search)) return true;
+  if (/BrokersBestieiOS/.test(ua)) return true;
+  return stored === '1';
+}
+let iosCached = null;
+export function isIosApp() {
+  if (iosCached !== null) return iosCached;
+  let stored = null;
+  try { stored = localStorage.getItem(IOS_KEY); } catch { /* private window */ }
+  iosCached = typeof location !== 'undefined' && detectIos({ search: location.search, ua: typeof navigator !== 'undefined' ? navigator.userAgent : '', stored });
+  if (iosCached) { try { localStorage.setItem(IOS_KEY, '1'); } catch { /* ignore */ } }
+  return iosCached;
+}
+
+// Inside either store app (Google Play or the App Store): no prices, plans,
+// Subscribe buttons, Stripe or payment links, and no "add to home screen" help.
+export const isStoreApp = () => isAndroidApp() || isIosApp();
+
 // What the Android app says about the account, with no price and no way to
 // pay: active (paid, trial or complimentary) or not active yet.
 export function appAccountWords(b) {
