@@ -454,11 +454,36 @@ export async function inviteCode() {
   return code;
 }
 
-function strip(row) {
+// Columns that are not text (dates, times, numbers, true/false, lists).
+// Postgres refuses "" in any of them, and one refused row used to stop the
+// whole sync: James's iPhone sent coe_date = "" 22 times on 2026-11-12
+// ("invalid input syntax for type date"). A cleared box is "no value".
+// Read from the live database on 2026-11-14; a test checks the SQL files
+// for any newer non-text column that is missing here.
+export const NOT_TEXT = new Set(('alerted_at,also_selling,amount,areas,cancelled,coe_date,consent,created_at,crm_dirty,' +
+  'crm_sent_at,date,deleted_at,done,done_at,due,due_at,ended_at,expiration_date,failed_at,favorite,feedback_asked_at,' +
+  'feedback_logged_at,files,finished,follow_up,followed_up_at,gate_lat,gate_lng,has_agent,heads_up,inspected_at,lat,' +
+  'list_date,list_price,lng,marketing,miles,minutes,oh_date,photo_taken_at,price,recap_sent_at,seller_update_at,septic,' +
+  'shown_at,sort,start_lat,start_lng,start_minutes,started_at,stops,team_id,updated_at,user_id,well,worked_at').split(','));
+// Any other column named like a date, time or place is treated the same way.
+const NOT_TEXT_NAME = /(_at|_date|_lat|_lng|_minutes)$/;
+
+export function cleanRow(row, teamId) {
   const out = {};
-  for (const [k, v] of Object.entries(row)) if (!k.startsWith('_') && k !== 'sample') out[k] = v;
-  out.team_id = cloud.teamId;
+  for (const [k, v] of Object.entries(row)) {
+    if (k.startsWith('_') || k === 'sample') continue;
+    out[k] = (v === '' || (typeof v === 'string' && !v.trim())) && (NOT_TEXT.has(k) || NOT_TEXT_NAME.test(k)) ? null : v;
+  }
+  out.team_id = teamId;
   return out;
+}
+
+function strip(row) { return cleanRow(row, cloud.teamId); }
+
+// Turn a Supabase error into one short line a person can read off the phone.
+export function errorLine(table, error) {
+  const msg = String((error && (error.message || error.details)) || error || 'unknown error').replace(/\s+/g, ' ').trim();
+  return `${table}: ${msg.slice(0, 160)}`;
 }
 
 let syncTimer = null;
@@ -484,14 +509,23 @@ export async function syncNow() {
     // Anything filed under a sample property stays on the phone with it; sending
     // it up would point at a property the team database has never seen.
     const sampleProps = new Set(all('properties').filter((p) => p.sample).map((p) => p.id));
+    const failed = [];
     for (const t of TABLES) {
       const dirty = all(t).filter((r) => r._dirty && !r.sample && !sampleProps.has(r.property_id));
       // In groups, and read back in pages: an imported address book can be
       // thousands of rows, and the server hands back 1,000 at most per ask
       // (a short read would drop the rest from this phone).
+      // If a group is refused, send its rows one at a time so one bad row is
+      // skipped (kept on this phone, still waiting) and the rest still save.
+      const stuck = new Set();
       for (let i = 0; i < dirty.length; i += 500) {
-        const { error } = await c.from(t).upsert(dirty.slice(i, i + 500).map(strip));
-        if (error) throw error;
+        const group = dirty.slice(i, i + 500);
+        const { error } = await c.from(t).upsert(group.map(strip));
+        if (!error) continue;
+        for (const r of group) {
+          const { error: e1 } = await c.from(t).upsert([strip(r)]);
+          if (e1) { stuck.add(r.id); failed.push(errorLine(t, e1)); }
+        }
       }
       const remote = [];
       for (let from = 0; ; from += 1000) {
@@ -506,16 +540,20 @@ export async function syncNow() {
         const mine = local.get(r.id);
         merged.set(r.id, mine && mine._dirty && mine.updated_at > r.updated_at ? mine : r);
       }
-      // Sample rows stay on this phone and never go up.
-      for (const r of all(t)) if (r.sample && !merged.has(r.id)) merged.set(r.id, r);
-      data[t] = [...merged.values()].map((r) => (r.sample ? r : { ...r, _dirty: false }));
+      // Sample rows stay on this phone and never go up; a row the server
+      // refused stays too, still marked to send, so nothing typed is lost.
+      for (const r of all(t)) if ((r.sample || stuck.has(r.id)) && !merged.has(r.id)) merged.set(r.id, r);
+      for (const id of stuck) { const mine = local.get(id); if (mine) merged.set(id, mine); }
+      data[t] = [...merged.values()].map((r) => (r.sample || stuck.has(r.id) ? r : { ...r, _dirty: false }));
       writeJson(KEY(t), data[t]);
     }
-    cloud.status = 'synced';
+    cloud.status = failed.length ? 'error' : 'synced';
+    cloud.lastError = failed.length ? failed[0] + (failed.length > 1 ? ` (and ${failed.length - 1} more)` : '') : '';
     setTimeout(uploadPrepPhotos, 0);
   } catch (e) {
     console.warn('Sync failed; will retry', e);
     cloud.status = 'error';
+    cloud.lastError = errorLine('sync', e);
   } finally {
     syncing = false;
     emit();

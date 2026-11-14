@@ -102,7 +102,7 @@ test('a photo is kept on the phone before its row is saved, and retried until it
   const add = app.match(/async function addPrepPhotos[\s\S]*?\n}\n/)[0];
   assert.ok(add.indexOf('putPrepPhoto') < add.indexOf("store.save('prep_items'"), 'stored first, then filed');
   assert.match(add, /shrinkPhoto\(file, 2048/, 'sharp enough for the MLS');
-  assert.match(store, /cloud\.status = 'synced';\n\s*setTimeout\(uploadPrepPhotos, 0\)/, 'every sync tries the waiting photos again');
+  assert.match(store, /cloud\.status = failed\.length \? 'error' : 'synced';[^\n]*\n[^\n]*\n\s*setTimeout\(uploadPrepPhotos, 0\)/, 'every sync tries the waiting photos again');
   const up = store.match(/export async function uploadPrepPhotos[\s\S]*?\n}\n/)[0];
   assert.match(up, /if \(error\) \{ prepUpload\.failed\+\+;[^\n]*continue; \}/, 'a failed upload leaves the photo waiting, not dropped');
   assert.match(up, /photo_path: path/);
