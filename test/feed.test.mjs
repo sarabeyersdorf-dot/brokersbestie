@@ -107,3 +107,16 @@ test('contacts: the address book from a feed, kind read from the CRM words, note
   assert.equal(c.notes, undefined);
   assert.deepEqual(mapFeed({ format: 'bestie-feed/1' }, 't').contacts, []);
 });
+
+test('open house sign-ins: only CRM listings, only with consent, once, and fresh', () => {
+  const now = Date.parse('2026-11-08T20:00:00Z');
+  const pid = crmId(team, 'p', '1143-echo');
+  const v = (o) => ({ id: 'v1', property_id: pid, oh_date: '2026-11-08', created_at: '2026-11-08T19:00:00Z', first_name: 'Jo', last_name: 'Park', email: 'jo@x.com', phone: '', consent: true, ...o });
+  const [c] = pushChanges({ visitors: [v({})] }, now);
+  assert.equal(c.type, 'visitor'); assert.equal(c.ext_id, 'v1'); assert.equal(c.property_ext, '1143-echo'); assert.equal(c.date, '2026-11-08');
+  assert.equal(pushChanges({ visitors: [v({ consent: false })] }, now).length, 0);
+  assert.equal(pushChanges({ visitors: [v({ property_id: 'p-mine' })] }, now).length, 0);
+  assert.equal(pushChanges({ visitors: [v({ crm_sent_at: '2026-11-08T19:05:00Z' })] }, now).length, 0);
+  assert.equal(pushChanges({ visitors: [v({ email: '', phone: '' })] }, now).length, 0);
+  assert.equal(pushChanges({ visitors: [v({ created_at: '2026-09-01T00:00:00Z' })] }, now).length, 0);
+});
