@@ -3779,6 +3779,7 @@ function viewSettings() {
             </div>
             <div class="hint">With an invite code, you join that team as soon as you sign in.</div>`
           : html`<div>Signed in as <b>${c.user.email}</b>. ${c.status === 'synced' ? 'Everything is saved to your team.' : c.status === 'error' ? 'Last save did not go through; it will retry.' : ''}</div>
+          ${c.status === 'error' && c.lastError ? html`<div class="small" style="margin-top:4px;word-break:break-word">${c.lastError}</div>` : ''}
             <div class="btns"><button class="btn" type="button" id="syncnow">Save now</button><button class="btn" type="button" id="invite">Invite a teammate</button></div>
             <label class="field"><span>Join a team with a code</span><input id="joincode" autocomplete="off" placeholder="ABC123"></label>
             <button class="btn block" type="button" id="join">Join team</button>
